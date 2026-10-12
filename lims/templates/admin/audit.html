@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Audit log · IGI LIMS{% endblock %}{% block content %}
+<h1>Audit log</h1>
+<form method="get" class="card filters">
+  <label><span class="lbl">Table</span><select name="table"><option value="">any</option>{% for t in tables %}<option {% if f.table == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Record ID contains</span><input type="text" name="record" value="{{ f.record }}"></label>
+  <label><span class="lbl">User</span><input type="text" name="user" value="{{ f.user }}"></label>
+  <button type="submit">Filter</button>
+</form>
+<table><thead><tr><th>When</th><th>User</th><th>Table</th><th>Record</th><th>Action</th><th>Before</th><th>After</th><th>Appr.</th></tr></thead><tbody>
+{% for a in rows %}<tr><td>{{ a.ts }}</td><td>{{ a.username }}</td><td>{{ a.table_name }}</td>
+<td>{% if a.table_name == 'sample' %}<a href="{{ url_for('samples.detail', sample_id=a.record_id) }}"><code>{{ a.record_id }}</code></a>{% else %}<code>{{ a.record_id }}</code>{% endif %}</td>
+<td>{{ a.action }}</td><td><code class="wrap">{{ a.before_json or '' }}</code></td><td><code class="wrap">{{ a.after_json or '' }}</code></td>
+<td>{% if a.approval_id %}<a href="{{ url_for('approvals.detail', request_id=a.approval_id) }}">#{{ a.approval_id }}</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+<p>{% if page > 1 %}<a href="{{ url_for('admin.audit_log', page=page-1, **f) }}">← newer</a>{% endif %} {% if has_more %}<a href="{{ url_for('admin.audit_log', page=page+1, **f) }}">older →</a>{% endif %}</p>
+{% endblock %}

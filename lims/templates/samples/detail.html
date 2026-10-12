@@ -1,0 +1,97 @@
+{% extends "base.html" %}{% block title %}{{ s.sample_id }} · IGI LIMS{% endblock %}{% block content %}
+<h1><code>{{ s.sample_id }}</code> <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}</h1>
+{% if pending %}<div class="flash error">Pending approval request(s) on this record: {% for r in pending %}<a href="{{ url_for('approvals.detail', request_id=r.id) }}">#{{ r.id }} {{ r.action_type }}</a> {% endfor %}</div>{% endif %}
+
+<div class="card">
+<h2>Provenance</h2>
+<div class="chain">
+  {% for a in ancestors %}<a href="{{ url_for('samples.detail', sample_id=a.sample_id) }}" title="{{ a.sample_id }}"><code>{{ a.sample_id.split('-')[-3:]|join('-') }}</code></a> <span class="sep">→</span> {% endfor %}
+  <code class="here">{{ s.sample_id.split('-')[-3:]|join('-') }}</code>
+  {% if children %}<span class="sep">→</span> <span class="muted">{{ children|length }} child tube(s)</span>{% endif %}
+</div>
+<p><a href="{{ url_for('samples.tree', root_id=s.root_id, highlight=s.sample_id) }}">Full tree for this collection</a> · <a href="{{ url_for('samples.list_samples', root=s.root_id) }}">all tubes from this collection</a>
+{% if g.user.role != 'viewer' and not s.deleted_at %} · <a class="btn" href="{{ url_for('samples.derive', sample_id=s.sample_id) }}">Derive new tube(s) from this</a>{% endif %}</p>
+{% if children %}<h3>Children</h3><ul class="plain">{% for c in children %}<li><a href="{{ url_for('samples.detail', sample_id=c.sample_id) }}"><code>{{ c.sample_id }}</code></a> <span class="status {{ c.status }}">{{ c.status }}</span>{% if c.deleted_at %} <span class="muted">deleted</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+</div>
+
+<div class="cols">
+<div class="card">
+<h2>Tube</h2>
+<table class="compact"><tbody>
+<tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=s.participant_id) }}">{{ s.participant_id }}</a> · cohort {{ s.cohort_code }} ({{ meanings.cohort.get(s.cohort_code,'') }}){% if participant and participant.external_participant_id %} · site ID {{ participant.external_participant_id }} ({{ participant.site_code or '?' }}){% endif %}</td></tr>
+<tr><th>Collected</th><td>{{ s.collection_date }}</td></tr>
+<tr><th>Specimen</th><td>{{ s.specimen_code }} – {{ meanings.specimen.get(s.specimen_code,'') }}</td></tr>
+<tr><th>Fraction</th><td>{{ s.fraction_code }} – {{ meanings.fraction.get(s.fraction_code,'') }}</td></tr>
+<tr><th>Material</th><td>{{ s.material_code }} – {{ meanings.material.get(s.material_code,'') }}</td></tr>
+<tr><th>Aliquot</th><td>{{ '%02d'|format(s.aliquot) }}</td></tr>
+<tr><th>Parent</th><td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id }}</code></a>{% else %}<span class="muted">none (root specimen)</span>{% endif %}</td></tr>
+<tr><th>Processed</th><td>{{ s.created_datetime or '—' }} by {{ s.created_by or '—' }}{% if s.sop_code %} under {{ s.sop_code }}{% endif %}</td></tr>
+<tr><th>Biobank source</th><td>{{ s.biobank_source or '—' }} {{ meanings.biobank_source.get(s.biobank_source, '') }}</td></tr>
+<tr><th>Quantity</th><td>{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% else %}—{% endif %}</td></tr>
+<tr><th>Location</th><td>{{ [s.freezer, s.rack, s.box, s.position]|reject('none')|join(' / ') or '—' }}</td></tr>
+<tr><th>Notes</th><td>{{ s.notes or '' }}</td></tr>
+<tr><th>Record</th><td class="muted">created {{ s.record_created_at }} by {{ s.record_created_by }}{% if s.record_updated_at %}, updated {{ s.record_updated_at }}{% endif %}</td></tr>
+</tbody></table>
+{% if g.user.role != 'viewer' %}
+<p><a class="btn secondary" href="{{ url_for('samples.edit', sample_id=s.sample_id) }}">Edit</a></p>
+<details><summary>{% if s.deleted_at %}Restore{% else %}Delete{% endif %} this record</summary>
+<form method="post" action="{{ url_for('samples.delete', sample_id=s.sample_id) }}">
+  <p class="muted">Deletion is a soft delete; the record and its aliquot number are kept. A second user must approve.</p>
+  <label><span class="lbl">Justification</span><textarea name="justification" required></textarea></label>
+  <button type="submit" class="danger">Request {% if s.deleted_at %}restore{% else %}deletion{% endif %}</button>
+</form></details>
+{% endif %}
+<h3>Label</h3>
+<div class="label">{% for row in label %}{{ row }}<br>{% endfor %}{{ s.created_by or '' }}</div>
+</div>
+
+<div class="card">
+<h2>Chain of custody</h2>
+<table class="compact"><thead><tr><th>When</th><th>From</th><th>To</th><th>Purpose</th><th>Condition</th><th>Init.</th></tr></thead><tbody>
+{% for c in custody %}<tr><td>{{ c.event_datetime }}</td><td>{{ c.from_party }}</td><td>{{ c.to_party }}</td><td>{{ c.purpose or '' }}{% if c.notes %} <span class="muted">({{ c.notes }})</span>{% endif %}</td><td>{{ c.condition_on_receipt or '' }}</td><td>{{ c.initials or '' }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No hand-offs recorded.</td></tr>{% endfor %}
+</tbody></table>
+{% if g.user.role != 'viewer' and not s.deleted_at %}
+<details><summary>Record a hand-off</summary>
+<form method="post" action="{{ url_for('samples.add_custody', sample_id=s.sample_id) }}"><div class="grid">
+  <label><span class="lbl">Date/time</span><input type="datetime-local" name="event_datetime" required></label>
+  <label><span class="lbl">From (person or location)</span><input type="text" name="from_party" required></label>
+  <label><span class="lbl">To (person or location)</span><input type="text" name="to_party" required></label>
+  <label><span class="lbl">Purpose</span><input type="text" name="purpose" placeholder="e.g. DNA/RNA extraction, HTSF submission"></label>
+  <label><span class="lbl">Condition on receipt</span><input type="text" name="condition_on_receipt"></label>
+  <label><span class="lbl">Initials</span><input type="text" name="initials" value="{{ g.user.initials }}"></label>
+  <label><span class="lbl">Also set status to</span><select name="set_status"><option value="">(unchanged)</option><option>In use</option><option>Shipped</option><option>Available</option></select></label>
+  <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
+</div><button type="submit">Record</button></form></details>
+{% endif %}
+
+<h2>Data files</h2>
+<table class="compact"><thead><tr><th>URI</th><th>Assay</th><th>Run</th><th>Pipeline</th><th></th></tr></thead><tbody>
+{% for f in files %}<tr><td><code class="wrap">{{ f.uri }}</code>{% if f.checksum_md5 %}<br><span class="muted">md5 {{ f.checksum_md5 }}</span>{% endif %}</td><td>{{ f.assay_code or '' }}</td><td>{{ f.run_id or '' }}</td><td>{{ f.pipeline or '' }} {{ f.pipeline_version or '' }}</td>
+<td>{% if g.user.role != 'viewer' %}<form class="inline" method="post" action="{{ url_for('samples.delete_file', sample_id=s.sample_id, file_id=f.id) }}" onsubmit="return confirm('Remove this file record?')"><button class="small secondary">remove</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">No files linked.</td></tr>{% endfor %}
+</tbody></table>
+{% if g.user.role != 'viewer' %}
+<details><summary>Link a data file</summary>
+<form method="post" action="{{ url_for('samples.add_file', sample_id=s.sample_id) }}"><div class="grid">
+  <label class="wide"><span class="lbl">URI (file name should start with <code>{{ s.sample_id }}_</code>)</span><input type="text" name="uri" required placeholder="gs://bucket/path/{{ s.sample_id }}_ONT-R001.bam"></label>
+  <label><span class="lbl">Assay</span><select name="assay_code"><option value="">—</option>{% for a in assays %}<option value="{{ a.code }}">{{ a.code }} – {{ a.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Run ID</span><input type="text" name="run_id"></label>
+  <label><span class="lbl">MD5</span><input type="text" name="checksum_md5"></label>
+  <label><span class="lbl">Pipeline</span><input type="text" name="pipeline"></label>
+  <label><span class="lbl">Version</span><input type="text" name="pipeline_version"></label>
+  <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
+</div><button type="submit">Link file</button></form></details>
+{% endif %}
+</div>
+</div>
+
+<div class="card">
+<h2>Record history</h2>
+<table class="compact"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Change</th><th>Approval</th></tr></thead><tbody>
+{% for h in history %}<tr><td>{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ h.action }}</td>
+<td>{% if h.action == 'update' %}<code class="wrap">{{ h.before_json }}</code> → <code class="wrap">{{ h.after_json }}</code>{% elif h.action == 'insert' %}<span class="muted">created</span>{% else %}{{ h.action }}{% endif %}</td>
+<td>{% if h.approval_id %}<a href="{{ url_for('approvals.detail', request_id=h.approval_id) }}">#{{ h.approval_id }}</a>{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+</div>
+{% endblock %}

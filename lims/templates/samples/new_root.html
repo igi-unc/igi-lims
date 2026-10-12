@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Register specimen · IGI LIMS{% endblock %}{% block content %}
+<h1>Register a collected specimen (root tube)</h1>
+<div class="card">
+<form method="post">
+<div class="grid">
+  <label><span class="lbl">Participant</span><select name="participant" required>
+    <option value="">—</option>{% for q in participants %}<option value="{{ q.participant_id }}" {% if p.participant == q.participant_id %}selected{% endif %}>{{ q.participant_id }} ({{ q.cohort_code }}{% if q.external_participant_id %}, {{ q.external_participant_id }}{% endif %})</option>{% endfor %}
+  </select> <a class="muted" href="{{ url_for('participants.new') }}">new participant</a></label>
+  <label><span class="lbl">Collection date</span><input type="date" name="collection_date" value="{{ p.collection_date or '' }}" required></label>
+  <label><span class="lbl">Specimen</span><select name="specimen" required><option value="">—</option>{% for c in specimens %}<option value="{{ c.code }}" {% if p.specimen == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Fraction (as received)</span><select name="fraction">{% for c in fractions %}<option value="{{ c.code }}" {% if p.fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Material (as received)</span><select name="material">{% for c in materials %}<option value="{{ c.code }}" {% if p.material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  {% include "samples/_fields.html" %}
+</div>
+{% if prefix %}<p class="muted">IDs will be issued as <code>{{ prefix }}NN</code></p>{% endif %}
+{% include "samples/_violations.html" %}
+<p><button type="submit" name="action" value="create">Create</button> <a class="btn secondary" href="{{ url_for('samples.list_samples') }}">Cancel</a></p>
+</form>
+</div>
+{% endblock %}

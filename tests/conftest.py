@@ -1,0 +1,56 @@
+import os
+import tempfile
+import pytest
+
+from lims import create_app
+from lims.db import init_db, get_db
+from lims.auth import create_user
+
+
+@pytest.fixture
+def app():
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    app = create_app({"TESTING": True, "DATABASE": path, "SECRET_KEY": "test", "WTF_CSRF_ENABLED": False})
+    with app.app_context():
+        init_db()
+        conn = get_db()
+        create_user(conn, "alice", "Alice A", "AA", "password1", "admin")
+        create_user(conn, "bob", "Bob B", "BB", "password1", "user")
+        create_user(conn, "vic", "Vic V", "VV", "password1", "viewer")
+        conn.execute("INSERT INTO participant(participant_id, cohort_code, external_participant_id, site_code) VALUES ('KXRTQVA','MP','UNC316','UNC')")
+        conn.commit()
+    yield app
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.unlink(path + suffix)
+        except FileNotFoundError:
+            pass
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+
+def login(client, username, password="password1"):
+    return client.post("/login", data={"username": username, "password": password}, follow_redirects=True)
+
+
+@pytest.fixture
+def alice(client):
+    login(client, "alice")
+    return client
+
+
+def make_root(client, **over):
+    data = {"participant": "KXRTQVA", "collection_date": "2026-09-29", "specimen": "PF", "fraction": "BLK",
+            "material": "NAT", "count": "1", "quantity": "500", "unit": "mL", "created_by": "MF"}
+    data.update(over)
+    return client.post("/samples/new", data=data, follow_redirects=True)
+
+
+def derive(client, parent, **over):
+    data = {"fraction": "", "material": "", "count": "1"}
+    data.update(over)
+    return client.post(f"/samples/{parent}/derive", data=data, follow_redirects=True)

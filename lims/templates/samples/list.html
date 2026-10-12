@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}Samples · IGI LIMS{% endblock %}{% block content %}
+<h1>Samples {% if g.user.role != 'viewer' %}<a class="btn" href="{{ url_for('samples.new_root') }}">Register specimen</a>{% endif %}</h1>
+<form method="get" class="card filters">
+  <label><span class="lbl">ID contains</span><input type="text" name="q" value="{{ f.q }}"></label>
+  <label><span class="lbl">Participant</span><input type="text" name="participant" value="{{ f.participant }}"></label>
+  <label><span class="lbl">Cohort</span><select name="cohort"><option value="">any</option>{% for c in cohorts %}<option value="{{ c.code }}" {% if f.cohort == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Specimen</span><select name="specimen"><option value="">any</option>{% for c in specimens %}<option value="{{ c.code }}" {% if f.specimen == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Fraction</span><select name="fraction"><option value="">any</option>{% for c in fractions %}<option value="{{ c.code }}" {% if f.fraction == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Material</span><select name="material"><option value="">any</option>{% for c in materials %}<option value="{{ c.code }}" {% if f.material == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Status</span><select name="status"><option value="">any</option>{% for c in statuses %}<option value="{{ c.code }}" {% if f.status == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  {% if f.root %}<input type="hidden" name="root" value="{{ f.root }}">{% endif %}
+  <label><input type="checkbox" name="deleted" value="1" {% if show_deleted %}checked{% endif %}> include deleted</label>
+  <button type="submit">Filter</button> <a class="btn secondary" href="{{ url_for('samples.list_samples') }}">Clear</a>
+</form>
+{% if f.root %}<p>Showing collection rooted at <a href="{{ url_for('samples.tree', root_id=f.root) }}"><code>{{ f.root }}</code></a> (<a href="{{ url_for('samples.tree', root_id=f.root) }}">tree view</a>)</p>{% endif %}
+<table>
+<thead><tr><th>Sample ID</th><th>Parent</th><th>Status</th><th>Qty</th><th>Location</th><th>Processed</th><th>By</th></tr></thead>
+<tbody>
+{% for s in rows %}
+<tr class="{% if s.deleted_at %}del{% endif %}">
+  <td><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a>{% if s.deleted_at %} <span class="muted">(deleted)</span>{% endif %}</td>
+  <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id.split('-')[-3:]|join('-') }}</code></a>{% else %}<span class="muted">root</span>{% endif %}</td>
+  <td><span class="status {{ s.status }}">{{ s.status }}</span></td>
+  <td class="num">{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% endif %}</td>
+  <td>{{ [s.freezer, s.rack, s.box, s.position]|reject('none')|join(' / ') }}</td>
+  <td>{{ s.created_datetime or '' }}</td><td>{{ s.created_by or '' }}</td>
+</tr>
+{% else %}<tr><td colspan="7" class="muted">No samples match.</td></tr>{% endfor %}
+</tbody></table>
+<p>{% if page > 1 %}<a href="{{ url_for('samples.list_samples', page=page-1, **f) }}">← previous</a>{% endif %}
+   {% if has_more %}<a href="{{ url_for('samples.list_samples', page=page+1, **f) }}">next →</a>{% endif %}</p>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Participants · IGI LIMS{% endblock %}{% block content %}
+<h1>Participants {% if g.user.role != 'viewer' %}<a class="btn" href="{{ url_for('participants.new') }}">New participant</a>{% endif %}</h1>
+<form method="get" class="card filters">
+  <label><span class="lbl">ID contains</span><input type="text" name="q" value="{{ q }}"></label>
+  <label><span class="lbl">Cohort</span><select name="cohort"><option value="">any</option>{% for c in cohorts %}<option value="{{ c.code }}" {% if cohort == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <button type="submit">Filter</button>
+</form>
+<table><thead><tr><th>Participant</th><th>Cohort</th><th>Site ID</th><th>Site</th><th class="num">Collections</th><th class="num">Tubes</th></tr></thead><tbody>
+{% for p in rows %}<tr><td><a href="{{ url_for('participants.detail', participant_id=p.participant_id) }}"><code>{{ p.participant_id }}</code></a></td><td>{{ p.cohort_code }} <span class="muted">{{ meanings.cohort.get(p.cohort_code,'') }}</span></td><td>{{ p.external_participant_id or '' }}</td><td>{{ p.site_code or '' }}</td><td class="num">{{ p.n_collections }}</td><td class="num">{{ p.n_samples }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No participants yet.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

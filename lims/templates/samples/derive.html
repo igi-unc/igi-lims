@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}Derive · IGI LIMS{% endblock %}{% block content %}
+<h1>Derive from <a href="{{ url_for('samples.detail', sample_id=parent.sample_id) }}"><code>{{ parent.sample_id }}</code></a></h1>
+<p class="muted">Parent: {{ parent.specimen_code }} / {{ parent.fraction_code }} / {{ parent.material_code }} · status <span class="status {{ parent.status }}">{{ parent.status }}</span>{% if parent.quantity is not none %} · {{ parent.quantity }} {{ parent.unit or '' }}{% endif %}</p>
+<div class="card">
+<form method="post">
+<div class="grid">
+  <label><span class="lbl">Fraction</span><select name="fraction">{% for c in fractions %}<option value="{{ c.code }}" {% if p.fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}{% if allowed_fr is defined and c.code not in allowed_fr %} (not allowed from {{ parent.fraction_code }}){% endif %}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Material</span><select name="material" required><option value="">—</option>{% for c in materials %}<option value="{{ c.code }}" {% if p.material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}{% if allowed_mat is defined and c.code not in allowed_mat %} (not allowed from {{ parent.material_code }}){% endif %}</option>{% endfor %}</select></label>
+  {% include "samples/_fields.html" %}
+  <label class="wide"><input type="checkbox" name="parent_consumed" value="1" {% if p.parent_consumed %}checked{% endif %}> All parent material used – mark parent as Depleted</label>
+</div>
+{% if prefix %}<p class="muted">IDs will be issued as <code>{{ prefix }}NN</code></p>{% endif %}
+{% include "samples/_violations.html" %}
+<p><button type="submit" name="action" value="create">Create</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=parent.sample_id) }}">Cancel</a></p>
+</form>
+</div>
+{% endblock %}

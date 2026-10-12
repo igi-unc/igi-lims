@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}IGI LIMS{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="{{ url_for('main.index') }}">IGI LIMS</a>
+  {% if g.user %}
+  <nav>
+    <a href="{{ url_for('samples.list_samples') }}">Samples</a>
+    <a href="{{ url_for('participants.list_participants') }}">Participants</a>
+    <a href="{{ url_for('approvals.list_requests') }}">Approvals{% if pending_count %} <span class="badge">{{ pending_count }}</span>{% endif %}</a>
+    <a href="{{ url_for('admin.audit_log') }}">Audit</a>
+    {% if g.user.role == 'admin' %}
+    <a href="{{ url_for('admin.code_lists') }}">Codes</a>
+    <a href="{{ url_for('admin.rule_table') }}">Rules</a>
+    <a href="{{ url_for('admin.users') }}">Users</a>
+    {% endif %}
+  </nav>
+  <form class="jump" action="{{ url_for('main.go') }}" method="get">
+    <input type="text" name="q" placeholder="Scan or type a sample / participant ID" autocomplete="off">
+  </form>
+  <span class="who">{{ g.user.display_name }} ({{ g.user.role }}) · <a href="{{ url_for('auth.change_password') }}">password</a> · <a href="{{ url_for('auth.logout') }}">log out</a></span>
+  {% endif %}
+</header>
+<main>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+{% endwith %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

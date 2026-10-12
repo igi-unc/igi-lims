@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}Code lists · IGI LIMS{% endblock %}{% block content %}
+<h1>Code lists</h1>
+<p class="tabs">{% for c in categories %}<a class="{% if category == c %}active{% endif %}" href="{{ url_for('admin.code_lists', category=c) }}">{{ c }}</a>{% endfor %}</p>
+<div class="card">
+<table class="compact"><thead><tr><th>Code</th><th>Meaning</th><th>Active</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr class="{% if not r.active %}del{% endif %}"><td><code>{{ r.code }}</code></td>
+<td><form class="inline" method="post"><input type="hidden" name="action" value="rename"><input type="hidden" name="category" value="{{ category }}"><input type="hidden" name="code" value="{{ r.code }}"><input type="text" name="meaning" value="{{ r.meaning }}" style="width:420px"> <button class="small secondary">save</button></form></td>
+<td>{{ 'yes' if r.active else 'retired' }}</td>
+<td><form class="inline" method="post"><input type="hidden" name="action" value="toggle"><input type="hidden" name="category" value="{{ category }}"><input type="hidden" name="code" value="{{ r.code }}"><button class="small secondary">{{ 'retire' if r.active else 'reactivate' }}</button></form></td></tr>
+{% else %}<tr><td colspan="4" class="muted">No codes in this category yet.</td></tr>{% endfor %}
+</tbody></table>
+<h3>Add a code</h3>
+<form method="post" class="filters"><input type="hidden" name="action" value="add"><input type="hidden" name="category" value="{{ category }}">
+  <label><span class="lbl">Code</span><input type="text" name="code" required></label>
+  <label><span class="lbl">Meaning</span><input type="text" name="meaning" required style="min-width:360px"></label>
+  <button type="submit">Add</button></form>
+<p class="muted">Codes are never deleted or repurposed; retire them instead. Codes used in sample IDs (cohort, specimen, fraction, material) must match the width in the ID format.</p>
+</div>
+{% endblock %}

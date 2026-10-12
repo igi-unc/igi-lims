@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block content %}
+<h1>Dashboard</h1>
+<div class="tiles">
+  <div class="tile"><div class="n">{{ totals.samples }}</div><div>tubes</div></div>
+  <div class="tile"><div class="n">{{ totals.collections }}</div><div>collections</div></div>
+  <div class="tile"><div class="n">{{ totals.participants }}</div><div>participants</div></div>
+  <div class="tile"><div class="n">{{ totals.files }}</div><div>data files</div></div>
+  <div class="tile"><div class="n">{{ pending_count }}</div><div><a href="{{ url_for('approvals.list_requests') }}">pending approvals</a></div></div>
+</div>
+<div class="cols">
+<div class="card">
+  <h2>Quick actions</h2>
+  {% if g.user.role != 'viewer' %}
+  <p><a class="btn" href="{{ url_for('samples.new_root') }}">Register collected specimen</a>
+     <a class="btn" href="{{ url_for('participants.new') }}">New participant</a></p>
+  {% endif %}
+  <p>Derive tubes (cryopreserve, extract, build libraries) from a sample's own page.</p>
+  <h3>Tubes by status</h3>
+  <table class="compact"><tbody>{% for r in by_status %}<tr><td><a href="{{ url_for('samples.list_samples', status=r.status) }}">{{ r.status }}</a></td><td class="num">{{ r.n }}</td></tr>{% endfor %}</tbody></table>
+  <h3>Tubes by material</h3>
+  <table class="compact"><tbody>{% for r in by_material %}<tr><td><a href="{{ url_for('samples.list_samples', material=r.material_code) }}">{{ r.material_code }}</a></td><td class="num">{{ r.n }}</td></tr>{% endfor %}</tbody></table>
+</div>
+<div class="card">
+  <h2>Recently created tubes</h2>
+  <ul class="plain">{% for s in recent_samples %}<li><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a> <span class="muted">{{ s.record_created_at }}</span></li>{% else %}<li class="muted">None yet.</li>{% endfor %}</ul>
+  <h2>Recent activity</h2>
+  <ul class="plain">{% for a in recent %}<li><span class="muted">{{ a.ts }}</span> {{ a.username }} {{ a.action }} {{ a.table_name }} <code>{{ a.record_id }}</code></li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ul>
+  <h3>ID pattern</h3>
+  <p class="muted">Pipelines should validate IDs with: <code class="wrap">{{ pattern }}</code> (also at <code>/api/pattern</code>)</p>
+</div>
+</div>
+{% endblock %}

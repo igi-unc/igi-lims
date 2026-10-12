@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Edit · IGI LIMS{% endblock %}{% block content %}
+<h1>Edit <code>{{ s.sample_id }}</code></h1>
+{% if needs_approval %}<p class="muted">Edits to sample records are applied only after a second user approves them.</p>{% endif %}
+<div class="card">
+<form method="post">
+<div class="grid">
+  <label><span class="lbl">Parent tube ID</span><input type="text" name="parent_id" value="{{ p.parent_id or '' }}" {% if not s.parent_id %}placeholder="root specimen (no parent)"{% endif %}></label>
+  <label><span class="lbl">Processed on</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}"></label>
+  <label><span class="lbl">Operator initials</span><input type="text" name="created_by" value="{{ p.created_by or '' }}"></label>
+  <label><span class="lbl">SOP / protocol</span><input type="text" name="sop_code" value="{{ p.sop_code or '' }}"></label>
+  <label><span class="lbl">Biobank source</span><select name="biobank_source"><option value="">—</option>{% for c in biobanks %}<option value="{{ c.code }}" {% if p.biobank_source == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Quantity</span><input type="number" step="any" name="quantity" value="{{ p.quantity if p.quantity is not none else '' }}"></label>
+  <label><span class="lbl">Unit</span><select name="unit"><option value="">—</option>{% for c in units %}<option value="{{ c.code }}" {% if p.unit == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Status</span><select name="status">{% for c in statuses %}<option value="{{ c.code }}" {% if p.status == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Freezer</span><input type="text" name="freezer" value="{{ p.freezer or '' }}"></label>
+  <label><span class="lbl">Rack</span><input type="text" name="rack" value="{{ p.rack or '' }}"></label>
+  <label><span class="lbl">Box</span><input type="text" name="box" value="{{ p.box or '' }}"></label>
+  <label><span class="lbl">Position</span><input type="text" name="position" value="{{ p.position or '' }}"></label>
+  <label class="wide"><span class="lbl">Notes</span><textarea name="notes">{{ p.notes or '' }}</textarea></label>
+  {% if needs_approval %}<label class="wide"><span class="lbl">Justification (required; shown to the approver)</span><textarea name="justification" required></textarea></label>{% endif %}
+</div>
+<p><button type="submit">{% if needs_approval %}Submit for approval{% else %}Save{% endif %}</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=s.sample_id) }}">Cancel</a></p>
+</form>
+</div>
+{% endblock %}

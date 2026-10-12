@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Approvals · IGI LIMS{% endblock %}{% block content %}
+<h1>Approval queue</h1>
+<p class="tabs">{% for st in ('pending','approved','rejected','failed') %}<a class="{% if status == st %}active{% endif %}" href="{{ url_for('approvals.list_requests', status=st) }}">{{ st }}</a>{% endfor %}</p>
+<table><thead><tr><th>#</th><th>Action</th><th>Target</th><th>Requested by</th><th>When</th><th>Justification</th><th>Decided</th></tr></thead><tbody>
+{% for r in rows %}<tr><td><a href="{{ url_for('approvals.detail', request_id=r.id) }}">{{ r.id }}</a></td><td>{{ r.action_type }}</td>
+<td>{% if r.target_id %}<a href="{{ url_for('samples.detail', sample_id=r.target_id) }}"><code>{{ r.target_id }}</code></a>{% else %}<span class="muted">new tubes</span>{% endif %}</td>
+<td>{{ r.requested_by }}</td><td>{{ r.requested_at }}</td><td>{{ r.justification }}</td><td>{% if r.decided_by %}{{ r.decided_by }} {{ r.decided_at }}{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Nothing {{ status }}.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

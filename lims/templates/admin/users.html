@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Users · IGI LIMS{% endblock %}{% block content %}
+<h1>Users <a class="btn" href="{{ url_for('admin.user_new') }}">New user</a></h1>
+<table><thead><tr><th>Username</th><th>Name</th><th>Initials</th><th>Role</th><th>Active</th><th>Actions</th></tr></thead><tbody>
+{% for u in rows %}<tr><td>{{ u.username }}</td><td>{{ u.display_name }}</td><td>{{ u.initials }}</td>
+<td><form class="inline" method="post" action="{{ url_for('admin.user_update', username=u.username) }}"><input type="hidden" name="action" value="role"><select name="role" onchange="this.form.submit()">{% for r in ('admin','user','viewer') %}<option {% if u.role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></form></td>
+<td>{{ 'yes' if u.active else 'no' }}</td>
+<td><form class="inline" method="post" action="{{ url_for('admin.user_update', username=u.username) }}"><input type="hidden" name="action" value="toggle_active"><button class="small secondary">{{ 'deactivate' if u.active else 'activate' }}</button></form>
+<form class="inline" method="post" action="{{ url_for('admin.user_update', username=u.username) }}"><input type="hidden" name="action" value="reset_password"><input type="password" name="password" placeholder="new password" minlength="8"><button class="small secondary">reset</button></form></td></tr>{% endfor %}
+</tbody></table>
+<p class="muted">Roles: admin (everything), user (create/derive/edit/approve), viewer (read only).</p>
+{% endblock %}

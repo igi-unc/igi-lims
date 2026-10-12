@@ -1,0 +1,48 @@
+# NOTES – open questions and decisions to revisit
+
+## Open questions (for Steven)
+
+1. **Vocabulary oddities in the specimen list.** `NTC` (Normal T cell) and
+   `NRM` (Normal tissue) sit in the *specimen* list but read like fractions or
+   sources. Are these healthy-donor sources, patient-matched normals, or both?
+   Should NTC be `PB` specimen + `TTC` fraction instead? Also: `IMM` says
+   "e.g. CD45+ enriched, buffy coat" but buffy coat already has its own fraction
+   code `BFC`. Which one wins for a buffy coat tube? Note that `NTC` and `NRM`
+   are three characters while the ID format reserves two for specimen
+   (`[A-Z]{2}`), so they currently cannot appear in an ID. Either shorten them
+   or widen the segment in `config.py`.
+2. **ID format is still in flight.** The build uses the 35-character validated
+   pattern from the spec (`IGI-CC-PPPPPPP-YYMMDD-SS-FFF-MMM-AA`). The later
+   field table hints at `P101-UNC316`, `26SEP29` dates, operator initials and a
+   processing date inside the ID. Those are a `config.py` edit (plus a column
+   if a new segment is added). Operator and processing date are stored in the
+   database per the spec's own rule ("processing dates go in the database").
+3. **Edit approval scope.** "Require agreement for record overrides" is
+   implemented literally: every edit or delete of a sample needs a second user.
+   If routine updates (location, quantity, status) turn out to be too slow,
+   set `SAMPLE_EDIT_APPROVAL = "provenance"` in `config.py`. Custody events,
+   file links, and participant edits are direct but audited.
+4. **Participant code generation.** Generated codes use A–Z minus I and O
+   (7 letters). Confirm this against the IRB/HIPAA review of label contents,
+   and whether codes should instead be issued by a central IGI registry.
+5. **Rule seed is a first guess.** The allowed transitions in `lims/seed.py`
+   were inferred from the worked example; review them on the *Rules* page.
+   Notably: `PEP` restricted to `TUM`/`BLK`/`IMM`; `CFD` only from `PLA`;
+   root tubes may arrive as NAT, CPU, SNF, OCT, FFP.
+6. **Pooling.** Single parent only, per decision. If hashtagged 10x pools or
+   pooled libraries appear, a `sample_parent` link table is the change.
+7. **HIPAA.** Collection dates are in every ID and label. The database also
+   stores the site's external participant ID. Confirm who may be a `viewer`
+   and whether the API token should be scoped.
+8. **Barcodes.** The jump box on every page accepts a scanned ID. Label
+   printing is not implemented; the 3-row layout is shown on each tube page.
+
+## Decisions made during the build
+
+* Collection = (participant, collection date, specimen). No separate table;
+  `root_id` groups a collection and the participant page lists them.
+* Site/external ID live on the participant; biobank source on the tube.
+* Status change to Depleted happens via the "all parent material used" box on
+  the derive form, so it does not need approval.
+* Aliquot numbers are issued from `MAX(aliquot)` over all tubes with the same
+  prefix, including deleted ones, so they are never reused.

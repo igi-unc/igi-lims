@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Rules · IGI LIMS{% endblock %}{% block content %}
+<h1>Derivation rules</h1>
+<p class="tabs">{% for t in rule_types %}<a class="{% if rule_type == t %}active{% endif %}" href="{{ url_for('admin.rule_table', rule_type=t) }}">{{ t }}</a>{% endfor %}</p>
+<div class="card">
+<p class="muted">
+{% if rule_type == 'specimen_fraction' %}Which fractions may exist for each specimen type.
+{% elif rule_type == 'fraction_transition' %}Which fraction a child may have given its parent's fraction. Same fraction is always allowed.
+{% elif rule_type == 'material_transition' %}Which material a child may have given its parent's material.
+{% elif rule_type == 'material_fraction' %}If a material has entries here, a tube of that material must be in one of the listed fractions.
+{% else %}Materials a root (as-collected) specimen may arrive as. From code is always <code>*</code>.{% endif %}
+Violations block creation unless a second user approves an override.</p>
+<table class="compact"><thead><tr><th>From</th><th>Allowed to</th></tr></thead><tbody>
+{% for frm, rs in grouped.items() %}<tr><td><code>{{ frm }}</code></td><td>{% for r in rs %}<form class="inline" method="post"><input type="hidden" name="action" value="delete"><input type="hidden" name="rule_type" value="{{ rule_type }}"><input type="hidden" name="from_code" value="{{ frm }}"><input type="hidden" name="to_code" value="{{ r.to_code }}"><code>{{ r.to_code }}</code><button class="small secondary" title="remove rule" onclick="return confirm('Remove {{ frm }} → {{ r.to_code }}?')">×</button></form> {% endfor %}</td></tr>
+{% else %}<tr><td colspan="2" class="muted">No rules of this type.</td></tr>{% endfor %}
+</tbody></table>
+<h3>Add a rule</h3>
+<form method="post" class="filters"><input type="hidden" name="rule_type" value="{{ rule_type }}">
+  <label><span class="lbl">From</span><input type="text" name="from_code" required value="{% if rule_type == 'root_material' %}*{% endif %}"></label>
+  <label><span class="lbl">To</span><input type="text" name="to_code" required></label>
+  <label><span class="lbl">Note</span><input type="text" name="note"></label>
+  <button type="submit">Add</button></form>
+</div>
+{% endblock %}
