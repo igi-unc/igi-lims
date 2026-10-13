@@ -212,3 +212,14 @@ def test_browse_and_register_pages(app, alice):
     assert alice.get("/browse").status_code == 200
     # audit page renders key/value lines
     assert "class='kv'" in alice.get("/admin/audit").data.decode()
+
+
+def test_register_derived_picker(app, alice):
+    make_root(alice)
+    assert alice.get("/samples/derive").status_code == 200
+    r = alice.get("/samples/derive?participant=KXRTQVA")
+    assert P + "PF-BLK-NAT-01" in r.data.decode()
+    r = alice.post("/samples/derive", data={"parent_id": P + "PF-BLK-NAT-01"})
+    assert r.status_code == 302 and r.headers["Location"].endswith(f"/samples/{P}PF-BLK-NAT-01/derive")
+    r = alice.post("/samples/derive", data={"parent_id": "nope"}, follow_redirects=True)
+    assert b"No tube with ID NOPE" in r.data

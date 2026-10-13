@@ -155,6 +155,30 @@ def new_root():
     return _render_form("samples/new_root.html", payload, participants=participants)
 
 
+@bp.route("/derive", methods=("GET", "POST"))
+@writer_required
+def derive_pick():
+    """Register > Derived specimen: choose the parent tube, then continue to the derive form."""
+    conn = get_db()
+    if request.method == "POST":
+        pid = (request.form.get("parent_id") or "").strip().upper()
+        if not pid:
+            flash("Choose or scan the parent tube", "error")
+        elif svc.get_sample(conn, pid) is None:
+            flash(f"No tube with ID {pid}", "error")
+        else:
+            return redirect(url_for("samples.derive", sample_id=pid))
+    participant = (request.args.get("participant") or request.form.get("participant") or "").strip().upper()
+    participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
+    tubes = []
+    if participant:
+        tubes = conn.execute(
+            "SELECT * FROM sample WHERE participant_id=? AND deleted_at IS NULL "
+            "ORDER BY status IN ('Depleted','Destroyed'), sample_id", (participant,)).fetchall()
+    return render_template("samples/derive_pick.html", participants=participants, participant=participant, tubes=tubes,
+                           parent_id=request.form.get("parent_id", ""))
+
+
 @bp.route("/<sample_id>/derive", methods=("GET", "POST"))
 @writer_required
 def derive(sample_id):

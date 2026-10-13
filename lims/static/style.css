@@ -70,3 +70,4 @@ ul.plist li { padding:4px 6px; border-radius:4px; } ul.plist li.sel { background
 .panel { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
 .panel .t { font-size:15px; margin-bottom:6px; }
 .kv div { white-space:nowrap; } .kv .k { color:var(--muted); } .kv .k::after { content:":"; }
+.cols3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; } @media (max-width:1000px){ .cols3{grid-template-columns:1fr;} }
