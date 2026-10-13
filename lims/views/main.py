@@ -28,7 +28,7 @@ def index():
     recent_samples = conn.execute(
         "SELECT * FROM sample WHERE deleted_at IS NULL ORDER BY record_created_at DESC LIMIT 10").fetchall()
     return render_template("index.html", by_status=by_status, by_material=by_material, totals=totals,
-                           recent=recent, recent_samples=recent_samples, pattern=ids.full_pattern())
+                           recent=recent, recent_samples=recent_samples)
 
 
 @bp.route("/go")
