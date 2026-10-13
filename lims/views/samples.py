@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 
 from ..auth import login_required, writer_required
 from ..db import get_db
-from .. import samples as svc, approvals, audit, ids
+from .. import samples as svc, approvals, audit, ids, rules
 from .helpers import codes, code_meaning_map
 
 bp = Blueprint("samples", __name__, url_prefix="/samples")
@@ -158,7 +158,7 @@ def new_root():
 @bp.route("/derive", methods=("GET", "POST"))
 @writer_required
 def derive_pick():
-    """Register > Derived specimen: choose the parent tube, then continue to the derive form."""
+    """Register > Derived specimen: say what you are making, then choose among the parent tubes that qualify."""
     conn = get_db()
     if request.method == "POST":
         pid = (request.form.get("parent_id") or "").strip().upper()
@@ -167,16 +167,25 @@ def derive_pick():
         elif svc.get_sample(conn, pid) is None:
             flash(f"No tube with ID {pid}", "error")
         else:
-            return redirect(url_for("samples.derive", sample_id=pid))
-    participant = (request.args.get("participant") or request.form.get("participant") or "").strip().upper()
+            return redirect(url_for("samples.derive", sample_id=pid, fraction=request.form.get("fraction", ""),
+                                    material=request.form.get("material", "")))
+    participant = (request.values.get("participant") or "").strip().upper()
+    fraction = (request.values.get("fraction") or "").strip().upper()
+    material = (request.values.get("material") or "").strip().upper()
     participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
-    tubes = []
-    if participant:
-        tubes = conn.execute(
-            "SELECT * FROM sample WHERE participant_id=? AND deleted_at IS NULL "
-            "ORDER BY status IN ('Depleted','Destroyed'), sample_id", (participant,)).fetchall()
-    return render_template("samples/derive_pick.html", participants=participants, participant=participant, tubes=tubes,
-                           parent_id=request.form.get("parent_id", ""))
+    eligible, ineligible = [], []
+    if participant and fraction and material:
+        tubes = conn.execute("SELECT * FROM sample WHERE participant_id=? AND deleted_at IS NULL ORDER BY sample_id",
+                             (participant,)).fetchall()
+        for t in tubes:
+            comp = {"project": t["project_code"], "cohort": t["cohort_code"], "participant": t["participant_id"],
+                    "collection_date": t["collection_date"], "specimen": t["specimen_code"],
+                    "fraction": fraction, "material": material}
+            v = rules.check_derivation(conn, t, comp)
+            (eligible if not v else ineligible).append((t, v))
+    return render_template("samples/derive_pick.html", participants=participants, participant=participant,
+                           fraction=fraction, material=material, fractions=codes("fraction"), materials=codes("material"),
+                           eligible=eligible, ineligible=ineligible, parent_id=request.form.get("parent_id", ""))
 
 
 @bp.route("/<sample_id>/derive", methods=("GET", "POST"))
@@ -195,7 +204,8 @@ def derive(sample_id):
     allowed_fr.add(parent["fraction_code"])
     allowed_mat = {r["to_code"] for r in conn.execute(
         "SELECT to_code FROM derivation_rule WHERE rule_type='material_transition' AND from_code=?", (parent["material_code"],))}
-    payload = {"fraction": parent["fraction_code"], "material": "", "count": 1, "status": "Available",
+    payload = {"fraction": request.args.get("fraction") or parent["fraction_code"],
+               "material": request.args.get("material") or "", "count": 1, "status": "Available",
                "created_by": g.user["initials"], "biobank_source": parent["biobank_source"]}
     return _render_form("samples/derive.html", payload, parent=parent, allowed_fr=allowed_fr, allowed_mat=allowed_mat)
 

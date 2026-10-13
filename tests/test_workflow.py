@@ -216,10 +216,19 @@ def test_browse_and_register_pages(app, alice):
 
 def test_register_derived_picker(app, alice):
     make_root(alice)
+    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", parent_consumed="1")
     assert alice.get("/samples/derive").status_code == 200
-    r = alice.get("/samples/derive?participant=KXRTQVA")
-    assert P + "PF-BLK-NAT-01" in r.data.decode()
-    r = alice.post("/samples/derive", data={"parent_id": P + "PF-BLK-NAT-01"})
-    assert r.status_code == 302 and r.headers["Location"].endswith(f"/samples/{P}PF-BLK-NAT-01/derive")
+    # HMD can come from CPL/CPU/NAT..., but NAT-01 is depleted -> only CPU-01 eligible
+    html = alice.get("/samples/derive?participant=KXRTQVA&fraction=TUM&material=HMD").data.decode()
+    assert f'value="{P}PF-BLK-CPU-01" required' in html
+    assert f'<code>{P}PF-BLK-NAT-01</code></td><td><span class="status Depleted">' in html
+    assert "Parent status is Depleted" in html
+    # a LIB needs a nucleic-acid parent: nothing eligible yet
+    html = alice.get("/samples/derive?participant=KXRTQVA&fraction=TUM&material=LIB").data.decode()
+    assert "No tube from KXRTQVA can be the parent" in html
+    r = alice.post("/samples/derive", data={"parent_id": P + "PF-BLK-CPU-01", "fraction": "TUM", "material": "HMD"})
+    assert r.status_code == 302 and r.headers["Location"].endswith(f"/samples/{P}PF-BLK-CPU-01/derive?fraction=TUM&material=HMD")
+    html = alice.get(r.headers["Location"]).data.decode()
+    assert 'value="HMD" selected' in html and 'value="TUM" selected' in html
     r = alice.post("/samples/derive", data={"parent_id": "nope"}, follow_redirects=True)
     assert b"No tube with ID NOPE" in r.data

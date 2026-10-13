@@ -1,32 +1,55 @@
 {% extends "base.html" %}{% block title %}Register derived specimen · IGI LIMS{% endblock %}{% block content %}
 <h1>Register</h1>
 {% include "_register_tabs.html" %}
-<h2>Derived specimen: choose the parent tube</h2>
-<div class="cols">
+<h2>Derived specimen</h2>
 <div class="card">
-  <h3>Scan or type the parent tube ID</h3>
-  <form method="post">
-    <label><input type="text" name="parent_id" value="{{ parent_id }}" placeholder="IGI-MP-XXXXXXX-YYMMDD-SS-FFF-MMM-AA" autofocus autocomplete="off"></label>
-    <button type="submit">Continue</button>
+  <h3>Step 1 · What are you making, and for whom?</h3>
+  <form method="get" class="filters">
+    <label><span class="lbl">Participant</span><select name="participant" required><option value="">—</option>{% for q in participants %}<option value="{{ q.participant_id }}" {% if participant == q.participant_id %}selected{% endif %}>{{ q.participant_id }} ({{ q.cohort_code }}{% if q.external_participant_id %}, {{ q.external_participant_id }}{% endif %})</option>{% endfor %}</select></label>
+    <label><span class="lbl">Fraction of the new tube</span><select name="fraction" required><option value="">—</option>{% for c in fractions %}<option value="{{ c.code }}" {% if fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+    <label><span class="lbl">Material of the new tube</span><select name="material" required><option value="">—</option>{% for c in materials %}<option value="{{ c.code }}" {% if material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+    <button type="submit">Find eligible parent tubes</button>
   </form>
 </div>
+
+{% if participant and fraction and material %}
 <div class="card">
-  <h3>Or pick from a participant's tubes</h3>
-  <form method="get">
-    <label><span class="lbl">Participant</span><select name="participant" onchange="this.form.submit()"><option value="">—</option>{% for q in participants %}<option value="{{ q.participant_id }}" {% if participant == q.participant_id %}selected{% endif %}>{{ q.participant_id }} ({{ q.cohort_code }}{% if q.external_participant_id %}, {{ q.external_participant_id }}{% endif %})</option>{% endfor %}</select></label>
-    <noscript><button type="submit" class="secondary">Show tubes</button></noscript>
-  </form>
-  {% if participant %}
+  <h3>Step 2 · Choose the parent tube</h3>
+  <p class="muted">Tubes from {{ participant }} that the derivation rules allow as an input for a <code>{{ fraction }}-{{ material }}</code> tube.</p>
+  {% if eligible %}
   <form method="post">
-    <input type="hidden" name="participant" value="{{ participant }}">
-    <label><span class="lbl">Parent tube</span><select name="parent_id" size="12" style="font-family:ui-monospace,Menlo,monospace">
-      {% for t in tubes %}<option value="{{ t.sample_id }}" {% if t.status in ('Depleted','Destroyed') %}disabled{% endif %}>{{ t.sample_id }} — {{ t.status }}{% if t.quantity is not none %} · {{ t.quantity }} {{ t.unit or '' }}{% endif %}</option>
-      {% else %}<option disabled>No tubes for this participant yet</option>{% endfor %}
-    </select></label>
-    <button type="submit">Continue</button>
-    <span class="muted">Depleted and destroyed tubes are greyed out.</span>
+    <input type="hidden" name="participant" value="{{ participant }}"><input type="hidden" name="fraction" value="{{ fraction }}"><input type="hidden" name="material" value="{{ material }}">
+    <table class="compact"><thead><tr><th></th><th>Parent tube</th><th>Status</th><th>Qty</th><th>Location</th><th>Processed</th></tr></thead><tbody>
+    {% for t, v in eligible %}<tr>
+      <td><input type="radio" name="parent_id" value="{{ t.sample_id }}" required id="p{{ loop.index }}"></td>
+      <td><label for="p{{ loop.index }}"><code>{{ t.sample_id }}</code></label></td>
+      <td><span class="status {{ t.status }}">{{ t.status }}</span></td>
+      <td class="num">{% if t.quantity is not none %}{{ t.quantity }} {{ t.unit or '' }}{% endif %}</td>
+      <td>{{ [t.freezer, t.rack, t.box, t.position]|reject('none')|reject('equalto','NA')|join(' / ') }}</td>
+      <td>{{ t.created_datetime or '' }} {{ t.created_by or '' }}</td></tr>{% endfor %}
+    </tbody></table>
+    <p><button type="submit">Continue with this parent</button></p>
   </form>
+  {% else %}
+  <p class="flash error">No tube from {{ participant }} can be the parent of a <code>{{ fraction }}-{{ material }}</code> tube under the current rules.
+  {% if not ineligible %}This participant has no tubes yet.{% else %}Check the reasons below. If this is a legitimate exception, scan the intended parent in Step 3 and request an override on the next page.{% endif %}</p>
+  {% endif %}
+  {% if ineligible %}
+  <details><summary>{{ ineligible|length }} tube(s) not eligible</summary>
+    <table class="compact"><thead><tr><th>Tube</th><th>Status</th><th>Why not</th></tr></thead><tbody>
+    {% for t, v in ineligible %}<tr><td><code>{{ t.sample_id }}</code></td><td><span class="status {{ t.status }}">{{ t.status }}</span></td><td>{{ v|join('; ') }}</td></tr>{% endfor %}
+    </tbody></table>
+  </details>
   {% endif %}
 </div>
+{% endif %}
+
+<div class="card">
+  <h3>{% if participant and fraction and material %}Step 3 · {% endif %}Or scan the parent tube directly</h3>
+  <form method="post" class="filters">
+    <input type="hidden" name="fraction" value="{{ fraction }}"><input type="hidden" name="material" value="{{ material }}">
+    <label><input type="text" name="parent_id" value="{{ parent_id }}" placeholder="IGI-MP-XXXXXXX-YYMMDD-SS-FFF-MMM-AA" autocomplete="off" style="min-width:360px"></label>
+    <button type="submit" class="secondary">Continue</button>
+  </form>
 </div>
 {% endblock %}
