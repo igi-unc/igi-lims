@@ -19,14 +19,13 @@
   <div class="card">
     <h2>{{ selected.participant_id }} <span class="muted">cohort {{ selected.cohort_code }} ({{ meanings.cohort.get(selected.cohort_code,'') }}){% if selected.external_participant_id %} · site ID {{ selected.external_participant_id }} ({{ selected.site_code or '?' }}){% endif %}</span></h2>
     <p class="muted"><a href="{{ url_for('participants.detail', participant_id=selected.participant_id) }}">participant record</a>
-      {% if g.user.role != 'viewer' %} · <a href="{{ url_for('samples.new_root', participant=selected.participant_id) }}">register a collected specimen</a>{% endif %}
       · {% if request.args.get('deleted') %}<a href="{{ url_for('main.browse', participant=selected.participant_id) }}">hide deleted</a>{% else %}<a href="{{ url_for('main.browse', participant=selected.participant_id, deleted=1) }}">show deleted</a>{% endif %}
       · hover a tube for details, click to pin it</p>
     <div class="tree-wrap"><svg id="tree-svg" class="tree"></svg></div>
     <div id="tree-tip" class="tip" hidden></div>
     <div id="tree-panel" class="panel" hidden></div>
   </div>
-  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ROLE = {{ g.user.role|tojson }}; window.ORIENT = "vertical";</script>
+  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ORIENT = "vertical";</script>
   <script src="{{ url_for('static', filename='tree.js') }}"></script>
 {% else %}
   <div class="card"><p class="muted">Select a participant on the left to see every tube derived from their specimens as a tree.</p></div>

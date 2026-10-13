@@ -80,8 +80,7 @@
     return `<div class="t"><code>${esc(s.sample_id)}</code> <span class="status ${esc(s.status)}">${esc(s.status)}</span></div>` +
       `<table class="compact">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}</table>` +
       `<p><a class="btn secondary" href="/samples/${s.sample_id}">Open tube page</a> ` +
-      (window.ROLE && window.ROLE !== "viewer" && !s.deleted_at ? `<a class="btn" href="/samples/${s.sample_id}/derive">Derive from this</a>` : "") +
-      ` <button type="button" class="small secondary" id="tree-panel-close">close</button></p>`;
+      `<button type="button" class="small secondary" id="tree-panel-close">close</button></p>`;
   }
   let pinned = null;
   svg.querySelectorAll("g.node").forEach(g => {
