@@ -122,7 +122,7 @@ def test_edit_requires_approval_and_applies(app, alice, client):
     make_root(alice)
     sid = P + "PF-BLK-NAT-01"
     r = alice.post(f"/samples/{sid}/edit", data={"status": "Shipped", "quantity": "500", "unit": "mL",
-                                                 "created_by": "MF", "justification": "sent to HTSF"}, follow_redirects=True)
+                                                 "created_by": "AA", "justification": "sent to HTSF"}, follow_redirects=True)
     assert b"Change request #1 submitted" in r.data
     with app.app_context():
         assert get_db().execute("SELECT status FROM sample WHERE sample_id=?", (sid,)).fetchone()[0] == "Available"
@@ -151,7 +151,7 @@ def test_custody_and_files(app, alice):
     make_root(alice)
     sid = P + "PF-BLK-NAT-01"
     r = alice.post(f"/samples/{sid}/custody", data={"event_datetime": "2026-09-29T14:00", "from_party": "PIRL",
-                                                    "to_party": "Ken", "purpose": "DNA/RNA extraction", "set_status": "In use"},
+                                                    "to_party": "BB", "purpose": "EXTRACT", "condition_on_receipt": "good", "set_status": "In use"},
                    follow_redirects=True)
     assert b"Custody event recorded" in r.data
     r = alice.post(f"/samples/{sid}/files", data={"uri": f"gs://igi-bucket/{sid}_ONT-R001.bam", "assay_code": "ONT",
@@ -159,7 +159,7 @@ def test_custody_and_files(app, alice):
     assert b"File recorded" in r.data
     j = alice.get(f"/api/samples/{sid}").get_json()
     assert j["sample"]["status"] == "In use"
-    assert j["custody"][0]["to_party"] == "Ken"
+    assert j["custody"][0]["to_party"] == "BB"
     assert j["files"][0]["assay_code"] == "ONT"
     assert alice.get("/api/files?assay=ONT").get_json()[0]["participant_id"] == "KXRTQVA"
 

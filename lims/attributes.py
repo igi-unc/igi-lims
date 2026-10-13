@@ -1,6 +1,6 @@
 """Per-fraction / per-material metadata fields (definitions + values)."""
 import json
-from datetime import date
+from datetime import date, datetime
 
 from flask import g
 
@@ -32,12 +32,26 @@ def definitions_for(conn, fraction=None, material=None, active_only=True):
     return out
 
 
+def options(conn, defn):
+    """[(value, label)] for choice/list/bool definitions."""
+    t = defn["type"]
+    if t == "bool":
+        return [("yes", "yes"), ("no", "no")]
+    if t == "choice":
+        return [(c, c) for c in (defn["choices"] or "").split("|") if c]
+    if t == "list":
+        return [(r["code"], f"{r['code']} – {r['meaning']}" if r["meaning"] != r["code"] else r["code"]) for r in conn.execute(
+            "SELECT code, meaning FROM code_list WHERE category=? AND active=1 ORDER BY sort_order, code", (defn["choices"],))]
+    return []
+
+
 def all_definitions_json(conn):
     """Every active definition, grouped for the create forms' JavaScript."""
     rows = conn.execute("SELECT * FROM attribute_definition WHERE active=1 ORDER BY sort_order, id").fetchall()
     out = {"all": [], "fraction": {}, "material": {}}
     for r in rows:
         d = {k: r[k] for k in ("key", "label", "type", "unit", "choices", "required")}
+        d["options"] = options(conn, r)
         if r["scope"] == "all":
             out["all"].append(d)
         else:
@@ -45,7 +59,7 @@ def all_definitions_json(conn):
     return json.dumps(out)
 
 
-def coerce(defn, raw):
+def coerce(defn, raw, conn=None):
     """Validate a raw string against a definition. Returns normalised string or None. Raises ValueError."""
     v = (raw or "").strip() if isinstance(raw, str) else raw
     if v in ("", None):
@@ -71,11 +85,22 @@ def coerce(defn, raw):
         if str(v) not in choices:
             raise ValueError(f"{defn['label']} must be one of: {', '.join(choices)}")
         return str(v)
+    if t == "list":
+        if conn is not None and not conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1",
+                                                 (defn["choices"], str(v))).fetchone():
+            raise ValueError(f"{defn['label']}: '{v}' is not in the {defn['choices']} list (add it under Codes)")
+        return str(v)
     if t == "date":
         try:
             date.fromisoformat(str(v))
         except ValueError:
             raise ValueError(f"{defn['label']} must be a date (YYYY-MM-DD)")
+        return str(v)
+    if t == "datetime":
+        try:
+            datetime.fromisoformat(str(v))
+        except ValueError:
+            raise ValueError(f"{defn['label']} must be a date and time")
         return str(v)
     return str(v)
 
@@ -84,7 +109,7 @@ def collect_from_form(conn, form, fraction, material):
     """Read attr_<key> fields from a submitted form for the given fraction/material. Returns {key: value}."""
     out = {}
     for d in definitions_for(conn, fraction, material):
-        out[d["key"]] = coerce(d, form.get("attr_" + d["key"], ""))
+        out[d["key"]] = coerce(d, form.get("attr_" + d["key"], ""), conn)
     return out
 
 
@@ -94,7 +119,7 @@ def validate_dict(conn, values, fraction, material):
     out = {}
     for k, v in (values or {}).items():
         if k in defs:
-            out[k] = coerce(defs[k], v)
+            out[k] = coerce(defs[k], v, conn)
         elif v not in (None, ""):
             out[k] = str(v)   # unknown key: keep as free text rather than lose data
     return out

@@ -11,12 +11,12 @@
     const name = "attr_" + d.key, cur = VALUES[d.key] != null ? VALUES[d.key] : "";
     const req = d.required ? " required" : "", lbl = esc(d.label) + (d.unit ? " (" + esc(d.unit) + ")" : "") + (d.required ? " *" : "");
     let input;
-    if (d.type === "choice" || d.type === "bool") {
-      const opts = (d.type === "bool" ? ["yes", "no"] : (d.choices || "").split("|"));
-      input = `<select name="${name}"${req}><option value="">—</option>` + opts.map(o => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("") + `</select>`;
+    if (d.options && d.options.length) {
+      input = `<select name="${name}"${req}><option value="">—</option>` + d.options.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`).join("") + `</select>`;
     } else if (d.type === "number") input = `<input type="number" step="any" name="${name}" value="${esc(cur)}"${req}>`;
     else if (d.type === "date") input = `<input type="date" name="${name}" value="${esc(cur)}"${req}>`;
-    else input = `<input type="text" name="${name}" value="${esc(cur)}"${req}>`;
+    else if (d.type === "datetime") input = `<input type="datetime-local" name="${name}" value="${esc(cur)}"${req}>`;
+    else input = `<select name="${name}"${req}><option value="">— (no entries yet; add some under Codes)</option></select>`;
     return `<label><span class="lbl">${lbl}</span>${input}</label>`;
   }
   function render() {

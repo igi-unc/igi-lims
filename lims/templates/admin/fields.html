@@ -7,9 +7,9 @@
   <label><span class="lbl">{{ scope|capitalize }} code</span><select name="code" onchange="this.form.submit()">{% for c in codes_for %}<option value="{{ c.code }}" {% if code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
 </form>
 {% endif %}
-<p class="muted">Fields shown on the create and edit forms for {% if scope == 'all' %}every tube{% else %}tubes whose {{ scope }} is <code>{{ code }}</code>{% endif %}. A key shared by several codes (e.g. <code>cell_count</code>) is one value on the tube. QC imports write into these keys.</p>
+<p class="muted">No free-text fields: use <em>list</em> for vocabularies the lab will extend (kits, lots, buffers) and <em>choice</em> for fixed sets. Fields shown on the create and edit forms for {% if scope == 'all' %}every tube{% else %}tubes whose {{ scope }} is <code>{{ code }}</code>{% endif %}. A key shared by several codes (e.g. <code>cell_count</code>) is one value on the tube. QC imports write into these keys.</p>
 <table class="compact"><thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Unit</th><th>Choices</th><th>Required</th><th>Active</th><th></th></tr></thead><tbody>
-{% for r in rows %}<tr class="{% if not r.active %}del{% endif %}"><td><code>{{ r.key }}</code></td><td>{{ r.label }}</td><td>{{ r.type }}</td><td>{{ r.unit or '' }}</td><td class="muted">{{ (r.choices or '').replace('|', ' · ') }}</td>
+{% for r in rows %}<tr class="{% if not r.active %}del{% endif %}"><td><code>{{ r.key }}</code></td><td>{{ r.label }}</td><td>{{ r.type }}</td><td>{{ r.unit or '' }}</td><td class="muted">{% if r.type == 'list' %}list: <a href="{{ url_for('admin.code_lists', category=r.choices) }}">{{ r.choices }}</a>{% else %}{{ (r.choices or '').replace('|', ' · ') }}{% endif %}</td>
 <td><form class="inline" method="post"><input type="hidden" name="action" value="required"><input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="code" value="{{ code }}"><button class="small secondary">{{ 'yes' if r.required else 'no' }}</button></form></td>
 <td>{{ 'yes' if r.active else 'retired' }}</td>
 <td><form class="inline" method="post"><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="code" value="{{ code }}"><button class="small secondary">{{ 'retire' if r.active else 'reactivate' }}</button></form></td></tr>
@@ -19,9 +19,10 @@
 <form method="post" class="filters"><input type="hidden" name="action" value="add"><input type="hidden" name="scope" value="{{ scope }}"><input type="hidden" name="code" value="{{ code }}">
   <label><span class="lbl">Key</span><input type="text" name="key" required placeholder="snake_case"></label>
   <label><span class="lbl">Label</span><input type="text" name="label" required></label>
-  <label><span class="lbl">Type</span><select name="type">{% for t in ('text','number','choice','bool','date') %}<option>{{ t }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Type</span><select name="type">{% for t in ('list','choice','number','bool','date','datetime') %}<option>{{ t }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Unit</span><input type="text" name="unit" style="width:80px"></label>
-  <label><span class="lbl">Choices (a|b|c)</span><input type="text" name="choices"></label>
+  <label><span class="lbl">List (for type list)</span><select name="list_category"><option value="">—</option>{% for c in list_categories %}<option>{{ c }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Fixed choices (for type choice, a|b|c)</span><input type="text" name="choices"></label>
   <label><input type="checkbox" name="required" value="1"> required</label>
   <button type="submit">Add</button></form>
 </div>

@@ -8,7 +8,13 @@ from .helpers import codes
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
-CATEGORIES = ["cohort", "specimen", "fraction", "material", "status", "assay", "biobank_source", "site", "unit", "sop"]
+# Core vocabularies first; every other category in the table (the admin-extendable lists) follows.
+CORE_CATEGORIES = ["cohort", "specimen", "fraction", "material", "status", "assay", "biobank_source", "site", "unit", "sop"]
+
+
+def all_categories(conn):
+    extra = [r[0] for r in conn.execute("SELECT DISTINCT category FROM code_list ORDER BY category") if r[0] not in CORE_CATEGORIES]
+    return CORE_CATEGORIES + extra
 
 
 @bp.route("/users")
@@ -73,6 +79,15 @@ def code_lists():
     if request.method == "POST":
         f = request.form
         action = f.get("action")
+        if action == "new_category":
+            cat = f["new_category"].strip().lower().replace(" ", "_")
+            if not cat:
+                flash("Category name is required", "error")
+                return redirect(url_for("admin.code_lists"))
+            conn.execute("INSERT OR IGNORE INTO code_list(category, code, meaning, sort_order) VALUES (?,?,?,0)", (cat, "NA", "Not applicable"))
+            audit.log(conn, "code_list", f"{cat}:NA", "insert", after={"meaning": "new category"})
+            conn.commit()
+            return redirect(url_for("admin.code_lists", category=cat))
         if action == "add":
             cat, code, meaning = f["category"], f["code"].strip().upper(), f["meaning"].strip()
             if not code or not meaning:
@@ -98,7 +113,9 @@ def code_lists():
         return redirect(url_for("admin.code_lists", category=f.get("category")))
     cat = request.args.get("category", "specimen")
     rows = codes(cat, active_only=False)
-    return render_template("admin/codes.html", categories=CATEGORIES, category=cat, rows=rows)
+    used_by = conn.execute("SELECT DISTINCT scope, code, label FROM attribute_definition WHERE type='list' AND choices=? AND active=1 ORDER BY 1,2",
+                           (cat,)).fetchall()
+    return render_template("admin/codes.html", categories=all_categories(conn), core=CORE_CATEGORIES, category=cat, rows=rows, used_by=used_by)
 
 
 @bp.route("/rules", methods=("GET", "POST"))
@@ -168,9 +185,13 @@ def fields():
             else:
                 n = conn.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM attribute_definition WHERE scope=? AND code=?",
                                  (f["scope"], f["code"].strip().upper() or "*")).fetchone()[0]
+                choices = f.get("list_category", "").strip() if f["type"] == "list" else f.get("choices", "").strip()
+                if f["type"] in ("list", "choice") and not choices:
+                    flash("A list field needs a category and a choice field needs its choices", "error")
+                    return redirect(url_for("admin.fields", scope=f.get("scope"), code=f.get("code")))
                 conn.execute("INSERT INTO attribute_definition(scope, code, key, label, type, unit, choices, required, sort_order) VALUES (?,?,?,?,?,?,?,?,?)",
                              (f["scope"], f["code"].strip().upper() or "*", key, f["label"].strip(), f["type"],
-                              f.get("unit", "").strip() or None, f.get("choices", "").strip() or None, 1 if f.get("required") else 0, n))
+                              f.get("unit", "").strip() or None, choices or None, 1 if f.get("required") else 0, n))
                 audit.log(conn, "attribute_definition", f"{f['scope']}:{f['code']}:{key}", "insert", after={"label": f["label"]})
                 flash("Field added", "ok")
         elif action == "toggle":
@@ -188,9 +209,10 @@ def fields():
     scope = request.args.get("scope", "material")
     code = (request.args.get("code") or "").upper()
     codes_for = {"fraction": codes("fraction", active_only=False), "material": codes("material", active_only=False), "all": []}[scope]
+    list_categories = all_categories(conn)
     if scope == "all":
         code = "*"
     elif not code and codes_for:
         code = codes_for[0]["code"]
     rows = conn.execute("SELECT * FROM attribute_definition WHERE scope=? AND code=? ORDER BY sort_order, id", (scope, code)).fetchall()
-    return render_template("admin/fields.html", scope=scope, code=code, codes_for=codes_for, rows=rows)
+    return render_template("admin/fields.html", scope=scope, code=code, codes_for=codes_for, rows=rows, list_categories=list_categories)

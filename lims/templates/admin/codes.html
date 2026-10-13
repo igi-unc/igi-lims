@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Code lists · IGI LIMS{% endblock %}{% block content %}
 <h1>Code lists</h1>
-<p class="tabs">{% for c in categories %}<a class="{% if category == c %}active{% endif %}" href="{{ url_for('admin.code_lists', category=c) }}">{{ c }}</a>{% endfor %}</p>
+<p class="tabs">{% for c in categories %}{% if c in core %}<a class="{% if category == c %}active{% endif %}" href="{{ url_for('admin.code_lists', category=c) }}">{{ c }}</a>{% endif %}{% endfor %}</p>
+<p class="tabs">{% for c in categories %}{% if c not in core %}<a class="{% if category == c %}active{% endif %}" href="{{ url_for('admin.code_lists', category=c) }}">{{ c }}</a>{% endif %}{% endfor %}
+<form method="post" class="inline"><input type="hidden" name="action" value="new_category"><input type="text" name="new_category" placeholder="new list name" style="width:150px"> <button class="small secondary">Add list</button></form></p>
 <div class="card">
 <table class="compact"><thead><tr><th>Code</th><th>Meaning</th><th>Active</th><th></th></tr></thead><tbody>
 {% for r in rows %}<tr class="{% if not r.active %}del{% endif %}"><td><code>{{ r.code }}</code></td>
@@ -14,6 +16,7 @@
   <label><span class="lbl">Code</span><input type="text" name="code" required></label>
   <label><span class="lbl">Meaning</span><input type="text" name="meaning" required style="min-width:360px"></label>
   <button type="submit">Add</button></form>
-<p class="muted">Codes are never deleted or repurposed; retire them instead. Codes used in sample IDs (cohort, specimen, fraction, material) must match the width in the ID format.</p>
+<p class="muted">Codes are never deleted or repurposed; retire them instead. Codes used in sample IDs (cohort, specimen, fraction, material) must match the width in the ID format.
+{% if used_by %}This list feeds the field{{ 's' if used_by|length > 1 }}: {% for u in used_by %}<code>{{ u.scope }}:{{ u.code }}</code> {{ u.label }}{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}</p>
 </div>
 {% endblock %}

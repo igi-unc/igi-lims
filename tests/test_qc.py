@@ -100,9 +100,9 @@ def test_attributes_on_create_edit_and_required(app, alice, client, tmp_path):
     assert b"Created 1" in r.data
     # editing an attribute goes through approval like any other edit
     sid = P + "PF-BLK-LIB-01"
-    r = alice.post(f"/samples/{sid}/edit", data={"parent_id": P + "PF-BLK-DNA-01", "status": "Available", "quantity": "1", "unit": "NA", "created_by": "MF",
+    r = alice.post(f"/samples/{sid}/edit", data={"parent_id": P + "PF-BLK-DNA-01", "status": "Available", "quantity": "1", "unit": "NA", "created_by": "AA",
                                                  "created_datetime": "2026-09-29T10:00", "sop_code": "NA", "biobank_source": "IH",
-                                                 "freezer": "F1", "rack": "R1", "box": "B1", "position": "A1", "notes": "NA",
+                                                 "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1", "notes": "NA",
                                                  "attr_assay": "WGS", "attr_pcr_cycles": "8", "justification": "typo"}, follow_redirects=True)
     assert b"Change request #1 submitted" in r.data
     login(client, "bob")
@@ -129,3 +129,40 @@ def test_admin_fields_page(app, alice):
     r = alice.post("/admin/fields", data={"action": "add", "scope": "material", "code": "LIB", "key": "flowcell", "label": "Flowcell", "type": "text"}, follow_redirects=True)
     assert b"Field added" in r.data
     assert b"flowcell" in alice.get("/admin/fields?scope=material&code=LIB").data
+
+
+def test_no_free_text_fields_in_seed(app):
+    with app.app_context():
+        rows = get_db().execute("SELECT key FROM attribute_definition WHERE active=1 AND type='text'").fetchall()
+    assert rows == []
+
+
+def test_coded_fields_rejected_when_not_in_list(app, alice):
+    r = make_root(alice, freezer="F9")
+    assert b"F9" in r.data and b"is not in the freezer list" in r.data
+    r = make_root(alice, created_by="ZZ")
+    assert b"ZZ" in r.data and b"is not an active user" in r.data
+    r = make_root(alice, attr_container_type="PAPER_CUP")
+    assert b"not in the container_type list" in r.data
+    # admin adds the freezer, then it works
+    alice.post("/admin/codes", data={"action": "add", "category": "freezer", "code": "F9", "meaning": "Basement -80 #9"}, follow_redirects=True)
+    assert b"Created 1" in make_root(alice, freezer="F9").data
+
+
+def test_custody_rejects_unknown_party(app, alice):
+    make_root(alice)
+    sid = P + "PF-BLK-NAT-01"
+    r = alice.post(f"/samples/{sid}/custody", data={"event_datetime": "2026-09-29T14:00", "from_party": "PIRL", "to_party": "Ken",
+                                                    "purpose": "EXTRACT", "condition_on_receipt": "good"}, follow_redirects=True)
+    assert b"From and To must be a user or an entry in the party list" in r.data
+
+
+def test_new_list_category_and_list_field(app, alice):
+    r = alice.post("/admin/codes", data={"action": "new_category", "new_category": "flowcell type"}, follow_redirects=True)
+    assert r.status_code == 200
+    alice.post("/admin/codes", data={"action": "add", "category": "flowcell_type", "code": "R10.4.1", "meaning": "ONT R10.4.1"}, follow_redirects=True)
+    r = alice.post("/admin/fields", data={"action": "add", "scope": "material", "code": "LIB", "key": "flowcell", "label": "Flowcell",
+                                          "type": "list", "list_category": "flowcell_type"}, follow_redirects=True)
+    assert b"Field added" in r.data
+    html = alice.get("/samples/new").data.decode()
+    assert '"flowcell"' in html and "R10.4.1" in html

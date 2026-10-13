@@ -44,18 +44,18 @@ def alice(client):
 
 
 ALL_FIELDS = {"created_datetime": "2026-09-29T10:00", "sop_code": "NA", "biobank_source": "IH", "status": "Available",
-              "freezer": "F1", "rack": "R1", "box": "B1", "position": "A1", "notes": "NA"}
+              "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1", "notes": "NA"}
 
 
 def make_root(client, **over):
     data = {"participant": "KXRTQVA", "collection_date": "2026-09-29", "specimen": "PF", "fraction": "BLK",
-            "material": "NAT", "count": "1", "quantity": "500", "unit": "mL", "created_by": "MF", **ALL_FIELDS}
+            "material": "NAT", "count": "1", "quantity": "500", "unit": "mL", "created_by": "AA", **ALL_FIELDS}
     data.update(over)
     return client.post("/samples/new", data=data, follow_redirects=True)
 
 
 def derive(client, parent, **over):
-    data = {"fraction": "", "material": "", "count": "1", "quantity": "1", "unit": "NA", "created_by": "MF", **ALL_FIELDS}
+    data = {"fraction": "", "material": "", "count": "1", "quantity": "1", "unit": "NA", "created_by": "AA", **ALL_FIELDS}
     data.update(over)
     # required metadata for some materials (see lims/seed_attributes.py)
     if data["material"] == "LIB":

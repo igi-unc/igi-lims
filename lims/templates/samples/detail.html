@@ -54,18 +54,18 @@
 <div class="card">
 <h2>Chain of custody</h2>
 <table class="compact"><thead><tr><th>When</th><th>From</th><th>To</th><th>Purpose</th><th>Condition</th><th>Init.</th></tr></thead><tbody>
-{% for c in custody %}<tr><td>{{ c.event_datetime }}</td><td>{{ c.from_party }}</td><td>{{ c.to_party }}</td><td>{{ c.purpose or '' }}{% if c.notes %} <span class="muted">({{ c.notes }})</span>{% endif %}</td><td>{{ c.condition_on_receipt or '' }}</td><td>{{ c.initials or '' }}</td></tr>
+{% for c in custody %}<tr><td>{{ c.event_datetime }}</td><td>{{ c.from_party }}</td><td>{{ c.to_party }}</td><td>{{ meanings.custody_purpose.get(c.purpose, c.purpose or '') }}{% if c.notes %} <span class="muted">({{ c.notes }})</span>{% endif %}</td><td>{{ c.condition_on_receipt or '' }}</td><td>{{ c.initials or '' }}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">No hand-offs recorded.</td></tr>{% endfor %}
 </tbody></table>
 {% if g.user.role != 'viewer' and not s.deleted_at %}
 <details><summary>Record a hand-off</summary>
 <form method="post" action="{{ url_for('samples.add_custody', sample_id=s.sample_id) }}"><div class="grid">
   <label><span class="lbl">Date/time</span><input type="datetime-local" name="event_datetime" required></label>
-  <label><span class="lbl">From (person or location)</span><input type="text" name="from_party" required></label>
-  <label><span class="lbl">To (person or location)</span><input type="text" name="to_party" required></label>
-  <label><span class="lbl">Purpose</span><input type="text" name="purpose" placeholder="e.g. DNA/RNA extraction, HTSF submission"></label>
-  <label><span class="lbl">Condition on receipt</span><input type="text" name="condition_on_receipt"></label>
-  <label><span class="lbl">Initials</span><input type="text" name="initials" value="{{ g.user.initials }}"></label>
+  <label><span class="lbl">From (person or location)</span><select name="from_party" required><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}">{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}{% for c in parties %}<option value="{{ c.code }}">{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">To (person or location)</span><select name="to_party" required><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}">{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}{% for c in parties %}<option value="{{ c.code }}">{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Purpose</span><select name="purpose" required><option value="">—</option>{% for c in purposes %}<option value="{{ c.code }}">{{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Condition on receipt</span><select name="condition_on_receipt" required>{% for c in ('good','thawed','damaged','leaking','NA') %}<option>{{ c }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Recorded by</span><select name="initials">{% for u in users %}<option value="{{ u.initials }}" {% if u.initials == g.user.initials %}selected{% endif %}>{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Also set status to</span><select name="set_status"><option value="">(unchanged)</option><option>In use</option><option>Shipped</option><option>Available</option></select></label>
   <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
 </div><button type="submit">Record</button></form></details>

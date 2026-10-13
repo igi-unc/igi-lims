@@ -85,6 +85,7 @@ def detail(sample_id):
     return render_template("samples/detail.html", s=s, children=children, ancestors=svc.ancestors(conn, sample_id),
                            custody=custody, files=files, history=history, pending=pending, participant=participant,
                            attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
+                           users=_users(), parties=codes("party"), purposes=codes("custody_purpose"),
                            label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"),
                            json=json)
 
@@ -103,12 +104,36 @@ def tree(root_id):
 
 # ------------------------------------------------------------------ create
 
+def _users():
+    return get_db().execute("SELECT initials, display_name FROM user WHERE active=1 ORDER BY initials").fetchall()
+
+
+def _lists():
+    return {"users": _users(), "freezers": codes("freezer"), "racks": codes("rack"), "boxes": codes("box"),
+            "positions": codes("position"), "sops": codes("sop"), "units": codes("unit"), "biobanks": codes("biobank_source"),
+            "statuses": codes("status"), "parties": codes("party"), "purposes": codes("custody_purpose")}
+
+
+CODED_FIELDS = {"sop_code": "sop", "biobank_source": "biobank_source", "unit": "unit", "status": "status",
+                "freezer": "freezer", "rack": "rack", "box": "box", "position": "position"}
+
+
+def _check_coded(conn, payload, fields=CODED_FIELDS):
+    """Every coded column must hold an active code; the operator must be an active user's initials."""
+    for f, cat in fields.items():
+        v = payload.get(f)
+        if v and not conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1", (cat, v)).fetchone():
+            raise ValueError(f"{f.replace('_', ' ').capitalize()} '{v}' is not in the {cat} list (add it under Codes)")
+    op = payload.get("created_by")
+    if op and not conn.execute("SELECT 1 FROM user WHERE initials=? AND active=1", (op,)).fetchone():
+        raise ValueError(f"Operator '{op}' is not an active user")
+
+
 def _render_form(template, payload, violations=None, prefix=None, **ctx):
+    ctx = {**_lists(), **ctx}
     return render_template(template, p=payload, violations=violations or [], prefix=prefix,
                            attr_defs_json=attributes.all_definitions_json(get_db()),
-                           fractions=codes("fraction"), materials=codes("material"), statuses=codes("status"),
-                           units=codes("unit"), biobanks=codes("biobank_source"), specimens=codes("specimen"),
-                           sops=codes("sop"), **ctx)
+                           fractions=codes("fraction"), materials=codes("material"), specimens=codes("specimen"), **ctx)
 
 
 def _handle_create(payload, template, **ctx):
@@ -121,6 +146,7 @@ def _handle_create(payload, template, **ctx):
         flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
         return _render_form(template, payload, **ctx)
     try:
+        _check_coded(conn, payload)
         payload["attributes"] = attributes.validate_dict(conn, payload.get("attributes"), payload.get("fraction"), payload.get("material"))
         for d in attributes.definitions_for(conn, payload.get("fraction"), payload.get("material")):
             if d["required"] and not payload["attributes"].get(d["key"]):
@@ -228,10 +254,13 @@ def edit(sample_id):
         abort(404)
     attr_defs = attributes.definitions_for(conn, s["fraction_code"], s["material_code"])
     attr_vals = {k: r["value"] for k, r in attributes.get(conn, sample_id).items()}
+    edit_ctx = {**_lists(), "attr_defs": attr_defs, "attr_options": {d["key"]: attributes.options(conn, d) for d in attr_defs},
+                "needs_approval": current_app.config["SAMPLE_EDIT_APPROVAL"] != "none"}
     if request.method == "POST":
         changes = {f: request.form.get(f, "") for f in svc.EDITABLE_FIELDS}
         changes["attributes"] = {d["key"]: request.form.get("attr_" + d["key"], "") for d in attr_defs}
         try:
+            _check_coded(conn, changes)
             diff = svc.diff_changes(conn, sample_id, changes)
             if not diff:
                 flash("No changes", "ok")
@@ -240,9 +269,7 @@ def edit(sample_id):
                 just = request.form.get("justification", "").strip()
                 if not just:
                     flash("Edits to sample records need a justification and a second user's approval", "error")
-                    return render_template("samples/edit.html", s=s, p=changes, statuses=codes("status"),
-                                           units=codes("unit"), biobanks=codes("biobank_source"), sops=codes("sop"),
-                                           needs_approval=True, attr_defs=attr_defs, attr_vals=changes["attributes"])
+                    return render_template("samples/edit.html", s=s, p=changes, attr_vals=changes["attributes"], **edit_ctx)
                 payload = {f: n for f, (_, n) in diff.items() if not f.startswith("attr:")}
                 payload["attributes"] = {f[5:]: n for f, (_, n) in diff.items() if f.startswith("attr:")}
                 rid = approvals.request(conn, "update_sample", payload, just,
@@ -257,14 +284,8 @@ def edit(sample_id):
         except ValueError as e:
             conn.rollback()
             flash(str(e), "error")
-            return render_template("samples/edit.html", s=s, p=changes, statuses=codes("status"), units=codes("unit"),
-                                   biobanks=codes("biobank_source"), sops=codes("sop"),
-                                   needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none",
-                                   attr_defs=attr_defs, attr_vals=changes["attributes"])
-    return render_template("samples/edit.html", s=s, p=dict(s), statuses=codes("status"), units=codes("unit"),
-                           biobanks=codes("biobank_source"), sops=codes("sop"),
-                           needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none",
-                           attr_defs=attr_defs, attr_vals=attr_vals)
+            return render_template("samples/edit.html", s=s, p=changes, attr_vals=changes["attributes"], **edit_ctx)
+    return render_template("samples/edit.html", s=s, p=dict(s), attr_vals=attr_vals, **edit_ctx)
 
 
 @bp.route("/<sample_id>/delete", methods=("POST",))
@@ -308,8 +329,16 @@ def add_custody(sample_id):
         abort(404)
     f = {k: request.form.get(k, "").strip() or None for k in
          ("event_datetime", "from_party", "to_party", "purpose", "condition_on_receipt", "initials", "notes")}
-    if not (f["event_datetime"] and f["from_party"] and f["to_party"]):
-        flash("Date/time, from and to are required", "error")
+    if not (f["event_datetime"] and f["from_party"] and f["to_party"] and f["purpose"]):
+        flash("Date/time, from, to and purpose are required", "error")
+        return redirect(url_for("samples.detail", sample_id=sample_id))
+    ok_party = lambda v: conn.execute("SELECT 1 FROM user WHERE initials=? AND active=1", (v,)).fetchone() or \
+        conn.execute("SELECT 1 FROM code_list WHERE category='party' AND code=? AND active=1", (v,)).fetchone()
+    if not (ok_party(f["from_party"]) and ok_party(f["to_party"])):
+        flash("From and To must be a user or an entry in the party list", "error")
+        return redirect(url_for("samples.detail", sample_id=sample_id))
+    if not conn.execute("SELECT 1 FROM code_list WHERE category='custody_purpose' AND code=? AND active=1", (f["purpose"],)).fetchone():
+        flash("Purpose must be an entry in the custody purpose list", "error")
         return redirect(url_for("samples.detail", sample_id=sample_id))
     cur = conn.execute(
         "INSERT INTO custody_event(sample_id, event_datetime, from_party, to_party, purpose, condition_on_receipt, "

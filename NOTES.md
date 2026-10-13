@@ -49,6 +49,16 @@
     lab bucket with gcsfuse (or sync it) rather than storing files on the VM
     disk only.
 
+12. **Remaining free text.** Only Notes fields are free text, plus three
+    machine identifiers that cannot be dropdowns: data-file URI, run ID and
+    md5 (copied from pipeline output; could move to API-only registration),
+    and the participant's external site ID. Everything else is a number, a
+    date/time, a fixed choice, or an entry from an admin-extendable list under
+    Codes (kits, lots, buffers, freezers, racks, boxes, parties, SOPs, ...).
+    Most lists start with just NA; fill them in before the first real tubes.
+    Operators are chosen from active users, so every lab member needs an
+    account before they appear on a form.
+
 ## Decisions made during the build
 
 * Collection = (participant, collection date, specimen). No separate table;

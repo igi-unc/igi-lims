@@ -42,6 +42,10 @@ Log in, add participants, register a collected specimen (root tube), then use
 * **Custody events** are append-only. **Data files** are linked to the tube
   that was sequenced or run (usually LIB or PEP) by URI, with assay, run ID,
   checksum and pipeline version.
+* **No free text** except Notes. Operator, SOP, freezer, rack, box, position,
+  custody parties and purposes, and every metadata vocabulary (kits, lots,
+  buffers, media, antibodies, ...) are dropdowns backed by admin-extendable
+  lists on the *Codes* page. Server-side checks reject values not in a list.
 * **Metadata fields** depend on the tube's fraction and material (kit, purity,
   cell count, concentration, RIN/DIN, capture kit, HLA class, ...). They are
   defined in one table (*Fields* page), appear on the create and edit forms,

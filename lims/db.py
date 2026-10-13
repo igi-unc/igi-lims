@@ -25,8 +25,26 @@ def close_db(e=None):
         conn.close()
 
 
+def _migrate(conn):
+    """Small in-place migrations for databases created by earlier versions."""
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='attribute_definition'").fetchone()
+    if row and "'list'" not in row["sql"]:
+        conn.executescript("""
+            ALTER TABLE attribute_definition RENAME TO attribute_definition_old;
+            CREATE TABLE attribute_definition (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL CHECK (scope IN ('fraction','material','all')),
+                code TEXT NOT NULL, key TEXT NOT NULL, label TEXT NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('text','number','bool','choice','list','date','datetime')),
+                unit TEXT, choices TEXT, required INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1, UNIQUE (scope, code, key));
+            INSERT INTO attribute_definition SELECT * FROM attribute_definition_old;
+            DROP TABLE attribute_definition_old;
+        """)
+
+
 def init_db(conn=None):
     conn = conn or get_db()
+    _migrate(conn)
     with current_app.open_resource("schema.sql") as f:
         conn.executescript(f.read().decode("utf8"))
     seed_module.seed(conn)
