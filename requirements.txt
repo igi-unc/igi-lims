@@ -4,3 +4,6 @@ gunicorn>=21
 pytest>=7
 allotropy>=0.1.140
 pypdf>=4          # only used when extracting vendor PDFs; safe to omit in production
+
+# Documentation (docs/make_feature_overview.py)
+reportlab
