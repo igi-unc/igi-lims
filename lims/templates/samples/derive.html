@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Derive · IGI LIMS{% endblock %}{% block content %}
 <h1>Register</h1>
 {% include "_register_tabs.html" %}
-<h2>Derived specimen from <a href="{{ url_for('samples.detail', sample_id=parent.sample_id) }}"><code>{{ parent.sample_id }}</code></a> <a class="muted" href="{{ url_for('samples.derive_pick', participant=parent.participant_id) }}">(change parent)</a></h2>
+<h2>Derived specimen from <a href="{{ url_for('samples.detail', sample_id=parent.sample_id) }}"><code>{{ parent.sample_id }}</code></a></h2>
 <p class="muted">Parent: {{ parent.specimen_code }} / {{ parent.fraction_code }} / {{ parent.material_code }} · status <span class="status {{ parent.status }}">{{ parent.status }}</span>{% if parent.quantity is not none %} · {{ parent.quantity }} {{ parent.unit or '' }}{% endif %}</p>
 <div class="card">
 <form method="post">

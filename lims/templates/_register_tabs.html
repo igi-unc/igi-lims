@@ -1,6 +1,1 @@
-<p class="tabs">
-  <a class="{% if request.endpoint == 'main.register' %}active{% endif %}" href="{{ url_for('main.register') }}">Overview</a>
-  <a class="{% if request.endpoint == 'participants.new' %}active{% endif %}" href="{{ url_for('participants.new') }}">Participant</a>
-  <a class="{% if request.endpoint == 'samples.new_root' %}active{% endif %}" href="{{ url_for('samples.new_root') }}">Base specimen</a>
-  <a class="{% if request.endpoint in ('samples.derive_pick', 'samples.derive') %}active{% endif %}" href="{{ url_for('samples.derive_pick') }}">Derived specimen</a>
-</p>
+<p class="muted"><a href="{{ url_for('main.register') }}">← Register</a></p>
