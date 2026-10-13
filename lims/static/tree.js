@@ -1,11 +1,14 @@
 // Provenance tree as SVG. Input: window.TREE (nested {sample, children}; a top node with sample=null is a
 // virtual root, e.g. a participant), window.HIGHLIGHT, optional window.MEANINGS and window.ROLE.
 // Hover shows a tooltip; click pins a detail panel (if #tree-tip / #tree-panel exist).
+// window.ORIENT = "vertical" (root at top, children below) or "horizontal" (root at left).
 (function () {
   const data = window.TREE, highlight = window.HIGHLIGHT || "", M = window.MEANINGS || {};
   const svg = document.getElementById("tree-svg"), tip = document.getElementById("tree-tip"), panel = document.getElementById("tree-panel");
   if (!svg || !data) return;
-  const NODE_W = 112, NODE_H = 26, GAP_X = 44, GAP_Y = 8, PAD = 10;
+  const vertical = (window.ORIENT || "horizontal") === "vertical";
+  const NODE_W = 112, NODE_H = 26, PAD = 10;
+  const GAP_X = vertical ? 10 : 44, GAP_Y = vertical ? 34 : 8;   // gap along the leaf axis / the depth axis
   const nodes = [], links = [];
   let leafCounter = 0;
   function layout(node, depth, parent) {
@@ -20,16 +23,27 @@
     return n;
   }
   layout(data, 0, null);
-  const maxDepth = Math.max(...nodes.map(n => n.depth)), rows = Math.max(leafCounter, 1);
-  const W = (maxDepth + 1) * (NODE_W + GAP_X) + PAD, H = rows * (NODE_H + GAP_Y) + 2 * PAD;
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.style.height = Math.min(Math.max(H, 120), 1600) + "px";
-  const x = n => n.depth * (NODE_W + GAP_X) + PAD, y = n => n.y * (NODE_H + GAP_Y) + PAD;
+  const maxDepth = Math.max(...nodes.map(n => n.depth)), leaves = Math.max(leafCounter, 1);
+  let W, H, x, y;
+  if (vertical) {
+    W = leaves * (NODE_W + GAP_X) + 2 * PAD; H = (maxDepth + 1) * (NODE_H + GAP_Y) + 2 * PAD;
+    x = n => n.y * (NODE_W + GAP_X) + PAD; y = n => n.depth * (NODE_H + GAP_Y) + PAD;
+  } else {
+    W = (maxDepth + 1) * (NODE_W + GAP_X) + PAD; H = leaves * (NODE_H + GAP_Y) + 2 * PAD;
+    x = n => n.depth * (NODE_W + GAP_X) + PAD; y = n => n.y * (NODE_H + GAP_Y) + PAD;
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
   const colors = { Available: "#dcfce7", Depleted: "#fee2e2", Shipped: "#dbeafe", Destroyed: "#e5e7eb", "In use": "#fef3c7" };
   const esc = v => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   let out = "";
   links.forEach(([a, b]) => {
-    const x1 = x(a) + NODE_W, y1 = y(a) + NODE_H / 2, x2 = x(b), y2 = y(b) + NODE_H / 2;
-    out += `<path d="M${x1},${y1} C${x1 + GAP_X / 2},${y1} ${x2 - GAP_X / 2},${y2} ${x2},${y2}" fill="none" stroke="#9ca3af" stroke-width="1.3"/>`;
+    if (vertical) {
+      const x1 = x(a) + NODE_W / 2, y1 = y(a) + NODE_H, x2 = x(b) + NODE_W / 2, y2 = y(b);
+      out += `<path d="M${x1},${y1} C${x1},${y1 + GAP_Y / 2} ${x2},${y2 - GAP_Y / 2} ${x2},${y2}" fill="none" stroke="#9ca3af" stroke-width="1.3"/>`;
+    } else {
+      const x1 = x(a) + NODE_W, y1 = y(a) + NODE_H / 2, x2 = x(b), y2 = y(b) + NODE_H / 2;
+      out += `<path d="M${x1},${y1} C${x1 + GAP_X / 2},${y1} ${x2 - GAP_X / 2},${y2} ${x2},${y2}" fill="none" stroke="#9ca3af" stroke-width="1.3"/>`;
+    }
   });
   nodes.forEach((n, i) => {
     const s = n.s;
@@ -76,7 +90,7 @@
     g.addEventListener("mousemove", ev => {
       if (!tip) return;
       tip.innerHTML = summary(n.s); tip.hidden = false;
-      const r = svg.parentElement.getBoundingClientRect();
+      const r = (svg.closest(".card") || svg.parentElement).getBoundingClientRect();
       tip.style.left = (ev.clientX - r.left + 14) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px";
     });
     g.addEventListener("mouseleave", () => { if (tip) tip.hidden = true; });

@@ -22,11 +22,11 @@
       {% if g.user.role != 'viewer' %} · <a href="{{ url_for('samples.new_root', participant=selected.participant_id) }}">register a collected specimen</a>{% endif %}
       · {% if request.args.get('deleted') %}<a href="{{ url_for('main.browse', participant=selected.participant_id) }}">hide deleted</a>{% else %}<a href="{{ url_for('main.browse', participant=selected.participant_id, deleted=1) }}">show deleted</a>{% endif %}
       · hover a tube for details, click to pin it</p>
-    <svg id="tree-svg" class="tree"></svg>
+    <div class="tree-wrap"><svg id="tree-svg" class="tree"></svg></div>
     <div id="tree-tip" class="tip" hidden></div>
     <div id="tree-panel" class="panel" hidden></div>
   </div>
-  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ROLE = {{ g.user.role|tojson }};</script>
+  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ROLE = {{ g.user.role|tojson }}; window.ORIENT = "vertical";</script>
   <script src="{{ url_for('static', filename='tree.js') }}"></script>
 {% else %}
   <div class="card"><p class="muted">Select a participant on the left to see every tube derived from their specimens as a tree.</p></div>
