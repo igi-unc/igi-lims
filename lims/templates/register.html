@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Register · IGI LIMS{% endblock %}{% block content %}
+<h1>Register</h1>
+{% include "_register_tabs.html" %}
+<div class="cols">
+<div class="card">
+  <h2>1. Participant</h2>
+  <p>Create the participant first. The LIMS assigns the IGI participant code that appears in every sample ID; the collection site's own ID is stored but never printed on a label.</p>
+  {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('participants.new') }}">Register a participant</a></p>{% endif %}
+</div>
+<div class="card">
+  <h2>2. Collected specimen</h2>
+  <p>Register the tube as it arrived (pleural fluid, blood, tissue). This is the root of the provenance tree. Every later tube (cryo vials, pellets, DNA, libraries) is made with <em>Derive</em> from an existing tube, so it is never registered here.</p>
+  {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('samples.new_root') }}">Register a collected specimen</a></p>{% endif %}
+</div>
+</div>
+{% endblock %}

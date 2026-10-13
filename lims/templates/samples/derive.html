@@ -4,7 +4,7 @@
 <div class="card">
 <form method="post">
 <div class="grid">
-  <label><span class="lbl">Fraction</span><select name="fraction">{% for c in fractions %}<option value="{{ c.code }}" {% if p.fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}{% if allowed_fr is defined and c.code not in allowed_fr %} (not allowed from {{ parent.fraction_code }}){% endif %}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Fraction</span><select name="fraction" required>{% for c in fractions %}<option value="{{ c.code }}" {% if p.fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}{% if allowed_fr is defined and c.code not in allowed_fr %} (not allowed from {{ parent.fraction_code }}){% endif %}</option>{% endfor %}</select></label>
   <label><span class="lbl">Material</span><select name="material" required><option value="">—</option>{% for c in materials %}<option value="{{ c.code }}" {% if p.material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}{% if allowed_mat is defined and c.code not in allowed_mat %} (not allowed from {{ parent.material_code }}){% endif %}</option>{% endfor %}</select></label>
   {% include "samples/_fields.html" %}
   <label class="wide"><input type="checkbox" name="parent_consumed" value="1" {% if p.parent_consumed %}checked{% endif %}> All parent material used – mark parent as Depleted</label>

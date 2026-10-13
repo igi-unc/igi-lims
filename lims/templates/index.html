@@ -11,8 +11,8 @@
 <div class="card">
   <h2>Quick actions</h2>
   {% if g.user.role != 'viewer' %}
-  <p><a class="btn" href="{{ url_for('samples.new_root') }}">Register collected specimen</a>
-     <a class="btn" href="{{ url_for('participants.new') }}">New participant</a></p>
+  <p><a class="btn" href="{{ url_for('main.register') }}">Register</a>
+     <a class="btn secondary" href="{{ url_for('main.browse') }}">Browse by participant</a></p>
   {% endif %}
   <p>Derive tubes (cryopreserve, extract, build libraries) from a sample's own page.</p>
   <h3>Tubes by status</h3>

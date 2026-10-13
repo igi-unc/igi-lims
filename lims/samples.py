@@ -281,6 +281,21 @@ def tree(conn, root_id, include_deleted=False):
     return roots[0] if len(roots) == 1 else {"sample": None, "children": roots}
 
 
+def participant_forest(conn, participant_id, include_deleted=False):
+    """One virtual root per participant; children are the collections' root tubes, then their trees."""
+    q = "SELECT * FROM sample WHERE participant_id=?" + ("" if include_deleted else " AND deleted_at IS NULL") + " ORDER BY sample_id"
+    rows = [dict(r) for r in conn.execute(q, (participant_id,))]
+    nodes = {r["sample_id"]: {"sample": r, "children": []} for r in rows}
+    roots = []
+    for r in rows:
+        pid = r["parent_id"]
+        if pid and pid in nodes:
+            nodes[pid]["children"].append(nodes[r["sample_id"]])
+        else:
+            roots.append(nodes[r["sample_id"]])
+    return {"sample": None, "participant": participant_id, "children": roots}
+
+
 def label_rows(sample):
     """Suggested 3-row label layout (spec section 4); breaks always fall at a hyphen."""
     sep = current_app.config["ID_SEPARATOR"]

@@ -12,10 +12,22 @@ FORM_FIELDS = ["fraction", "material", "count", "created_datetime", "created_by"
                "quantity", "unit", "freezer", "rack", "box", "position", "status", "notes"]
 
 
+# Every field must be filled in when a tube is created (use NA where it does not apply).
+REQUIRED_CREATE_FIELDS = [f for f in FORM_FIELDS]
+REQUIRED_ROOT_FIELDS = ["participant", "collection_date", "specimen"]
+FIELD_LABELS = {"created_datetime": "Processed on", "created_by": "Operator initials", "sop_code": "SOP / protocol",
+                "biobank_source": "Biobank source", "collection_date": "Collection date"}
+
+
 def _form_payload(extra=()):
     p = {f: request.form.get(f, "") for f in FORM_FIELDS + list(extra)}
     p["parent_consumed"] = bool(request.form.get("parent_consumed"))
     return p
+
+
+def _missing(payload, required):
+    return [FIELD_LABELS.get(f, f.replace("_", " ").capitalize()) for f in required
+            if not str(payload.get(f) or "").strip()]
 
 
 def _needs_approval(diff):
@@ -100,6 +112,11 @@ def _handle_create(payload, template, **ctx):
     """Shared POST logic for root and derived creation."""
     conn = get_db()
     action = request.form.get("action", "create")
+    required = REQUIRED_CREATE_FIELDS + (REQUIRED_ROOT_FIELDS if "participant" in payload else [])
+    missing = _missing(payload, required)
+    if missing:
+        flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
+        return _render_form(template, payload, **ctx)
     try:
         if action == "request_override":
             just = request.form.get("justification", "").strip()

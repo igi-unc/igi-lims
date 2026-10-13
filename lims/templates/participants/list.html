@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% block title %}Participants · IGI LIMS{% endblock %}{% block content %}
-<h1>Participants {% if g.user.role != 'viewer' %}<a class="btn" href="{{ url_for('participants.new') }}">New participant</a>{% endif %}</h1>
+<h1>Samples &amp; Participants</h1>
+{% include "_browse_tabs.html" %}
 <form method="get" class="card filters">
   <label><span class="lbl">ID contains</span><input type="text" name="q" value="{{ q }}"></label>
   <label><span class="lbl">Cohort</span><select name="cohort"><option value="">any</option>{% for c in cohorts %}<option value="{{ c.code }}" {% if cohort == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>

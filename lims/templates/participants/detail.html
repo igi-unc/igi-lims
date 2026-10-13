@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}{{ p.participant_id }} · IGI LIMS{% endblock %}{% block content %}
-<h1>Participant <code>{{ p.participant_id }}</code></h1>
+<h1>Participant <code>{{ p.participant_id }}</code> <a class="btn secondary" href="{{ url_for('main.browse', participant=p.participant_id) }}">Tree view</a></h1>
 <div class="card">
 <table class="compact"><tbody>
 <tr><th>Cohort</th><td>{{ p.cohort_code }} – {{ meanings.cohort.get(p.cohort_code,'') }}</td></tr>

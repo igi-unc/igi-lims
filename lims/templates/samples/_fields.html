@@ -1,16 +1,17 @@
+<p class="muted">All fields are required. Enter <code>NA</code> (or 0 for quantity) where a field does not apply.</p>
 {# Shared processing/storage fields for create forms. Expects p, statuses, units, biobanks, sops. #}
-<label><span class="lbl">Number of tubes</span><input type="number" name="count" min="1" max="99" value="{{ p.count or 1 }}"></label>
-<label><span class="lbl">Processed on (date/time)</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}"></label>
-<label><span class="lbl">Operator initials</span><input type="text" name="created_by" value="{{ p.created_by or '' }}" maxlength="4"></label>
+<label><span class="lbl">Number of tubes</span><input type="number" name="count" min="1" max="99" value="{{ p.count or 1 }}" required></label>
+<label><span class="lbl">Processed on (date/time)</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}" required></label>
+<label><span class="lbl">Operator initials</span><input type="text" name="created_by" value="{{ p.created_by or '' }}" maxlength="4" required></label>
 <label><span class="lbl">SOP / protocol</span>
-  {% if sops %}<select name="sop_code"><option value="">—</option>{% for c in sops %}<option value="{{ c.code }}" {% if p.sop_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select>
-  {% else %}<input type="text" name="sop_code" value="{{ p.sop_code or '' }}" placeholder="free text until SOP codes are added">{% endif %}</label>
-<label><span class="lbl">Biobank source</span><select name="biobank_source"><option value="">—</option>{% for c in biobanks %}<option value="{{ c.code }}" {% if p.biobank_source == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
-<label><span class="lbl">Quantity (per tube)</span><input type="number" step="any" name="quantity" value="{{ p.quantity if p.quantity is not none else '' }}"></label>
-<label><span class="lbl">Unit</span><select name="unit"><option value="">—</option>{% for c in units %}<option value="{{ c.code }}" {% if p.unit == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
-<label><span class="lbl">Status</span><select name="status">{% for c in statuses %}<option value="{{ c.code }}" {% if (p.status or 'Available') == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
-<label><span class="lbl">Freezer</span><input type="text" name="freezer" value="{{ p.freezer or '' }}"></label>
-<label><span class="lbl">Rack</span><input type="text" name="rack" value="{{ p.rack or '' }}"></label>
-<label><span class="lbl">Box</span><input type="text" name="box" value="{{ p.box or '' }}"></label>
-<label><span class="lbl">Position</span><input type="text" name="position" value="{{ p.position or '' }}" placeholder="e.g. A1 (first tube)"></label>
-<label class="wide"><span class="lbl">Notes</span><textarea name="notes">{{ p.notes or '' }}</textarea></label>
+  {% if sops %}<select name="sop_code" required><option value="">—</option>{% for c in sops %}<option value="{{ c.code }}" {% if p.sop_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select>
+  {% else %}<input type="text" name="sop_code" value="{{ p.sop_code or '' }}" placeholder="SOP name/version, or NA" required>{% endif %}</label>
+<label><span class="lbl">Biobank source</span><select name="biobank_source" required><option value="">—</option>{% for c in biobanks %}<option value="{{ c.code }}" {% if p.biobank_source == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+<label><span class="lbl">Quantity (per tube)</span><input type="number" step="any" name="quantity" value="{{ p.quantity if p.quantity is not none else '' }}" required placeholder="0 if not applicable"></label>
+<label><span class="lbl">Unit</span><select name="unit" required><option value="">—</option>{% for c in units %}<option value="{{ c.code }}" {% if p.unit == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+<label><span class="lbl">Status</span><select name="status" required>{% for c in statuses %}<option value="{{ c.code }}" {% if (p.status or 'Available') == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+<label><span class="lbl">Freezer</span><input type="text" name="freezer" value="{{ p.freezer or '' }}" required placeholder="freezer, or NA"></label>
+<label><span class="lbl">Rack</span><input type="text" name="rack" value="{{ p.rack or '' }}" required placeholder="rack, or NA"></label>
+<label><span class="lbl">Box</span><input type="text" name="box" value="{{ p.box or '' }}" required placeholder="box, or NA"></label>
+<label><span class="lbl">Position</span><input type="text" name="position" value="{{ p.position or '' }}" placeholder="e.g. A1 (first tube), or NA" required></label>
+<label class="wide"><span class="lbl">Notes</span><textarea name="notes" required placeholder="NA if nothing to note">{{ p.notes or '' }}</textarea></label>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}{% block title %}Samples · IGI LIMS{% endblock %}{% block content %}
-<h1>Samples {% if g.user.role != 'viewer' %}<a class="btn" href="{{ url_for('samples.new_root') }}">Register specimen</a>{% endif %}</h1>
+<h1>Samples &amp; Participants</h1>
+{% include "_browse_tabs.html" %}
 <form method="get" class="card filters">
   <label><span class="lbl">ID contains</span><input type="text" name="q" value="{{ f.q }}"></label>
   <label><span class="lbl">Participant</span><input type="text" name="participant" value="{{ f.participant }}"></label>

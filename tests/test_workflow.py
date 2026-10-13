@@ -192,3 +192,23 @@ def test_admin_codes_and_rules(app, alice):
     # retire the code: new tubes with it are rejected outright (not overridable)
     alice.post("/admin/codes", data={"action": "toggle", "category": "material", "code": "XYZ"}, follow_redirects=True)
     assert b"is retired" in derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="XYZ").data
+
+
+def test_all_fields_required(app, alice):
+    r = make_root(alice, freezer="", notes="")
+    assert b"All fields are required" in r.data and b"Freezer" in r.data and b"Notes" in r.data
+    assert ids_of(app, P + "PF-BLK-NAT") == []
+
+
+def test_browse_and_register_pages(app, alice):
+    make_root(alice)
+    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", count="2")
+    make_root(alice, specimen="PB")
+    assert alice.get("/register").status_code == 200
+    r = alice.get("/browse?participant=KXRTQVA")
+    assert r.status_code == 200
+    html = r.data.decode()
+    assert '"participant": "KXRTQVA"' in html and P + "PB-BLK-NAT-01" in html and P + "PF-BLK-CPU-02" in html
+    assert alice.get("/browse").status_code == 200
+    # audit page renders key/value lines
+    assert "class='kv'" in alice.get("/admin/audit").data.decode()

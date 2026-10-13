@@ -9,7 +9,7 @@
 <table><thead><tr><th>When</th><th>User</th><th>Table</th><th>Record</th><th>Action</th><th>Before</th><th>After</th><th>Appr.</th></tr></thead><tbody>
 {% for a in rows %}<tr><td>{{ a.ts }}</td><td>{{ a.username }}</td><td>{{ a.table_name }}</td>
 <td>{% if a.table_name == 'sample' %}<a href="{{ url_for('samples.detail', sample_id=a.record_id) }}"><code>{{ a.record_id }}</code></a>{% else %}<code>{{ a.record_id }}</code>{% endif %}</td>
-<td>{{ a.action }}</td><td><code class="wrap">{{ a.before_json or '' }}</code></td><td><code class="wrap">{{ a.after_json or '' }}</code></td>
+<td>{{ a.action }}</td><td>{{ a.before_json|kv }}</td><td>{{ a.after_json|kv }}</td>
 <td>{% if a.approval_id %}<a href="{{ url_for('approvals.detail', request_id=a.approval_id) }}">#{{ a.approval_id }}</a>{% endif %}</td></tr>{% endfor %}
 </tbody></table>
 <p>{% if page > 1 %}<a href="{{ url_for('admin.audit_log', page=page-1, **f) }}">← newer</a>{% endif %} {% if has_more %}<a href="{{ url_for('admin.audit_log', page=page+1, **f) }}">older →</a>{% endif %}</p>

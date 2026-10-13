@@ -1,5 +1,14 @@
 {% extends "base.html" %}{% block title %}Approvals · IGI LIMS{% endblock %}{% block content %}
 <h1>Approval queue</h1>
+<div class="card">
+<p>This is the two-person agreement step. Three kinds of action wait here until a <em>different</em> user approves them:</p>
+<ul>
+  <li><strong>Rule overrides.</strong> Creating a tube that breaks a derivation rule (for example a library straight from native fluid, or a fraction not allowed for that specimen). The tubes are only created on approval.</li>
+  <li><strong>Edits to existing tubes.</strong> Changes to status, quantity, location, parent, and so on are applied on approval. Creating tubes that pass the rules, recording custody hand-offs, and linking files do not need approval.</li>
+  <li><strong>Deleting or restoring a tube.</strong> Deletes are soft; the record and its aliquot number are kept.</li>
+</ul>
+<p class="muted">The requester cannot approve their own request. Every approved action is stamped with the request number in the audit log. The scope of edit approvals is set by <code>SAMPLE_EDIT_APPROVAL</code> in <code>config.py</code>.</p>
+</div>
 <p class="tabs">{% for st in ('pending','approved','rejected','failed') %}<a class="{% if status == st %}active{% endif %}" href="{{ url_for('approvals.list_requests', status=st) }}">{{ st }}</a>{% endfor %}</p>
 <table><thead><tr><th>#</th><th>Action</th><th>Target</th><th>Requested by</th><th>When</th><th>Justification</th><th>Decided</th></tr></thead><tbody>
 {% for r in rows %}<tr><td><a href="{{ url_for('approvals.detail', request_id=r.id) }}">{{ r.id }}</a></td><td>{{ r.action_type }}</td>

@@ -17,6 +17,23 @@ def create_app(test_config=None):
     for m in (main, samples, participants, approvals, admin, api):
         app.register_blueprint(m.bp)
 
+    @app.template_filter("kv")
+    def kv(text):
+        """Render a JSON object as 'key: value' lines for the audit views."""
+        import json
+        from markupsafe import Markup, escape
+        if not text:
+            return ""
+        try:
+            obj = json.loads(text)
+        except (TypeError, ValueError):
+            return text
+        if not isinstance(obj, dict):
+            return text
+        rows = "".join(f"<div><span class='k'>{escape(k)}</span> {escape('' if v is None else v)}</div>"
+                       for k, v in obj.items())
+        return Markup(f"<div class='kv'>{rows}</div>")
+
     @app.context_processor
     def inject():
         from .db import get_db

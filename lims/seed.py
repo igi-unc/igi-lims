@@ -68,6 +68,8 @@ CODES = {
     "biobank_source": [
         ("C", "UNC CCPD biobank"),
         ("H", "HemaTrack"),
+        ("IH", "In-house: collected or generated at PIRL, no biobank"),
+        ("NA", "Not applicable"),
     ],
     "site": [
         ("UNC", "University of North Carolina"),
@@ -81,6 +83,7 @@ CODES = {
         ("ng/uL", "concentration"),
         ("mg", "milligrams"),
         ("sections", "FFPE sections"),
+        ("NA", "Not applicable"),
     ],
 }
 

@@ -1,0 +1,5 @@
+<p class="tabs">
+  <a class="{% if request.endpoint == 'main.browse' %}active{% endif %}" href="{{ url_for('main.browse') }}">By participant (tree)</a>
+  <a class="{% if request.endpoint == 'samples.list_samples' %}active{% endif %}" href="{{ url_for('samples.list_samples') }}">All samples (table)</a>
+  <a class="{% if request.endpoint == 'participants.list_participants' %}active{% endif %}" href="{{ url_for('participants.list_participants') }}">All participants (table)</a>
+</p>
