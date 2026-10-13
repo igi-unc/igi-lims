@@ -14,6 +14,7 @@
   <label><span class="lbl">Material (as received)</span><select name="material" required>{% for c in materials %}<option value="{{ c.code }}" {% if p.material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
   {% include "samples/_fields.html" %}
 </div>
+{% include "samples/_attributes.html" %}
 {% if prefix %}<p class="muted">IDs will be issued as <code>{{ prefix }}NN</code></p>{% endif %}
 {% include "samples/_violations.html" %}
 <p><button type="submit" name="action" value="create">Create</button> <a class="btn secondary" href="{{ url_for('samples.list_samples') }}">Cancel</a></p>

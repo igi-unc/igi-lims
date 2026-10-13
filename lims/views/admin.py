@@ -148,3 +148,49 @@ def audit_log():
     rows = conn.execute(sql, params).fetchall()
     tables = [r[0] for r in conn.execute("SELECT DISTINCT table_name FROM audit_log ORDER BY 1")]
     return render_template("admin/audit.html", rows=rows[:100], has_more=len(rows) > 100, page=page, f=f, tables=tables)
+
+
+@bp.route("/fields", methods=("GET", "POST"))
+@admin_required
+def fields():
+    """Per-fraction / per-material metadata field definitions."""
+    conn = get_db()
+    if request.method == "POST":
+        f = request.form
+        action = f.get("action")
+        if action == "add":
+            key = f["key"].strip().lower().replace(" ", "_")
+            if not key or not f["label"].strip():
+                flash("Key and label are required", "error")
+            elif conn.execute("SELECT 1 FROM attribute_definition WHERE scope=? AND code=? AND key=?",
+                              (f["scope"], f["code"].strip().upper() or "*", key)).fetchone():
+                flash("That field already exists for this code", "error")
+            else:
+                n = conn.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM attribute_definition WHERE scope=? AND code=?",
+                                 (f["scope"], f["code"].strip().upper() or "*")).fetchone()[0]
+                conn.execute("INSERT INTO attribute_definition(scope, code, key, label, type, unit, choices, required, sort_order) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (f["scope"], f["code"].strip().upper() or "*", key, f["label"].strip(), f["type"],
+                              f.get("unit", "").strip() or None, f.get("choices", "").strip() or None, 1 if f.get("required") else 0, n))
+                audit.log(conn, "attribute_definition", f"{f['scope']}:{f['code']}:{key}", "insert", after={"label": f["label"]})
+                flash("Field added", "ok")
+        elif action == "toggle":
+            row = conn.execute("SELECT * FROM attribute_definition WHERE id=?", (f["id"],)).fetchone()
+            if row:
+                conn.execute("UPDATE attribute_definition SET active=? WHERE id=?", (0 if row["active"] else 1, row["id"]))
+                audit.log(conn, "attribute_definition", row["id"], "update", before={"active": row["active"]}, after={"active": 0 if row["active"] else 1})
+        elif action == "required":
+            row = conn.execute("SELECT * FROM attribute_definition WHERE id=?", (f["id"],)).fetchone()
+            if row:
+                conn.execute("UPDATE attribute_definition SET required=? WHERE id=?", (0 if row["required"] else 1, row["id"]))
+                audit.log(conn, "attribute_definition", row["id"], "update", before={"required": row["required"]}, after={"required": 0 if row["required"] else 1})
+        conn.commit()
+        return redirect(url_for("admin.fields", scope=f.get("scope"), code=f.get("code")))
+    scope = request.args.get("scope", "material")
+    code = (request.args.get("code") or "").upper()
+    codes_for = {"fraction": codes("fraction", active_only=False), "material": codes("material", active_only=False), "all": []}[scope]
+    if scope == "all":
+        code = "*"
+    elif not code and codes_for:
+        code = codes_for[0]["code"]
+    rows = conn.execute("SELECT * FROM attribute_definition WHERE scope=? AND code=? ORDER BY sort_order, id", (scope, code)).fetchall()
+    return render_template("admin/fields.html", scope=scope, code=code, codes_for=codes_for, rows=rows)

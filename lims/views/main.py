@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, g, redirect, url_for, request
 
 from ..auth import login_required
 from ..db import get_db
-from .. import ids, samples as svc
+from .. import ids, samples as svc, attributes
 from .helpers import codes, code_meaning_map
 import json
 
@@ -64,10 +64,15 @@ def browse():
     pid = request.args.get("participant") or ""
     selected = conn.execute("SELECT * FROM participant WHERE participant_id=?", (pid,)).fetchone() if pid else None
     forest = svc.participant_forest(conn, pid, include_deleted=request.args.get("deleted") == "1") if selected else None
+    attrs = {}
+    if selected:
+        sids = [r["sample_id"] for r in conn.execute("SELECT sample_id FROM sample WHERE participant_id=?", (pid,))]
+        attrs = attributes.for_samples(conn, sids)
     return render_template("browse.html", participants=participants, q=q, cohort=cohort, cohorts=codes("cohort"),
                            selected=selected, forest_json=json.dumps(forest, default=str) if forest else "null",
                            highlight=request.args.get("highlight", ""), meanings=code_meaning_map(),
-                           meanings_json=json.dumps(code_meaning_map()))
+                           meanings_json=json.dumps(code_meaning_map()), attrs_json=json.dumps(attrs),
+                           attr_labels_json=json.dumps({k: v[0] + (f" ({v[1]})" if v[1] else "") for k, v in attributes.labels(conn).items()}))
 
 
 @bp.route("/register")

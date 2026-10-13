@@ -1,0 +1,31 @@
+{# Dynamic metadata fields for create forms. Needs attr_defs_json and p (payload with optional p.attributes). #}
+<div class="wide" id="attr-fields"></div>
+<script>
+(function () {
+  const DEFS = {{ attr_defs_json|safe }};
+  const VALUES = {{ (p.attributes or {})|tojson }};
+  const box = document.getElementById("attr-fields");
+  const fr = document.querySelector("select[name=fraction]"), mat = document.querySelector("select[name=material]");
+  const esc = v => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  function field(d) {
+    const name = "attr_" + d.key, cur = VALUES[d.key] != null ? VALUES[d.key] : "";
+    const req = d.required ? " required" : "", lbl = esc(d.label) + (d.unit ? " (" + esc(d.unit) + ")" : "") + (d.required ? " *" : "");
+    let input;
+    if (d.type === "choice" || d.type === "bool") {
+      const opts = (d.type === "bool" ? ["yes", "no"] : (d.choices || "").split("|"));
+      input = `<select name="${name}"${req}><option value="">—</option>` + opts.map(o => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("") + `</select>`;
+    } else if (d.type === "number") input = `<input type="number" step="any" name="${name}" value="${esc(cur)}"${req}>`;
+    else if (d.type === "date") input = `<input type="date" name="${name}" value="${esc(cur)}"${req}>`;
+    else input = `<input type="text" name="${name}" value="${esc(cur)}"${req}>`;
+    return `<label><span class="lbl">${lbl}</span>${input}</label>`;
+  }
+  function render() {
+    const seen = new Set(), list = [];
+    const add = arr => (arr || []).forEach(d => { if (!seen.has(d.key)) { seen.add(d.key); list.push(d); } });
+    add(fr ? DEFS.fraction[fr.value] : null); add(mat ? DEFS.material[mat.value] : null); add(DEFS.all);
+    box.innerHTML = list.length ? `<h3>Metadata for ${esc(fr ? fr.value : "")}-${esc(mat ? mat.value : "")}</h3><div class="grid">` + list.map(field).join("") + `</div>` : "";
+  }
+  if (fr) fr.addEventListener("change", render); if (mat) mat.addEventListener("change", render);
+  render();
+})();
+</script>

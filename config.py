@@ -59,6 +59,9 @@ PROVENANCE_FIELDS = {"parent_id", "root_id", "sample_id"}
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.environ.get("LIMS_SECRET_KEY", "change-me-before-deploying")
 DATABASE = os.environ.get("LIMS_DATABASE", os.path.join(os.path.dirname(__file__), "instance", "lims.db"))
+# Uploaded files (QC exports, traces, images). Point at a gcsfuse mount on the GCP VM.
+ATTACHMENT_DIR = os.environ.get("LIMS_ATTACHMENT_DIR", os.path.join(os.path.dirname(__file__), "instance", "attachments"))
+MAX_CONTENT_LENGTH = 100 * 1024 * 1024
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 PERMANENT_SESSION_LIFETIME = 60 * 60 * 12

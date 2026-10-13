@@ -37,6 +37,18 @@
 8. **Barcodes.** The jump box on every page accepts a scanned ID. Label
    printing is not implemented; the 3-row layout is shown on each tube page.
 
+9. **Required metadata.** Only two fields are required so far: library assay
+   (LIB) and HLA class (PEP). Everything else is optional. Make more required
+   on the *Fields* page once the lab agrees what must never be blank.
+10. **QC import matching.** Rows auto-match only when the instrument sample
+    name contains the full 35-character tube ID. Tell operators to name samples
+    with the tube ID (or scan it) on the Qubit, NanoDrop, TapeStation and
+    Countess. The Countess reader is built from the vendor column spec, not a
+    real export; check it against the first real file.
+11. **Attachments on GCP.** `ATTACHMENT_DIR` is a plain directory; mount the
+    lab bucket with gcsfuse (or sync it) rather than storing files on the VM
+    disk only.
+
 ## Decisions made during the build
 
 * Collection = (participant, collection date, specimen). No separate table;
@@ -46,3 +58,12 @@
   the derive form, so it does not need approval.
 * Aliquot numbers are issued from `MAX(aliquot)` over all tubes with the same
   prefix, including deleted ones, so they are never reused.
+* Metadata keys are shared across codes (`cell_count` on TUM and CPU is one
+  value per tube). QC-imported values record the source attachment; manual
+  edits go through the approval queue like any other sample edit, QC imports
+  do not (the value comes from an instrument file and is audited).
+* TapeStation is parsed from the XML directly rather than via allotropy,
+  because allotropy's electrophoresis output buries RIN/DIN in calculated-data
+  documents and drops region tables (cfDNA %, average size, molarity).
+* Project now needs Python 3.10+ (allotropy). The cluster venv uses miniconda's
+  3.10.

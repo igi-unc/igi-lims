@@ -25,7 +25,7 @@
     <div id="tree-tip" class="tip" hidden></div>
     <div id="tree-panel" class="panel" hidden></div>
   </div>
-  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ORIENT = "vertical";</script>
+  <script>window.TREE = {{ forest_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.MEANINGS = {{ meanings_json|safe }}; window.ORIENT = "vertical"; window.ATTRS = {{ attrs_json|safe }}; window.ATTR_LABELS = {{ attr_labels_json|safe }};</script>
   <script src="{{ url_for('static', filename='tree.js') }}"></script>
 {% else %}
   <div class="card"><p class="muted">Select a participant on the left to see every tube derived from their specimens as a tree.</p></div>

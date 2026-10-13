@@ -57,4 +57,9 @@ def make_root(client, **over):
 def derive(client, parent, **over):
     data = {"fraction": "", "material": "", "count": "1", "quantity": "1", "unit": "NA", "created_by": "MF", **ALL_FIELDS}
     data.update(over)
+    # required metadata for some materials (see lims/seed_attributes.py)
+    if data["material"] == "LIB":
+        data.setdefault("attr_assay", "ONT")
+    if data["material"] == "PEP":
+        data.setdefault("attr_hla_class", "I")
     return client.post(f"/samples/{parent}/derive", data=data, follow_redirects=True)

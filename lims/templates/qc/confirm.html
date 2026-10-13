@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Import QC · IGI LIMS{% endblock %}{% block content %}
+<h1>Import QC <span class="muted">· {{ instrument }}</span></h1>
+<p class="muted">File <code>{{ att.filename }}</code> (md5 {{ att.md5 }}) stored as attachment #{{ att.id }}. For each row, enter the tube the measurement belongs to and untick any value you do not want written. Rows with no tube are skipped.</p>
+<form method="post">
+<table>
+<thead><tr><th>#</th><th>Instrument sample name</th><th>Measured</th><th>Tube ID</th><th>Values to write</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+  <td>{{ r.i + 1 }}</td>
+  <td><code>{{ r.m.sample_name }}</code>{% if r.m.extra.get('well') %} <span class="muted">well {{ r.m.extra.well }}</span>{% endif %}{% if r.m.extra.get('alert') %} <span class="status Depleted">{{ r.m.extra.alert }}</span>{% endif %}</td>
+  <td class="muted">{{ r.m.measured_at }}</td>
+  <td><input type="text" name="tube_{{ r.i }}" value="{{ r.suggest }}" placeholder="scan or type tube ID" autocomplete="off" style="min-width:330px;font-family:ui-monospace,Menlo,monospace"></td>
+  <td>{% for k, v, u, label in r.vals %}<label style="display:inline-block;margin:0 10px 2px 0"><input type="checkbox" name="use_{{ r.i }}_{{ k }}" value="1" checked> {{ label }}: <b>{{ v }}</b> {{ u or '' }}</label>{% endfor %}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+<p><button type="submit">Write values to tubes</button> <a class="btn secondary" href="{{ url_for('qc.upload') }}">Cancel</a></p>
+</form>
+{% endblock %}

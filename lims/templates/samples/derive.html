@@ -11,6 +11,7 @@
   {% include "samples/_fields.html" %}
   <label class="wide"><input type="checkbox" name="parent_consumed" value="1" {% if p.parent_consumed %}checked{% endif %}> All parent material used – mark parent as Depleted</label>
 </div>
+{% include "samples/_attributes.html" %}
 {% if prefix %}<p class="muted">IDs will be issued as <code>{{ prefix }}NN</code></p>{% endif %}
 {% include "samples/_violations.html" %}
 <p><button type="submit" name="action" value="create">Create</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=parent.sample_id) }}">Cancel</a></p>

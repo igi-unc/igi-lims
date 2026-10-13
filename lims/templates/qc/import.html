@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}Import QC · IGI LIMS{% endblock %}{% block content %}
+<h1>Import QC</h1>
+<div class="card">
+<p>Upload one export file from an instrument. The file is kept with the tubes it describes, and each value you confirm is written to the tube with a link back to the file.</p>
+<form method="post" enctype="multipart/form-data">
+  <div class="grid">
+    <label><span class="lbl">Export file</span><input type="file" name="file" required></label>
+    <label><span class="lbl">Instrument</span><select name="instrument"><option value="">detect automatically</option>{% for k, v in instruments.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+    <label class="wide"><span class="lbl">Notes (optional)</span><input type="text" name="notes"></label>
+  </div>
+  <p><button type="submit">Upload and read</button></p>
+</form>
+<p class="muted">Supported: Qubit 4 (CSV/XLSX), NanoDrop One (CSV), Agilent TapeStation (XML export from TapeStation Analysis), Countess 3 / 3 FL (CSV). Name samples on the instrument with the full tube ID and the rows will match themselves.</p>
+</div>
+{% endblock %}

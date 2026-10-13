@@ -146,3 +146,51 @@ CREATE TABLE IF NOT EXISTS audit_log (
     approval_id   INTEGER REFERENCES approval_request(id)
 );
 CREATE INDEX IF NOT EXISTS idx_audit_record ON audit_log(table_name, record_id);
+
+-- ---------------------------------------------------------------- metadata (added 2026-10-13)
+
+-- Which extra fields apply to a tube, by fraction code, material code, or all tubes ('all','*').
+-- A key may be defined under several codes (e.g. cell_count for TUM and CPU); the form merges by key.
+CREATE TABLE IF NOT EXISTS attribute_definition (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope       TEXT NOT NULL CHECK (scope IN ('fraction','material','all')),
+    code        TEXT NOT NULL,                     -- fraction/material code, or '*' for scope 'all'
+    key         TEXT NOT NULL,                     -- snake_case identifier, stable across scopes
+    label       TEXT NOT NULL,
+    type        TEXT NOT NULL CHECK (type IN ('text','number','bool','choice','date')),
+    unit        TEXT,
+    choices     TEXT,                              -- '|'-separated for type 'choice'
+    required    INTEGER NOT NULL DEFAULT 0,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    active      INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (scope, code, key)
+);
+
+-- Files kept with a tube (traces, images, reports) or shared QC exports (sample_id NULL, used by several tubes).
+CREATE TABLE IF NOT EXISTS attachment (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    sample_id     TEXT REFERENCES sample(sample_id),
+    filename      TEXT NOT NULL,
+    stored_path   TEXT NOT NULL,                   -- relative to ATTACHMENT_DIR
+    content_type  TEXT,
+    size_bytes    INTEGER NOT NULL,
+    md5           TEXT NOT NULL,
+    kind          TEXT NOT NULL DEFAULT 'other',   -- qc_export, trace, image, report, other
+    instrument    TEXT,                            -- qubit4, nanodrop_one, tapestation, countess3, ...
+    notes         TEXT,
+    uploaded_by   TEXT NOT NULL,
+    uploaded_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    deleted_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_attachment_sample ON attachment(sample_id);
+
+-- One value per (tube, key). Values written by a QC import point at the file they came from.
+CREATE TABLE IF NOT EXISTS sample_attribute (
+    sample_id             TEXT NOT NULL REFERENCES sample(sample_id),
+    key                   TEXT NOT NULL,
+    value                 TEXT,
+    source_attachment_id  INTEGER REFERENCES attachment(id),
+    updated_by            TEXT,
+    updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    PRIMARY KEY (sample_id, key)
+);

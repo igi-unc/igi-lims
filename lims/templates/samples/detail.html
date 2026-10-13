@@ -41,6 +41,12 @@
   <button type="submit" class="danger">Request {% if s.deleted_at %}restore{% else %}deletion{% endif %}</button>
 </form></details>
 {% endif %}
+<h2>Metadata</h2>
+<table class="compact"><tbody>
+{% for d, v in attrs %}<tr><th>{{ d.label if d else v.key }}</th><td>{{ v.value }}{% if d and d.unit %} {{ d.unit }}{% endif %}
+  {% if v.source_attachment_id %}<a class="muted" href="{{ url_for('samples.get_attachment', attachment_id=v.source_attachment_id) }}" title="from instrument file">⇣ file #{{ v.source_attachment_id }}</a>{% endif %}</td></tr>
+{% else %}<tr><td class="muted">No metadata recorded.{% if g.user.role != 'viewer' %} Add it with Edit, or via Import QC.{% endif %}</td></tr>{% endfor %}
+</tbody></table>
 <h3>Label</h3>
 <div class="label">{% for row in label %}{{ row }}<br>{% endfor %}{{ s.created_by or '' }}</div>
 </div>
@@ -63,6 +69,23 @@
   <label><span class="lbl">Also set status to</span><select name="set_status"><option value="">(unchanged)</option><option>In use</option><option>Shipped</option><option>Available</option></select></label>
   <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
 </div><button type="submit">Record</button></form></details>
+{% endif %}
+
+<h2>Attachments</h2>
+<table class="compact"><thead><tr><th>File</th><th>Kind</th><th>Uploaded</th><th></th></tr></thead><tbody>
+{% for a in attachments %}<tr><td><a href="{{ url_for('samples.get_attachment', attachment_id=a.id) }}">{{ a.filename }}</a> <span class="muted">{{ (a.size_bytes / 1024)|round(1) }} KB · md5 {{ a.md5[:8] }}…</span>{% if a.notes %}<br><span class="muted">{{ a.notes }}</span>{% endif %}</td>
+<td>{{ a.kind }}{% if a.instrument %} · {{ a.instrument }}{% endif %}{% if a.shared %} <span class="muted">(shared import)</span>{% endif %}</td><td class="muted">{{ a.uploaded_at }} {{ a.uploaded_by }}</td>
+<td>{% if g.user.role != 'viewer' and not a.shared %}<form class="inline" method="post" action="{{ url_for('samples.delete_attachment', attachment_id=a.id) }}" onsubmit="return confirm('Remove this attachment?')"><button class="small secondary">remove</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">No attachments.</td></tr>{% endfor %}
+</tbody></table>
+{% if g.user.role != 'viewer' and not s.deleted_at %}
+<details><summary>Attach a file (trace, image, report)</summary>
+<form method="post" action="{{ url_for('samples.add_attachment', sample_id=s.sample_id) }}" enctype="multipart/form-data"><div class="grid">
+  <label><span class="lbl">File</span><input type="file" name="file" required></label>
+  <label><span class="lbl">Kind</span><select name="kind">{% for k in ('trace','image','report','other') %}<option>{{ k }}</option>{% endfor %}</select></label>
+  <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
+</div><button type="submit">Attach</button></form></details>
+<p class="muted">Instrument QC exports go through <a href="{{ url_for('qc.upload') }}">Import QC</a>, which also fills the metadata fields.</p>
 {% endif %}
 
 <h2>Data files</h2>

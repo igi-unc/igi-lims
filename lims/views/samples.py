@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 
 from ..auth import login_required, writer_required
 from ..db import get_db
-from .. import samples as svc, approvals, audit, ids, rules
+from .. import samples as svc, approvals, audit, ids, rules, attributes, attachments
 from .helpers import codes, code_meaning_map
 
 bp = Blueprint("samples", __name__, url_prefix="/samples")
@@ -22,6 +22,7 @@ FIELD_LABELS = {"created_datetime": "Processed on", "created_by": "Operator init
 def _form_payload(extra=()):
     p = {f: request.form.get(f, "") for f in FORM_FIELDS + list(extra)}
     p["parent_consumed"] = bool(request.form.get("parent_consumed"))
+    p["attributes"] = {k[5:]: v for k, v in request.form.items() if k.startswith("attr_")}
     return p
 
 
@@ -83,6 +84,7 @@ def detail(sample_id):
     participant = conn.execute("SELECT * FROM participant WHERE participant_id=?", (s["participant_id"],)).fetchone()
     return render_template("samples/detail.html", s=s, children=children, ancestors=svc.ancestors(conn, sample_id),
                            custody=custody, files=files, history=history, pending=pending, participant=participant,
+                           attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
                            label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"),
                            json=json)
 
@@ -103,6 +105,7 @@ def tree(root_id):
 
 def _render_form(template, payload, violations=None, prefix=None, **ctx):
     return render_template(template, p=payload, violations=violations or [], prefix=prefix,
+                           attr_defs_json=attributes.all_definitions_json(get_db()),
                            fractions=codes("fraction"), materials=codes("material"), statuses=codes("status"),
                            units=codes("unit"), biobanks=codes("biobank_source"), specimens=codes("specimen"),
                            sops=codes("sop"), **ctx)
@@ -118,6 +121,10 @@ def _handle_create(payload, template, **ctx):
         flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
         return _render_form(template, payload, **ctx)
     try:
+        payload["attributes"] = attributes.validate_dict(conn, payload.get("attributes"), payload.get("fraction"), payload.get("material"))
+        for d in attributes.definitions_for(conn, payload.get("fraction"), payload.get("material")):
+            if d["required"] and not payload["attributes"].get(d["key"]):
+                raise ValueError(f"{d['label']} is required for {payload.get('fraction')}-{payload.get('material')} tubes")
         if action == "request_override":
             just = request.form.get("justification", "").strip()
             if not just:
@@ -219,8 +226,11 @@ def edit(sample_id):
     s = svc.get_sample(conn, sample_id)
     if s is None:
         abort(404)
+    attr_defs = attributes.definitions_for(conn, s["fraction_code"], s["material_code"])
+    attr_vals = {k: r["value"] for k, r in attributes.get(conn, sample_id).items()}
     if request.method == "POST":
         changes = {f: request.form.get(f, "") for f in svc.EDITABLE_FIELDS}
+        changes["attributes"] = {d["key"]: request.form.get("attr_" + d["key"], "") for d in attr_defs}
         try:
             diff = svc.diff_changes(conn, sample_id, changes)
             if not diff:
@@ -232,8 +242,10 @@ def edit(sample_id):
                     flash("Edits to sample records need a justification and a second user's approval", "error")
                     return render_template("samples/edit.html", s=s, p=changes, statuses=codes("status"),
                                            units=codes("unit"), biobanks=codes("biobank_source"), sops=codes("sop"),
-                                           needs_approval=True)
-                rid = approvals.request(conn, "update_sample", {f: n for f, (_, n) in diff.items()}, just,
+                                           needs_approval=True, attr_defs=attr_defs, attr_vals=changes["attributes"])
+                payload = {f: n for f, (_, n) in diff.items() if not f.startswith("attr:")}
+                payload["attributes"] = {f[5:]: n for f, (_, n) in diff.items() if f.startswith("attr:")}
+                rid = approvals.request(conn, "update_sample", payload, just,
                                         target_id=sample_id, violations={f: [o, n] for f, (o, n) in diff.items()})
                 conn.commit()
                 flash(f"Change request #{rid} submitted for approval", "ok")
@@ -247,10 +259,12 @@ def edit(sample_id):
             flash(str(e), "error")
             return render_template("samples/edit.html", s=s, p=changes, statuses=codes("status"), units=codes("unit"),
                                    biobanks=codes("biobank_source"), sops=codes("sop"),
-                                   needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none")
+                                   needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none",
+                                   attr_defs=attr_defs, attr_vals=changes["attributes"])
     return render_template("samples/edit.html", s=s, p=dict(s), statuses=codes("status"), units=codes("unit"),
                            biobanks=codes("biobank_source"), sops=codes("sop"),
-                           needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none")
+                           needs_approval=current_app.config["SAMPLE_EDIT_APPROVAL"] != "none",
+                           attr_defs=attr_defs, attr_vals=attr_vals)
 
 
 @bp.route("/<sample_id>/delete", methods=("POST",))
@@ -353,3 +367,45 @@ def delete_file(sample_id, file_id):
     conn.commit()
     flash("File record removed", "ok")
     return redirect(url_for("samples.detail", sample_id=sample_id))
+
+
+# ------------------------------------------------------------------ attachments
+
+@bp.route("/<sample_id>/attachments", methods=("POST",))
+@writer_required
+def add_attachment(sample_id):
+    conn = get_db()
+    if svc.get_sample(conn, sample_id) is None:
+        abort(404)
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Choose a file to attach", "error")
+        return redirect(url_for("samples.detail", sample_id=sample_id))
+    row = attachments.save(conn, f, sample_id=sample_id, kind=request.form.get("kind") or "other",
+                           notes=request.form.get("notes", "").strip() or None)
+    conn.commit()
+    flash(f"Attached {row['filename']} (md5 {row['md5'][:8]}…)", "ok")
+    return redirect(url_for("samples.detail", sample_id=sample_id))
+
+
+@bp.route("/attachments/<int:attachment_id>")
+@login_required
+def get_attachment(attachment_id):
+    from flask import send_file
+    row = attachments.get(get_db(), attachment_id)
+    if row is None or row["deleted_at"]:
+        abort(404)
+    return send_file(attachments.abs_path(row), as_attachment=True, download_name=row["filename"])
+
+
+@bp.route("/attachments/<int:attachment_id>/delete", methods=("POST",))
+@writer_required
+def delete_attachment(attachment_id):
+    conn = get_db()
+    row = attachments.get(conn, attachment_id)
+    if row is None:
+        abort(404)
+    attachments.soft_delete(conn, row)
+    conn.commit()
+    flash("Attachment removed", "ok")
+    return redirect(request.referrer or url_for("samples.list_samples"))

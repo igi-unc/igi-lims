@@ -13,11 +13,13 @@
   <nav>
     <a href="{{ url_for('main.browse') }}">Samples &amp; Participants</a>
     <a href="{{ url_for('main.register') }}">Register</a>
+    {% if g.user.role != 'viewer' %}<a href="{{ url_for('qc.upload') }}">Import QC</a>{% endif %}
     <a href="{{ url_for('approvals.list_requests') }}">Approvals{% if pending_count %} <span class="badge">{{ pending_count }}</span>{% endif %}</a>
     <a href="{{ url_for('admin.audit_log') }}">Audit</a>
     {% if g.user.role == 'admin' %}
     <a href="{{ url_for('admin.code_lists') }}">Codes</a>
     <a href="{{ url_for('admin.rule_table') }}">Rules</a>
+    <a href="{{ url_for('admin.fields') }}">Fields</a>
     <a href="{{ url_for('admin.users') }}">Users</a>
     {% endif %}
   </nav>

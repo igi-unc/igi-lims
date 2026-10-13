@@ -3,7 +3,7 @@ import sqlite3
 import click
 from flask import current_app, g
 
-from . import seed as seed_module
+from . import seed as seed_module, seed_attributes
 
 
 def get_db():
@@ -30,6 +30,7 @@ def init_db(conn=None):
     with current_app.open_resource("schema.sql") as f:
         conn.executescript(f.read().decode("utf8"))
     seed_module.seed(conn)
+    seed_attributes.seed(conn)
     conn.commit()
 
 

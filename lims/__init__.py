@@ -13,8 +13,8 @@ def create_app(test_config=None):
     db.init_app(app)
     app.register_blueprint(auth.bp)
 
-    from .views import main, samples, participants, approvals, admin, api
-    for m in (main, samples, participants, approvals, admin, api):
+    from .views import main, samples, participants, approvals, admin, api, qcimport
+    for m in (main, samples, participants, approvals, admin, api, qcimport):
         app.register_blueprint(m.bp)
 
     @app.template_filter("kv")

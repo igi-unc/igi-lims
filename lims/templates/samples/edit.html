@@ -17,6 +17,14 @@
   <label><span class="lbl">Box</span><input type="text" name="box" value="{{ p.box or '' }}"></label>
   <label><span class="lbl">Position</span><input type="text" name="position" value="{{ p.position or '' }}"></label>
   <label class="wide"><span class="lbl">Notes</span><textarea name="notes">{{ p.notes or '' }}</textarea></label>
+  {% if attr_defs %}<h3 class="wide">Metadata for {{ s.fraction_code }}-{{ s.material_code }}</h3>
+  {% for d in attr_defs %}{% set cur = attr_vals.get(d.key) or '' %}
+  <label><span class="lbl">{{ d.label }}{% if d.unit %} ({{ d.unit }}){% endif %}{% if d.required %} *{% endif %}</span>
+    {% if d.type in ('choice','bool') %}<select name="attr_{{ d.key }}"><option value="">—</option>{% for o in (('yes','no') if d.type == 'bool' else (d.choices or '').split('|')) %}<option value="{{ o }}" {% if cur == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select>
+    {% elif d.type == 'number' %}<input type="number" step="any" name="attr_{{ d.key }}" value="{{ cur }}">
+    {% elif d.type == 'date' %}<input type="date" name="attr_{{ d.key }}" value="{{ cur }}">
+    {% else %}<input type="text" name="attr_{{ d.key }}" value="{{ cur }}">{% endif %}</label>
+  {% endfor %}{% endif %}
   {% if needs_approval %}<label class="wide"><span class="lbl">Justification (required; shown to the approver)</span><textarea name="justification" required></textarea></label>{% endif %}
 </div>
 <p><button type="submit">{% if needs_approval %}Submit for approval{% else %}Save{% endif %}</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=s.sample_id) }}">Cancel</a></p>

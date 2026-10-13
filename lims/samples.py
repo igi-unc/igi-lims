@@ -10,7 +10,7 @@ from datetime import datetime
 
 from flask import current_app, g
 
-from . import ids, rules, audit
+from . import ids, rules, audit, attributes
 
 EDITABLE_FIELDS = [
     "parent_id", "created_datetime", "created_by", "sop_code", "biobank_source",
@@ -37,6 +37,8 @@ def _username():
 def _clean(payload):
     """Normalise form/JSON values: blanks -> None, quantity -> float, count -> int."""
     p = {k: (v.strip() if isinstance(v, str) else v) for k, v in payload.items()}
+    if isinstance(p.get("attributes"), dict):
+        p["attributes"] = {k: (v.strip() if isinstance(v, str) else v) for k, v in p["attributes"].items()}
     for k, v in list(p.items()):
         if v == "":
             p[k] = None
@@ -138,6 +140,9 @@ def create_samples(conn, payload, force=False, approval_id=None):
         conn.execute(f"INSERT INTO sample({cols}) VALUES ({qs})", list(row.values()))
         audit.log(conn, "sample", sid, "insert", after=row, approval_id=approval_id)
         created.append(sid)
+        if p.get("attributes"):
+            attributes.set_values(conn, sid, attributes.validate_dict(conn, p["attributes"], comp["fraction"], comp["material"]),
+                                  approval_id=approval_id)
 
     if parent and p.get("parent_consumed") and parent["status"] != "Depleted":
         before = dict(parent)
@@ -168,6 +173,12 @@ def diff_changes(conn, sample_id, changes):
         old = cur[f]
         if old != new:
             out[f] = (old, new)
+    if isinstance(changes.get("attributes"), dict):
+        new_attrs = attributes.validate_dict(conn, changes["attributes"], cur["fraction_code"], cur["material_code"])
+        cur_attrs = {k: r["value"] for k, r in attributes.get(conn, sample_id).items()}
+        for k, v in new_attrs.items():
+            if cur_attrs.get(k) != v:
+                out["attr:" + k] = (cur_attrs.get(k), v)
     if "parent_id" in out:
         _validate_new_parent(conn, cur, out["parent_id"][1])
     if "status" in out and out["status"][1] is not None:
@@ -200,7 +211,12 @@ def update_sample(conn, sample_id, changes, approval_id=None):
     if not d:
         return {}
     cur = get_sample(conn, sample_id)
-    sets = {f: new for f, (_, new) in d.items()}
+    attr_changes = {f[5:]: new for f, (_, new) in d.items() if f.startswith("attr:")}
+    sets = {f: new for f, (_, new) in d.items() if not f.startswith("attr:")}
+    if attr_changes:
+        attributes.set_values(conn, sample_id, attr_changes, approval_id=approval_id)
+    if not sets:
+        return d
     if "parent_id" in sets:
         new_parent = get_sample(conn, sets["parent_id"]) if sets["parent_id"] else None
         new_root = new_parent["root_id"] if new_parent else sample_id

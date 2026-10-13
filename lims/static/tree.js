@@ -63,13 +63,16 @@
   svg.innerHTML = out;
 
   const meaning = (cat, code) => (M[cat] && M[cat][code]) ? `${code} – ${M[cat][code]}` : code;
+  const ATTRS = window.ATTRS || {}, AL = window.ATTR_LABELS || {};
+  const attrLines = (s, max) => Object.entries(ATTRS[s.sample_id] || {}).slice(0, max).map(([k, v]) => `<div><span class="muted">${esc(AL[k] || k)}:</span> ${esc(v)}</div>`).join("");
+  const attrRows = s => Object.entries(ATTRS[s.sample_id] || {}).map(([k, v]) => `<tr><th>${esc(AL[k] || k)}</th><td>${esc(v)}</td></tr>`).join("");
   const loc = s => [s.freezer, s.rack, s.box, s.position].filter(v => v && v !== "NA").join(" / ") || "—";
   function summary(s) {
     return `<div class="t"><code>${esc(s.sample_id)}</code></div>` +
       `<div><span class="status ${esc(s.status)}">${esc(s.status)}</span>${s.deleted_at ? " <b>deleted</b>" : ""}</div>` +
       `<div>${esc(meaning("fraction", s.fraction_code))}</div><div>${esc(meaning("material", s.material_code))}</div>` +
       `<div>${s.quantity != null ? esc(s.quantity) + " " + esc(s.unit || "") : "—"} · ${esc(loc(s))}</div>` +
-      `<div class="muted">${esc(s.created_datetime || "")} ${esc(s.created_by || "")}${s.sop_code ? " · " + esc(s.sop_code) : ""}</div>`;
+      `<div class="muted">${esc(s.created_datetime || "")} ${esc(s.created_by || "")}${s.sop_code ? " · " + esc(s.sop_code) : ""}</div>` + attrLines(s, 6);
   }
   function detail(s) {
     const rows = [["Specimen", meaning("specimen", s.specimen_code)], ["Fraction", meaning("fraction", s.fraction_code)],
@@ -78,7 +81,7 @@
       ["Processed", (s.created_datetime || "") + " " + (s.created_by || "") + (s.sop_code ? " · " + s.sop_code : "")],
       ["Biobank", meaning("biobank_source", s.biobank_source)], ["Notes", s.notes || ""]];
     return `<div class="t"><code>${esc(s.sample_id)}</code> <span class="status ${esc(s.status)}">${esc(s.status)}</span></div>` +
-      `<table class="compact">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}</table>` +
+      `<table class="compact">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}${attrRows(s)}</table>` +
       `<p><a class="btn secondary" href="/samples/${s.sample_id}">Open tube page</a> ` +
       `<button type="button" class="small secondary" id="tree-panel-close">close</button></p>`;
   }

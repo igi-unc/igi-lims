@@ -1,3 +1,6 @@
+# Python 3.10 or newer (allotropy requires it)
 flask>=3.0
 gunicorn>=21
 pytest>=7
+allotropy>=0.1.140
+pypdf>=4          # only used when extracting vendor PDFs; safe to omit in production
