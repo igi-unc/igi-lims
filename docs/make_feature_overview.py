@@ -1,25 +1,35 @@
-"""Render docs/IGI_LIMS_feature_overview.pdf.
+"""Render docs/IGI_LIMS_feature_overview.pdf: an illustrated walkthrough of the LIMS.
 
-Run: .venv/bin/python docs/make_feature_overview.py
+Screenshots come from docs/screenshots/ (made by docs/walkthrough_capture.py).
+Run from the repo root:  .venv/bin/python docs/make_feature_overview.py
 """
+import json
 from datetime import date
 from pathlib import Path
 
+from PIL import Image as PILImage
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import (ListFlowable, ListItem, PageBreak, Paragraph,
+from reportlab.platypus import (Image, KeepTogether, ListFlowable, ListItem, PageBreak, Paragraph,
                                 SimpleDocTemplate, Spacer, Table, TableStyle)
 
-OUT = Path(__file__).with_name("IGI_LIMS_feature_overview.pdf")
+HERE = Path(__file__).resolve().parent
+SHOTS = HERE / "screenshots"
+OUT = HERE / "IGI_LIMS_feature_overview.pdf"
+META = json.loads((SHOTS / "meta.json").read_text())
+IDS = META["ids"]
+
+PAGE_W = letter[0] - 1.6 * inch
+MAX_IMG_H = 7.4 * inch
 
 ss = getSampleStyleSheet()
-H1 = ParagraphStyle("H1", parent=ss["Heading1"], fontSize=18, spaceAfter=8, spaceBefore=14)
-H2 = ParagraphStyle("H2", parent=ss["Heading2"], fontSize=13, spaceAfter=4, spaceBefore=10)
-BODY = ParagraphStyle("Body", parent=ss["BodyText"], fontSize=10, leading=13.5, alignment=TA_LEFT)
+H1 = ParagraphStyle("H1", parent=ss["Heading1"], fontSize=17, spaceAfter=6, spaceBefore=14)
+H2 = ParagraphStyle("H2", parent=ss["Heading2"], fontSize=12.5, spaceAfter=3, spaceBefore=10)
+BODY = ParagraphStyle("Body", parent=ss["BodyText"], fontSize=10, leading=13.5)
 SMALL = ParagraphStyle("Small", parent=BODY, fontSize=8.5, leading=11, textColor=colors.HexColor("#444444"))
+CAP = ParagraphStyle("Cap", parent=BODY, fontSize=9.5, leading=12.5, textColor=colors.HexColor("#333333"))
 MONO = ParagraphStyle("Mono", parent=BODY, fontName="Courier", fontSize=9.5, leading=12,
                       backColor=colors.HexColor("#f3f3f3"), borderPadding=4, spaceBefore=4, spaceAfter=6)
 TITLE = ParagraphStyle("Title", parent=ss["Title"], fontSize=24, spaceAfter=4)
@@ -30,11 +40,14 @@ def p(text, style=BODY):
     return Paragraph(text, style)
 
 
-def bullets(items):
-    return ListFlowable(
-        [ListItem(p(i)) for i in items],
-        bulletType="bullet", start="•", leftIndent=16, bulletFontSize=9, bulletOffsetY=-1, spaceBefore=2, spaceAfter=6,
-    )
+def bullets(items, style=BODY):
+    return ListFlowable([ListItem(p(i, style)) for i in items], bulletType="bullet", start="•", leftIndent=16,
+                        bulletFontSize=9, bulletOffsetY=-1, spaceBefore=2, spaceAfter=6)
+
+
+def numbered(items):
+    return ListFlowable([ListItem(p(i, CAP)) for i in items], bulletType="1", leftIndent=18, bulletFontSize=9,
+                        bulletColor=colors.HexColor("#d7263d"), bulletFontName="Helvetica-Bold", spaceBefore=2, spaceAfter=8)
 
 
 def table(header, rows, widths):
@@ -51,6 +64,32 @@ def table(header, rows, widths):
     return t
 
 
+def shot(name, heading, intro=None, max_h=MAX_IMG_H, before=()):
+    """Heading + intro + annotated screenshot + numbered callout legend."""
+    path = SHOTS / f"{name}.png"
+    m = META["shots"].get(name, {})
+    w, h = PILImage.open(path).size
+    iw = PAGE_W
+    ih = iw * h / w
+    # keep heading, caption, image and legend on one page: budget the image height
+    budget = 8.3 * inch - 0.18 * inch * len(m.get("callouts", [])) - (0.45 * inch if intro else 0) - (0.3 * inch if m.get("caption") else 0)
+    max_h = min(max_h, budget)
+    if ih > max_h:
+        ih = max_h
+        iw = ih * w / h
+    img = Image(str(path), width=iw, height=ih)
+    img.hAlign = "LEFT"
+    flow = list(before) + [p(heading, H2)]
+    if intro:
+        flow.append(p(intro))
+    if m.get("caption"):
+        flow.append(p(f"<i>{m['caption']}</i>", CAP))
+    flow.append(Spacer(1, 3))
+    flow.append(img)
+    flow.append(numbered(m["callouts"]) if m.get("callouts") else Spacer(1, 8))
+    return [KeepTogether(flow)]
+
+
 def footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 8)
@@ -60,153 +99,162 @@ def footer(canvas, doc):
     canvas.restoreState()
 
 
+ROOT, CPU1, CPU2, HMD1, PID = IDS["root"], IDS["cpu1"], IDS["cpu2"], IDS["hmd1"], IDS["participant"]
 story = []
+
+# --------------------------------------------------------------------------- title + overview
 story += [
     p("IGI LIMS", TITLE),
-    p("Feature overview of the specimen tracking system, as built to date", SUB),
+    p("An illustrated tour of the specimen tracking system, as built to date", SUB),
     p(f"PIRL, UNC · {date.today():%B %d, %Y} · status: prototype, specification in flight", SUB),
-    Spacer(1, 14),
-]
-
-story += [p("1. Purpose", H1), p(
-    "IGI LIMS is a chain-of-custody database and web interface for the biological specimens collected in the "
-    "IGI cancer clinical trial. It records one row per tube. Every tube stores the tube it was made from, so the "
-    "path from a collected specimen, through fractionation, cryopreservation, extraction and library preparation, "
-    "to the sequencing or mass-spectrometry data file is a chain of parent links that can be walked in either "
-    "direction. The system runs as a single Flask application on SQLite with no external services, suitable for a "
-    "small lab (about two dozen users) on a workstation or a GCP virtual machine."),
-]
-
-story += [p("2. Tube identifiers", H1), p(
-    "Identifiers are composed by the database from the tube's attributes. They are never typed by hand. The "
-    "format is defined in one place (<font face='Courier'>config.py</font>, <font face='Courier'>ID_SEGMENTS</font>) "
-    "so that it can change as the specification settles without touching the schema."),
+    Spacer(1, 12),
+    p("1. What it is", H1),
+    p("IGI LIMS is a chain-of-custody database and web interface for the biological specimens collected in the IGI "
+      "cancer clinical trial. It records one row per tube. Every tube stores the tube it was made from, so the path from "
+      "a collected specimen, through fractionation, cryopreservation, extraction and library preparation, to the "
+      "sequencing or mass-spectrometry data file is a chain of parent links that can be walked in either direction. "
+      "It runs as a single Flask application on SQLite with no external services, sized for a lab of about two dozen "
+      "users on a workstation or a GCP virtual machine."),
+    p("The screenshots in this document were taken from a throwaway demonstration database. The participant, tubes, "
+      "users and lists shown are invented. Red numbered arrows mark the features explained under each picture."),
+    p("2. The tube identifier", H1),
+    p("Identifiers are composed by the database from the tube's attributes and are never typed by hand. The format is "
+      "defined in one configuration list so that it can change as the specification settles without touching the schema."),
     p("IGI-CC-PPPPPPP-YYMMDD-SS-FFF-MMM-AA   (35 characters)", MONO),
     table(["Segment", "Meaning", "Validation"], [
         ["IGI", "Project constant", "literal"],
         ["CC", "Cohort", "active code in the cohort list (MP, AM, TN, NC)"],
-        ["PPPPPPP", "Participant code", "seven upper-case letters, no I or O"],
+        ["PPPPPPP", "Participant code", "seven upper-case letters, no I or O; generated"],
         ["YYMMDD", "Collection date", "parsed as a calendar date"],
         ["SS", "Specimen type", "active code in the specimen list (PF, PB, BM, TU, LN, ...)"],
-        ["FFF", "Fraction", "active code in the fraction list (BLK, PLA, PBM, CD8, ...)"],
-        ["MMM", "Material", "active code in the material list (NAT, CPU, DNA, LIB, PEP, ...)"],
+        ["FFF", "Fraction", "active code in the fraction list (BLK, PLA, PBM, PFM, CD8, ...)"],
+        ["MMM", "Material", "active code in the material list (NAT, CPU, DNA, HMD, LIB, PEP, ...)"],
         ["AA", "Aliquot number", "01 to 99, issued per prefix by the database, never reused"],
     ], [1.0 * inch, 1.6 * inch, 4.2 * inch]),
-    p("The aliquot counter is taken over all tubes including deleted ones, so an ID can never refer to two "
-      "different physical tubes. The anchored regular expression for the current format is published at "
-      "<font face='Courier'>/api/pattern</font> for pipelines and validation scripts."),
-]
-
-story += [p("3. What the system enforces", H1),
-    p("Controlled vocabularies", H2), p(
-    "Every code used in IDs, forms and metadata lives in one code-list table and is managed on the Codes page. "
-    "Codes are retired rather than deleted, so historical records keep their meaning. Currently 46 categories are "
-    "defined: the core ID vocabularies (cohort, specimen, fraction, material), status, assay, biobank source, "
-    "site, unit, and admin-extendable lists for SOPs, freezers, racks, boxes, positions, custody parties and "
-    "purposes, kits, lots, buffers, media, antibodies, instruments and so on. Administrators can add new "
-    "categories without a code change."),
-    p("No free text except Notes", H2), p(
-    "Every tube, custody and metadata field other than the Notes box is a dropdown backed by one of these "
-    "lists. The operator must be an active user account. Server-side checks reject any value that is not an "
-    "active entry, so the database cannot drift into inconsistent spellings. The only remaining free-text "
-    "fields are machine identifiers copied from pipeline output (data file URI, run ID, checksum) and the "
-    "participant's external site ID."),
-    p("Derivation rules", H2), p(
-    "A rule table (Rules page, 140 rules seeded as a starting proposal) decides which fractions a specimen type "
-    "may have, which fraction-to-fraction and material-to-material transitions are allowed, which materials a "
-    "root tube may arrive as, and which fractions a material may carry. A violation blocks creation and offers "
-    "a Request override button instead of silently accepting the record."),
-    p("Two-person agreement", H2), p(
-    "Overrides of derivation rules, and by default every edit, delete or restore of a sample record, go to an "
-    "Approvals queue. The requester cannot approve their own request. The approver's decision applies the "
-    "change, and the audit log records the approval ID alongside the change. The scope can be relaxed in "
-    "configuration to provenance-only changes (parent, ID components, delete) or switched off."),
-    p("Soft deletes and full audit", H2), p(
-    "Deleting a tube keeps the record, keeps the aliquot number reserved, and is refused while the tube has "
-    "active children. Every write (participants, samples, custody, files, metadata, attachments, code lists, "
-    "users) is recorded in the audit log with who, when, and a before and after snapshot shown as key and "
-    "value lines."),
-]
-
-story += [p("4. Registration workflow", H1), p(
-    "The Register landing page offers exactly three actions and nothing else, to keep one obvious path for each task."),
+    p(f"The worked example that follows produces <font face='Courier' size='8.5'>{ROOT}</font>: cohort MP, participant "
+      f"{PID}, collected 6 October 2026, pleural fluid, unfractionated, native, first aliquot. Its children keep the first "
+      "five segments and change only fraction, material and aliquot."),
+    p("3. What the system enforces", H1),
     bullets([
-        "<b>Participant.</b> Create a participant with cohort, generated participant code, and external site ID.",
-        "<b>Base specimen.</b> Register a collected tube (a root with no parent): specimen type, collection date, "
-        "fraction and material on arrival, biobank source (CCPD, HemaTrack, in-house, or not applicable), "
-        "operator, SOP, quantity and unit, storage location, status, and notes. All fields are required; "
-        "lists carry an NA entry where the question does not apply.",
-        "<b>Derived specimen.</b> Choose the participant, then the fraction and material of the tube being made. "
-        "The system lists only the parent tubes from that participant that the derivation rules accept as "
-        "inputs, and shows the ineligible ones with the reason. Creating the child can mark the parent as "
-        "depleted in the same step.",
+        "<b>Controlled vocabularies.</b> Every code used in IDs, forms and metadata lives in one code-list table managed on the "
+        "Codes page. Codes are retired rather than deleted, so historical records keep their meaning.",
+        "<b>No free text except Notes.</b> Operator, SOP, storage location, custody parties and purposes, and every metadata "
+        "vocabulary (kits, lots, buffers, media, antibodies, instruments) are dropdowns. The server rejects values that are "
+        "not active list entries. The only remaining free-text fields are machine identifiers (data file URI, run ID, "
+        "checksum) and the participant's external site ID.",
+        "<b>Derivation rules.</b> A rule table decides which fractions a specimen type may have, which fraction and material "
+        "transitions are allowed, and which materials a root tube may arrive as. A violation blocks creation and offers an "
+        "override request instead.",
+        "<b>Two-person agreement.</b> Overrides, and by default every edit, delete or restore of a tube record, go to an "
+        "approval queue. The requester cannot approve their own request. The approver's decision applies the change.",
+        "<b>Soft deletes and a full audit log.</b> Deleting a tube keeps the record and its aliquot number, and is refused "
+        "while the tube has active children. Every write is recorded with who, when, and before and after values.",
     ]),
-    p("Each tube page shows its components, parent and children, custody events, data files, attachments, "
-      "metadata, and history. Editing goes through the approval queue."),
 ]
 
-story += [p("5. Browsing: Samples &amp; Participants", H1), p(
-    "A single read-only page. Pick a participant and the page draws a tall, top-down tree of every collection "
-    "and everything derived from it. Hovering a node shows its status, quantity, location and key metadata; "
-    "clicking pins that panel with a link to the full tube page. Nothing on this page creates or changes "
-    "records, so it is safe to leave open on a shared screen."),
-]
+# --------------------------------------------------------------------------- walkthrough
+story += [p("4. Walkthrough: signing in and finding your way", H1)]
+story += shot("01_login", "4.1 Sign in")
+story += shot("02_dashboard", "4.2 The dashboard")
+story += shot("03_register", "4.3 The Register page",
+              "All record creation starts here. The three cards are the three kinds of record a lab member creates, "
+              "and the order matches the order of events: a participant enrols, a specimen is collected, tubes are derived.")
 
-story += [p("6. Metadata per fraction and material", H1), p(
-    "Metadata fields are defined in one table (Fields page) and attached to a fraction or a material, so a "
-    "tube shows only the fields that make sense for what it is. The create and edit forms render these fields "
-    "dynamically, the tube page and the tree hover panel display them, and they are included in the audit "
-    "diff. Fields are typed as number (with unit), fixed choice, admin-extendable list, yes/no, date, or "
-    "date-time. There is no text type. Two fields are required at present: the assay of a sequencing library "
-    "and the HLA class of a peptide eluate. 199 field definitions are active today, for example:"),
-    table(["Scope", "Examples"], [
-        ["Plasma, serum, supernatant", "spin protocol, hemolysis grade, time to processing, filter"],
-        ["PBMC, PFMC, buffy coat", "isolation method, viable cell count, viability, hashtag, cryo medium, freeze method"],
-        ["Immune, tumor, T-cell fractions", "enrichment or selection method, marker panel, purity, input cells, kit and lot"],
-        ["DNA, RNA, HMW DNA/RNA, cfDNA", "extraction kit, concentration, A260/280, A260/230, RIN or DIN, fragment size, elution"],
-        ["Sequencing library", "assay, library prep kit, capture kit, index, shearing, molarity, submission"],
-        ["Peptide eluate", "HLA class, antibody and lot, bead type, input cells, elution, cleanup, instrument"],
-        ["Tissue (snap-frozen, OCT, FFPE)", "block ID, dissociation method, input tissue mass"],
-    ], [2.2 * inch, 4.6 * inch]),
-]
+story += [PageBreak(), p("5. Walkthrough: registering a participant and a base specimen", H1)]
+story += shot("04_participant_form", "5.1 Register a participant")
+story += shot("05_participant_detail", "5.2 The participant record")
+story += shot("06_base_specimen_form", "5.3 Register the collected specimen (the root tube)",
+              "A base specimen is a tube with no parent. Its specimen type, fraction and material as received become "
+              "segments of the ID. The metadata block at the bottom changes with the fraction and material chosen; for an "
+              "unfractionated fluid it asks for container, collection and receipt times, transport temperature, "
+              "appearance and hemolysis.")
+story += shot("07_root_detail", "5.4 The tube page",
+              "Every tube has one page: identity and provenance at the top, then the tube's own fields, metadata, a "
+              "printable label layout, custody events, attachments, linked data files, and its full change history.")
 
-story += [p("7. QC file import and attachments", H1), p(
-    "Any file (trace, image, report) can be attached to a tube; it is stored on disk under the attachment "
-    "directory with an md5 checksum. The Import QC page goes further for common instrument exports: upload one "
-    "file, the system parses it, shows one row per instrument sample with a suggested tube ID (matched "
-    "automatically when the sample name contains a tube ID), and writes the ticked values into the tube's "
-    "metadata fields. Each imported value keeps a link back to the stored export file, so the provenance of a "
-    "concentration or RIN can be checked later. Imports are direct and audited; manual metadata edits still "
-    "go through approval."),
-    table(["Instrument", "Format", "Values captured"], [
-        ["Qubit 4", "CSV, parsed through allotropy", "concentration (original and diluted), assay, units"],
-        ["NanoDrop One", "CSV, parsed through allotropy", "concentration, A260/280, A260/230"],
-        ["TapeStation", "XML", "concentration, RIN or DIN, region average size, molarity, percent of total"],
-        ["Countess 3", "CSV, columns from the vendor guide", "total, live and dead concentration, viability, cells counted, average size, aggregation"],
-    ], [1.3 * inch, 2.2 * inch, 3.3 * inch]),
-]
+story += [PageBreak(), p("6. Walkthrough: deriving tubes", H1),
+          p("A derived tube is any tube made from another: a cryovial from a cell preparation, DNA from a pellet, a "
+            "library from DNA. The registration flow asks what is being made first and then offers only the parents that "
+            "the rules allow, so the operator never has to work out eligibility by hand.")]
+story += shot("08_derive_pick", "6.1 Choose what to make, then choose the parent")
+story += shot("09_derive_form", "6.2 Fill in the new tubes",
+              "Here two cryovials of PFMC are made from the pleural fluid. Metadata for a PFM fraction (isolation method, "
+              "cell count, viability, counting method) and for a CPU material (cryoprotectant, cells per vial, freezing "
+              "method, storage phase) appear together.")
+story += shot("10_derived_detail", "6.3 The result",
+              f"The two tubes are {CPU1} and {CPU2}. The parent, now marked Depleted, is one click away.")
+story += shot("11_rule_block", "6.4 When the rules say no",
+              "Here the operator tried to register serum derived from pleural fluid, from a parent that is already "
+              "depleted. The form refuses, lists the reasons, and offers an override request with a mandatory justification. "
+              "A second user will see that request in the approval queue (section 8).")
+story += [p("A third derivation, not shown as a form, extracted high-molecular-weight DNA from the first cryovial "
+            f"to make {HMD1}. It appears in the tree and is the tube edited in section 8.")]
 
-story += [p("8. Custody and data files", H1), p(
-    "Custody events are append-only: from and to (a user or an external party such as HTSF or CCPD), purpose "
-    "(extraction, sequencing submission, storage, immunopeptidomics, culture, sorting, return, shipment), "
-    "timestamp, and condition on receipt. Data files, which live in Google Cloud Storage buckets, are linked "
-    "to the tube that was sequenced or run (usually a library or peptide eluate) by URI, with assay, run ID, "
-    "checksum and pipeline version. A file is therefore always reachable from the collected specimen it came from."),
-]
+story += [PageBreak(), p("7. Walkthrough: browsing", H1),
+          p("Samples &amp; Participants is the one read-only page. It is safe to leave open on a shared screen, "
+            "because nothing on it creates or changes a record.")]
+story += shot("13_tree", "7.1 The participant tree")
+story += shot("14_tree_hover", "7.2 Hover for details")
+story += shot("15_tree_panel", "7.3 Click to pin")
 
-story += [p("9. Users, roles and administration", H1), bullets([
-    "<b>Roles.</b> admin (everything), user (create, derive, edit, approve), viewer (read only). Passwords are hashed; "
-    "accounts are created and reset from the command line or the Users page.",
-    "<b>Codes.</b> Add, rename or retire entries in any list; add a whole new list; see which fields use each list.",
-    "<b>Rules.</b> View and edit the derivation rule table.",
-    "<b>Fields.</b> Add metadata fields of any supported type, mark them required, or retire them.",
-    "<b>Audit.</b> Searchable log of every change.",
-]),
-]
+story += [PageBreak()]
+story += shot("16_custody_form", "8.1 Record a hand-off", before=[p("8. Walkthrough: custody, editing and approval", H1)], intro=
+              "Custody events are append-only. Each records from, to, purpose, time and condition. "
+              "The DNA tube is handed to the sequencing core here and marked In use in the same step.")
+story += shot("17_edit_form", "8.2 Modify a record",
+              "Jane Doe re-measured the DNA and used some of it for QC, so the quantity and the concentration need to "
+              "change. The edit form is the same for tube fields and metadata.")
+story += shot("18_edit_submitted", "8.3 The request is queued")
+story += shot("19_approvals_list", "8.4 The approval queue, seen by a second user")
+story += shot("20_approval_detail", "8.5 Reviewing a change request")
+story += shot("21_approval_decided", "8.6 After the decision")
+story += shot("22_override_detail", "8.7 Reviewing the override request from section 6.4",
+              "The same queue holds rule-override requests. The approver sees the rules that would be broken and the "
+              "full payload of the tube that would be created. In this example the request was rejected with a note "
+              "suggesting the correct fraction code.")
+story += shot("23_after_approval", "8.8 The tube after the approved edit",
+              "Quantity and concentration now show the new values. The history lists the approved change with the "
+              "approval number, the custody event's status change, and the original creation.")
 
-story += [p("10. Read-only JSON API", H1), p(
-    "For pipelines and scripts. Authenticate with a browser session or an <font face='Courier'>X-Api-Token</font> "
-    "header matching the token set in the server environment."),
+story += [PageBreak(), p("9. Walkthrough: the audit log", H1)]
+story += shot("24_audit", "9.1 Everything that happened to one tube",
+              "The audit log is the system-wide version of the history block on each tube page. It covers "
+              "participants, tubes, custody, data files, metadata, attachments, code lists, fields and users. "
+              "Before and After are shown as one key and value per line so a reviewer can read them without parsing JSON.")
+
+story += [PageBreak(), p("10. Walkthrough: importing instrument QC files", H1),
+          p("Common instrument exports can be loaded directly instead of typing numbers into metadata fields. "
+            "Supported today: Qubit 4 and NanoDrop One exports (parsed through the allotropy library), TapeStation XML, "
+            "and Countess 3 CSV. The example below imports a Countess cell count.")]
+story += shot("25_qc_upload", "10.1 Upload one export")
+story += shot("26_qc_confirm", "10.2 Confirm what goes where")
+story += shot("27_qc_provenance", "10.3 Provenance of imported values",
+              "Each value written by an import keeps a link to the stored export file, so a concentration or viability "
+              "can always be traced to the instrument run it came from. The export itself is kept as an attachment.")
+
+story += [PageBreak(), p("11. Administration", H1),
+          p("Administrators see four extra pages. None of them require a code change or a restart.")]
+story += shot("28_codes", "11.1 Codes: every controlled vocabulary", max_h=4.2 * inch)
+story += shot("29_fields", "11.2 Fields: which metadata each fraction and material carries",
+              "Fields are typed as number (with unit), fixed choice, admin-extendable list, yes/no, date or date-time. "
+              "There is no text type. A field can be marked required.", max_h=4.2 * inch)
+story += shot("30_rules", "11.3 Rules: allowed specimens, fractions and transitions", max_h=4.0 * inch)
+story += shot("31_users", "11.4 Users and roles",
+              "Roles are admin (everything), user (create, derive, edit, approve) and viewer (read only).", max_h=3.6 * inch)
+
+# --------------------------------------------------------------------------- reference
+story += [PageBreak(), p("12. Also available", H1),
+    p("Data files", H2),
+    p("Sequencing and mass-spectrometry outputs live in Google Cloud Storage buckets. A data file record links a bucket "
+      "URI to the tube that was sequenced or run (usually a library or a peptide eluate), with assay, run ID, checksum and "
+      "pipeline version, so a file is always reachable from the collected specimen it came from. Files can be linked from "
+      "the tube page or by a pipeline through the API."),
+    p("Attachments", H2),
+    p("Any file (trace, image, report) can be attached to a tube. It is stored on disk under the attachment directory "
+      "with an md5 checksum and listed on the tube page."),
+    p("Read-only JSON API", H2),
+    p("For pipelines and scripts. Authenticate with a browser session or an <font face='Courier'>X-Api-Token</font> "
+      "header matching the token set in the server environment."),
     table(["Endpoint", "Returns"], [
         ["/api/pattern", "anchored regex and fixed length for IDs"],
         ["/api/validate/&lt;id&gt;", "the ID parsed into components, and whether it exists"],
@@ -216,28 +264,26 @@ story += [p("10. Read-only JSON API", H1), p(
         ["/api/tree/&lt;root_id&gt;", "nested tree for one collection"],
         ["/api/files", "data files with their tube and lineage"],
     ], [3.2 * inch, 3.6 * inch]),
-]
-
-story += [p("11. Technical summary", H1), bullets([
-    "Python 3.10, Flask 3, Jinja templates, a small amount of vanilla JavaScript for the tree and dynamic forms.",
-    "SQLite in WAL mode with foreign keys on; one file database, backed up by copying the file.",
-    "Schema: code_list, derivation_rule, user, participant, sample, custody_event, data_file, approval_request, "
-    "audit_log, attribute_definition, sample_attribute, attachment.",
-    "Instrument parsing via allotropy (Benchling open source) for Qubit and NanoDrop; TapeStation and Countess parsed directly.",
-    "38 automated tests cover ID composition, the registration and approval workflow, parsers, import, metadata and vocabulary enforcement.",
-    "Deployment target: a GCP VM behind gunicorn, reachable by collaborators over the web; not yet set up.",
-]),
-]
-
-story += [p("12. Open questions (tracked in NOTES.md)", H1), bullets([
-    "Participant code format: seven letters as specified, or a site-style code such as P101.",
-    "NTC and NRM are three-character specimen codes but the ID segment is two characters.",
-    "Whether every edit should require two-person approval, or only provenance changes.",
-    "The seeded derivation rules are a proposal and need review by the lab.",
-    "Which metadata fields should be required.",
-    "Most admin-extendable lists start with only NA and need real freezers, racks, boxes, SOPs and kits before first use.",
-    "The Countess parser follows the vendor column specification and has not yet been checked against a real export.",
-]),
+    p("Technical summary", H2),
+    bullets([
+        "Python 3.10, Flask 3, Jinja templates, a small amount of vanilla JavaScript for the tree and dynamic forms.",
+        "SQLite in WAL mode with foreign keys on; one file database, backed up by copying the file.",
+        "Tables: code_list, derivation_rule, user, participant, sample, custody_event, data_file, approval_request, "
+        "audit_log, attribute_definition, sample_attribute, attachment.",
+        "Instrument parsing via allotropy (Benchling open source) for Qubit and NanoDrop; TapeStation and Countess parsed directly.",
+        "38 automated tests cover ID composition, the registration and approval workflow, parsers, import, metadata and vocabulary enforcement.",
+        "Deployment target: a GCP VM behind gunicorn, reachable by collaborators over the web; not yet set up.",
+    ]),
+    p("13. Open questions (tracked in NOTES.md)", H1),
+    bullets([
+        "Participant code format: seven letters as specified, or a site-style code such as P101.",
+        "NTC and NRM are three-character specimen codes but the ID segment is two characters.",
+        "Whether every edit should require two-person approval, or only provenance changes.",
+        "The seeded derivation rules are a proposal and need review by the lab.",
+        "Which metadata fields should be required.",
+        "Most admin-extendable lists start with only NA and need real freezers, racks, boxes, SOPs and kits before first use.",
+        "The Countess parser follows the vendor column specification and has not yet been checked against a real export.",
+    ]),
 ]
 
 doc = SimpleDocTemplate(str(OUT), pagesize=letter, leftMargin=0.8 * inch, rightMargin=0.8 * inch,

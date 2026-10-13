@@ -1,0 +1,250 @@
+{
+ "ids": {
+  "participant": "NDAKVTX",
+  "root": "IGI-MP-NDAKVTX-261006-PF-BLK-NAT-01",
+  "cpu1": "IGI-MP-NDAKVTX-261006-PF-PFM-CPU-01",
+  "cpu2": "IGI-MP-NDAKVTX-261006-PF-PFM-CPU-02",
+  "hmd1": "IGI-MP-NDAKVTX-261006-PF-PFM-HMD-01"
+ },
+ "shots": {
+  "01_login": {
+   "callouts": [
+    "Username (the account name, not the display name)",
+    "Sign in"
+   ],
+   "caption": "Every page requires a login. Accounts are created by an admin from the Users page or the command line."
+  },
+  "02_dashboard": {
+   "callouts": [
+    "Register: the only place records are created",
+    "Samples & Participants: read-only browsing",
+    "Jump box: scan or paste a tube ID to open it",
+    "Approvals queue; the badge counts pending requests",
+    "Quick actions, counts, recent tubes and recent activity"
+   ],
+   "caption": "The dashboard after signing in. Nothing on it is editable; it links to the three working areas."
+  },
+  "03_register": {
+   "callouts": [
+    "Step 1: a person enrolled in the trial",
+    "Step 2: a tube as collected (root of a tree)",
+    "Step 3: a tube made from an existing tube"
+   ],
+   "caption": "The Register page offers exactly three actions, in the order they happen in the lab."
+  },
+  "04_participant_form": {
+   "callouts": [
+    "Left blank: the seven-letter code is generated (no I or O)",
+    "Cohort, from the cohort code list",
+    "The site's own ID for cross-reference",
+    "Create"
+   ],
+   "caption": "Registering a participant. Only the cohort is mandatory; the participant code is issued by the system."
+  },
+  "05_participant_detail": {
+   "callouts": [
+    "Confirmation with the generated code",
+    "Go straight to registering this participant's first tube",
+    "Opens the read-only tree for this participant"
+   ],
+   "caption": "The participant record. It lists every collection and links to the tree."
+  },
+  "06_base_specimen_form": {
+   "callouts": [
+    "Participant chosen on the previous page",
+    "Specimen, fraction and material as received: these become ID segments",
+    "Every field is a dropdown; lists are maintained under Codes",
+    "Storage location: freezer, rack, box, position",
+    "Metadata fields appear for the chosen fraction and material",
+    "Notes: the only free-text field in the system",
+    "Create: the tube ID is composed by the database"
+   ],
+   "caption": "Registering the collected pleural fluid. All fields are required; NA is an explicit choice where a field does not apply."
+  },
+  "07_root_detail": {
+   "callouts": [
+    "The issued ID: IGI-MP-participant-date-PF-BLK-NAT-01",
+    "Derive children directly from this tube",
+    "Metadata recorded on the form",
+    "Edit goes through two-person approval",
+    "Append-only hand-off log"
+   ],
+   "caption": "The tube page for the new root specimen."
+  },
+  "08_derive_pick": {
+   "callouts": [
+    "Say what the new tube will be: participant, fraction and material",
+    "Find eligible parent tubes",
+    "Only tubes the derivation rules accept as inputs are listed",
+    "Continue with the selected parent"
+   ],
+   "caption": "Registering a derived specimen starts from the product, not the parent. Here: PFMC (pleural fluid mononuclear cells), cryopreserved."
+  },
+  "09_derive_form": {
+   "callouts": [
+    "The parent tube",
+    "Number of tubes: two aliquots get consecutive numbers",
+    "Metadata for PFM and CPU: isolation, counts, viability, cryo medium",
+    "Marks the parent Depleted in the same step",
+    "Create"
+   ],
+   "caption": "The derived-tube form. Fraction and material are fixed from step 1; the rest is filled in."
+  },
+  "10_derived_detail": {
+   "callouts": [
+    "Two tubes created: ...-01 and ...-02",
+    "Parent link; the parent is now Depleted",
+    "Metadata stored with the tube"
+   ],
+   "caption": "The first cryovial. Its parent is one click away, and so is every ancestor."
+  },
+  "11_rule_block": {
+   "callouts": [
+    "The rule table blocks this derivation; nothing was saved",
+    "The specific rules violated",
+    "Request override: sends it to a second user"
+   ],
+   "caption": "Trying to register serum from pleural fluid. The derivation rules refuse and offer an override request instead."
+  },
+  "13_tree": {
+   "callouts": [
+    "Pick a participant",
+    "Every collection and everything derived from it, top down"
+   ],
+   "caption": "Samples & Participants: a read-only view. Depleted tubes are shown with their status."
+  },
+  "14_tree_hover": {
+   "callouts": [
+    "Hover shows status, quantity, location and key metadata"
+   ],
+   "caption": "Hovering a node."
+  },
+  "15_tree_panel": {
+   "callouts": [
+    "Click pins the details",
+    "The only way out is to the tube page"
+   ],
+   "caption": "Clicking a node pins its details, with all metadata, and a link to the tube page."
+  },
+  "16_custody_form": {
+   "callouts": [
+    "From: a user or a party such as HTSF or CCPD",
+    "Purpose, from the custody purpose list",
+    "Optionally update the tube status in the same step",
+    "Record"
+   ],
+   "caption": "Recording a hand-off of the DNA tube to the sequencing core."
+  },
+  "17_edit_form": {
+   "callouts": [
+    "Edits are applied only after a second user approves",
+    "Quantity 40 to 36",
+    "Metadata is edited on the same form",
+    "A justification is required and shown to the approver",
+    "Submit for approval"
+   ],
+   "caption": "Modifying a record. Nothing changes until someone else approves."
+  },
+  "18_edit_submitted": {
+   "callouts": [
+    "The request is queued; the tube still shows the old values",
+    "Pending count on the Approvals link",
+    "The requester cannot decide their own request"
+   ],
+   "caption": "After submitting the edit, the requester lands on the request itself and can only wait."
+  },
+  "19_approvals_list": {
+   "callouts": [
+    "Pending, approved, rejected, failed",
+    "Each request: what, which tube, who asked and why"
+   ],
+   "caption": "Alex Smith's view of the queue. The requester cannot approve their own request."
+  },
+  "20_approval_detail": {
+   "callouts": [
+    "Who, which tube, and the justification",
+    "Exactly what will change, old to new",
+    "Approve and apply",
+    "Reject"
+   ],
+   "caption": "The approver sees the exact diff before deciding."
+  },
+  "21_approval_decided": {
+   "callouts": [
+    "Decision, by whom, and when"
+   ],
+   "caption": "The decision is recorded on the request, and the change is applied to the tube."
+  },
+  "22_override_detail": {
+   "callouts": [
+    "The rules that would be overridden",
+    "The full payload of the tube that would be created",
+    "Reject"
+   ],
+   "caption": "The override request from the earlier rule block, as seen by the approver."
+  },
+  "23_after_approval": {
+   "callouts": [
+    "Quantity now 36",
+    "The hand-off recorded earlier",
+    "Every change with before and after values and the approval number"
+   ],
+   "caption": "The DNA tube after the approved edit."
+  },
+  "24_audit": {
+   "callouts": [
+    "Filter by table, record ID or user",
+    "Before and After as key: value lines",
+    "Link to the approval that authorised the change"
+   ],
+   "caption": "The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here."
+  },
+  "25_qc_upload": {
+   "callouts": [
+    "One instrument export file",
+    "Instrument: auto-detected if left blank",
+    "Upload and parse"
+   ],
+   "caption": "Importing a Countess 3 cell-count export."
+  },
+  "26_qc_confirm": {
+   "callouts": [
+    "The instrument's sample name",
+    "Suggested tube ID: matched because the name contains it",
+    "Untick any value you do not want written",
+    "Write values to tubes"
+   ],
+   "caption": "One row per instrument sample. Rows with no tube ID are skipped; the blank slide stays blank."
+  },
+  "27_qc_provenance": {
+   "callouts": [
+    "Imported values, with a link to the stored export file",
+    "Source file"
+   ],
+   "caption": "The second cryovial after import. Each imported value points back to the file it came from."
+  },
+  "28_codes": {
+   "callouts": [
+    "Add an entry to any list",
+    "Create a whole new list for a new metadata field"
+   ],
+   "caption": "The Codes page. Entries are retired, never deleted, so old records keep their meaning."
+  },
+  "29_fields": {
+   "callouts": [
+    "Add a metadata field: scope, label, type, unit, list, required"
+   ],
+   "caption": "The Fields page defines which metadata each fraction or material carries."
+  },
+  "30_rules": {
+   "callouts": [],
+   "caption": "The Rules page: which fractions a specimen may have, and which transitions are allowed."
+  },
+  "31_users": {
+   "callouts": [
+    "Create a user with a role: admin, user or viewer"
+   ],
+   "caption": "The Users page."
+  }
+ }
+}

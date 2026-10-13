@@ -227,8 +227,8 @@ def update_sample(conn, sample_id, changes, approval_id=None):
     sets["record_updated_at"] = now_iso()
     assign = ", ".join(f"{k}=?" for k in sets)
     conn.execute(f"UPDATE sample SET {assign} WHERE sample_id=?", list(sets.values()) + [sample_id])
-    audit.log(conn, "sample", sample_id, "update",
-              before={f: old for f, (old, _) in d.items()}, after={f: new for f, (_, new) in d.items()},
+    audit.log(conn, "sample", sample_id, "update",   # attribute changes were audited by set_values
+              before={f: old for f, (old, _) in d.items() if f in sets}, after={f: new for f, (_, new) in d.items() if f in sets},
               approval_id=approval_id)
     return d
 

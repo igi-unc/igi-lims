@@ -12,7 +12,7 @@
 {% if r.action_type == 'update_sample' %}<table class="compact"><tbody>{% for f, v in violations.items() %}<tr><th>{{ f }}</th><td><code>{{ v[0] }}</code> → <code>{{ v[1] }}</code></td></tr>{% endfor %}</tbody></table>
 {% else %}<ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
 {% endif %}
-{% if r.action_type == 'create_sample' %}<h3>Requested tube(s)</h3><table class="compact"><tbody>{% for k, v in payload.items() if v not in (None, '', False) %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% if r.action_type == 'create_sample' %}<h3>Requested tube(s)</h3><table class="compact"><tbody>{% for k, v in payload.items() if v not in (None, '', False) %}<tr><th>{{ k }}</th><td>{% if k == 'attributes' and v is mapping %}{% for ak, av in v.items() if av not in (None, '') %}{{ ak }}: {{ av }}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">none</span>{% endfor %}{% else %}{{ v }}{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}
 {% if result %}<h3>Result</h3><pre class="json">{{ result }}</pre>{% endif %}
 {% if can_decide %}
 <form method="post" action="{{ url_for('approvals.decide', request_id=r.id) }}">
