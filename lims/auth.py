@@ -1,6 +1,14 @@
 import functools
 from flask import Blueprint, g, redirect, render_template, request, session, url_for, flash, abort
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
+from werkzeug.security import generate_password_hash as _gph
+
+
+def hash_password(password):
+    # PBKDF2 rather than Werkzeug's scrypt default: scrypt needs an OpenSSL build that
+    # some macOS / older Pythons lack (hashlib has no attribute 'scrypt').
+    return _gph(password, method="pbkdf2:sha256")
+
 
 from .db import get_db
 from . import audit
@@ -11,7 +19,7 @@ bp = Blueprint("auth", __name__)
 def create_user(conn, username, display_name, initials, password, role="user"):
     conn.execute(
         "INSERT INTO user(username, display_name, initials, password_hash, role) VALUES (?,?,?,?,?)",
-        (username, display_name, initials, generate_password_hash(password), role),
+        (username, display_name, initials, hash_password(password), role),
     )
 
 
@@ -86,7 +94,7 @@ def change_password():
             flash("New passwords must match and be at least 8 characters", "error")
         else:
             conn.execute("UPDATE user SET password_hash=? WHERE username=?",
-                         (generate_password_hash(request.form["new"]), g.user["username"]))
+                         (hash_password(request.form["new"]), g.user["username"]))
             audit.log(conn, "user", g.user["username"], "update", after={"password": "changed"})
             conn.commit()
             flash("Password changed", "ok")

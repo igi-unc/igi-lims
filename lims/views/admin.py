@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, abort
-from werkzeug.security import generate_password_hash
+from ..auth import hash_password
 
 from ..auth import admin_required, login_required, create_user
 from ..db import get_db
@@ -66,7 +66,7 @@ def user_update(username):
         if len(pw) < 8:
             flash("Password must be at least 8 characters", "error")
             return redirect(url_for("admin.users"))
-        conn.execute("UPDATE user SET password_hash=? WHERE username=?", (generate_password_hash(pw), username))
+        conn.execute("UPDATE user SET password_hash=? WHERE username=?", (hash_password(pw), username))
         audit.log(conn, "user", username, "update", after={"password": "reset by admin"})
     conn.commit()
     return redirect(url_for("admin.users"))

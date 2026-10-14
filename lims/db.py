@@ -102,11 +102,11 @@ def seed_demo_command(username):
 @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
 def set_password_command(username, password):
     """Reset a user's password from the command line (e.g. when locked out)."""
-    from werkzeug.security import generate_password_hash
+    from .auth import hash_password
     conn = get_db()
     if conn.execute("SELECT 1 FROM user WHERE username=?", (username,)).fetchone() is None:
         raise click.ClickException(f"No user named {username}")
-    conn.execute("UPDATE user SET password_hash=?, active=1 WHERE username=?", (generate_password_hash(password), username))
+    conn.execute("UPDATE user SET password_hash=?, active=1 WHERE username=?", (hash_password(password), username))
     conn.commit()
     click.echo(f"Password updated for {username}")
 
