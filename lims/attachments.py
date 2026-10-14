@@ -1,22 +1,15 @@
-"""Files stored with tubes or as shared QC exports."""
-import hashlib
-import os
+"""Files stored with tubes or as shared QC exports. Bytes go to lims.storage (local directory or Supabase bucket)."""
 import re
 
-from flask import current_app, g
+from flask import g
 from werkzeug.utils import secure_filename
 
-from . import audit
-
-
-def _dir():
-    d = current_app.config["ATTACHMENT_DIR"]
-    os.makedirs(d, exist_ok=True)
-    return d
+from . import audit, storage
 
 
 def abs_path(row):
-    return os.path.join(_dir(), row["stored_path"])
+    """A readable local path for the stored file (downloaded to a cache first when the bytes live in a bucket)."""
+    return storage.backend().local_path(row["stored_path"])
 
 
 def save(conn, file_storage, sample_id=None, kind="other", instrument=None, notes=None):
@@ -27,18 +20,9 @@ def save(conn, file_storage, sample_id=None, kind="other", instrument=None, note
                        (sample_id, name, "", file_storage.mimetype, kind, instrument, notes, g.user["username"]))
     aid = cur.lastrowid
     sub = re.sub(r"[^A-Z0-9-]", "_", sample_id) if sample_id else "shared"
-    rel = os.path.join(sub, f"{aid}_{name}")
-    full = os.path.join(_dir(), rel)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    h = hashlib.md5()
-    size = 0
-    with open(full, "wb") as out:
-        while True:
-            chunk = file_storage.stream.read(1 << 20)
-            if not chunk:
-                break
-            h.update(chunk); size += len(chunk); out.write(chunk)
-    conn.execute("UPDATE attachment SET stored_path=?, size_bytes=?, md5=? WHERE id=?", (rel, size, h.hexdigest(), aid))
+    rel = f"{sub}/{aid}_{name}"
+    size, md5 = storage.backend().put(rel, file_storage.stream, file_storage.mimetype)
+    conn.execute("UPDATE attachment SET stored_path=?, size_bytes=?, md5=? WHERE id=?", (rel, size, md5, aid))
     row = get(conn, aid)
     audit.log(conn, "attachment", aid, "insert", after={"sample_id": sample_id, "filename": name, "md5": row["md5"], "kind": kind, "instrument": instrument})
     return row

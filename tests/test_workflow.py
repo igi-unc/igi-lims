@@ -73,30 +73,32 @@ def test_aliquots_never_reused(app, alice):
     assert ids_of(app, P + "PF-BLK-CPU") == [P + "PF-BLK-CPU-01", P + "PF-BLK-CPU-02", P + "PF-BLK-CPU-03"]
 
 
-def test_rule_violation_blocks_then_override_needs_second_user(app, alice, client):
+def test_rule_violation_blocks_then_override_is_flagged(app, alice, client):
     make_root(alice)
     # RNA straight from native fluid is allowed; LIB from NAT is not
     r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB")
     assert b"Blocked by derivation rules" in r.data
     assert b"NAT cannot be processed into LIB" in r.data
     assert ids_of(app, P + "PF-BLK-LIB") == []
-    # request override
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB", action="request_override",
-               justification="direct library prep pilot")
-    assert b"Override request #1 submitted" in r.data
-    # requester cannot approve
-    r = alice.post("/approvals/1/decide", data={"decision": "approve"}, follow_redirects=True)
-    assert b"cannot be approved by the person who made it" in r.data
+    # override without a justification is refused
+    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB", action="override")
+    assert b"justification is required" in r.data
     assert ids_of(app, P + "PF-BLK-LIB") == []
-    # bob approves -> tube created with approval id in audit log
-    login(client, "bob")
-    r = client.post("/approvals/1/decide", data={"decision": "approve", "note": "ok"}, follow_redirects=True)
-    assert b"Approved and applied" in r.data
+    # with one, the tube is created and the override is written to the audit log with the reason
+    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB", action="override",
+               justification="direct library prep pilot")
+    assert b"rule override recorded" in r.data
     assert ids_of(app, P + "PF-BLK-LIB") == [P + "PF-BLK-LIB-01"]
     with app.app_context():
-        row = get_db().execute("SELECT approval_id FROM audit_log WHERE table_name='sample' AND record_id=? AND action='insert'",
+        row = get_db().execute("SELECT reason FROM audit_log WHERE table_name='sample' AND record_id=? AND action='insert'",
                                (P + "PF-BLK-LIB-01",)).fetchone()
-        assert row[0] == 1
+        assert row[0].startswith("Rule override: ") and "direct library prep pilot" in row[0]
+    r = alice.get(f"/samples/{P}PF-BLK-LIB-01")
+    assert b"rule override" in r.data and b"direct library prep pilot" in r.data
+    # the audit page's changes-only filter shows it; a viewer can read it
+    login(client, "vic")
+    r = client.get("/admin/audit?changes=1")
+    assert r.status_code == 200 and b"direct library prep pilot" in r.data
 
 
 def test_root_rule_fraction_for_specimen(app, alice):
@@ -118,18 +120,25 @@ def test_depleted_parent_blocks(app, alice):
     assert b"Parent status is Depleted" in r.data
 
 
-def test_edit_requires_approval_and_applies(app, alice, client):
+def test_edit_is_direct_and_flagged_in_audit(app, alice, client):
     make_root(alice)
     sid = P + "PF-BLK-NAT-01"
     r = alice.post(f"/samples/{sid}/edit", data={"status": "Shipped", "quantity": "500", "unit": "mL",
                                                  "created_by": "AA", "justification": "sent to HTSF"}, follow_redirects=True)
-    assert b"Change request #1 submitted" in r.data
+    assert b"Sample updated" in r.data and b"edited" in r.data
     with app.app_context():
-        assert get_db().execute("SELECT status FROM sample WHERE sample_id=?", (sid,)).fetchone()[0] == "Available"
-    login(client, "bob")
-    client.post("/approvals/1/decide", data={"decision": "approve"}, follow_redirects=True)
-    with app.app_context():
-        assert get_db().execute("SELECT status FROM sample WHERE sample_id=?", (sid,)).fetchone()[0] == "Shipped"
+        conn = get_db()
+        assert conn.execute("SELECT status FROM sample WHERE sample_id=?", (sid,)).fetchone()[0] == "Shipped"
+        row = conn.execute("SELECT before_json, after_json, reason FROM audit_log WHERE table_name='sample' AND record_id=? AND action='update'",
+                           (sid,)).fetchone()
+        assert '"Available"' in row[0] and '"Shipped"' in row[1] and row[2] == "sent to HTSF"
+    # the merged status/location column shows the status when the tube is not Available, the location when it is
+    r = alice.get("/samples/")
+    assert b"Shipped" in r.data
+    alice.post(f"/samples/{sid}/edit", data={"status": "Available", "quantity": "500", "unit": "mL", "created_by": "AA",
+                                             "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1"}, follow_redirects=True)
+    r = alice.get("/samples/")
+    assert b"<td>A1</td>" in r.data
 
 
 def test_delete_blocked_with_children_and_soft_delete(app, alice, client):
@@ -138,11 +147,12 @@ def test_delete_blocked_with_children_and_soft_delete(app, alice, client):
     r = alice.post(f"/samples/{P}PF-BLK-NAT-01/delete", data={"justification": "x"}, follow_redirects=True)
     assert b"active children" in r.data
     r = alice.post(f"/samples/{P}PF-BLK-CPU-01/delete", data={"justification": "mislabelled"}, follow_redirects=True)
-    assert b"request #1 submitted" in r.data.lower()
-    login(client, "bob")
-    client.post("/approvals/1/decide", data={"decision": "approve"}, follow_redirects=True)
+    assert b"Record deleted" in r.data
     with app.app_context():
-        assert get_db().execute("SELECT deleted_at FROM sample WHERE sample_id=?", (P + "PF-BLK-CPU-01",)).fetchone()[0]
+        conn = get_db()
+        assert conn.execute("SELECT deleted_at FROM sample WHERE sample_id=?", (P + "PF-BLK-CPU-01",)).fetchone()[0]
+        assert conn.execute("SELECT reason FROM audit_log WHERE action='delete' AND record_id=?",
+                            (P + "PF-BLK-CPU-01",)).fetchone()[0] == "mislabelled"
     # still visible with include-deleted and page renders
     assert alice.get(f"/samples/{P}PF-BLK-CPU-01").status_code == 200
 

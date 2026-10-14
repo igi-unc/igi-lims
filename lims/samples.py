@@ -1,9 +1,10 @@
 """Sample service layer: create (root or derived), update, soft delete, lineage queries.
 
 All writes take an open connection and do not commit; the caller commits.
-Rule violations are returned, not raised, so the caller can route them to the
-approval queue. Hard validation errors (unknown participant, bad code) raise
-ValueError and cannot be overridden.
+Rule violations are returned, not raised; the caller may retry with force=True
+and a reason, which is written to the audit log as a flagged override. Hard
+validation errors (unknown participant, bad code) raise ValueError and cannot
+be overridden.
 """
 import json
 from datetime import datetime
@@ -104,7 +105,7 @@ def preview(conn, payload):
     return ids.prefix_without_aliquot(comp), violations
 
 
-def create_samples(conn, payload, force=False, approval_id=None):
+def create_samples(conn, payload, force=False, reason=None):
     """Create `count` aliquots. Returns (created_ids, violations).
     If violations exist and force is False, nothing is written."""
     p = _clean(payload)
@@ -112,6 +113,8 @@ def create_samples(conn, payload, force=False, approval_id=None):
     violations = rules.check_derivation(conn, parent, comp) if parent else rules.check_root(conn, comp)
     if violations and not force:
         return [], violations
+    if violations:
+        reason = "Rule override: " + "; ".join(violations) + (". Justification: " + reason if reason else "")
 
     status = p.get("status") or "Available"
     if not conn.execute("SELECT 1 FROM code_list WHERE category='status' AND code=? AND active=1", (status,)).fetchone():
@@ -138,18 +141,18 @@ def create_samples(conn, payload, force=False, approval_id=None):
         cols = ", ".join(row)
         qs = ", ".join("?" for _ in row)
         conn.execute(f"INSERT INTO sample({cols}) VALUES ({qs})", list(row.values()))
-        audit.log(conn, "sample", sid, "insert", after=row, approval_id=approval_id)
+        audit.log(conn, "sample", sid, "insert", after=row, reason=reason)
         created.append(sid)
         if p.get("attributes"):
             attributes.set_values(conn, sid, attributes.validate_dict(conn, p["attributes"], comp["fraction"], comp["material"]),
-                                  approval_id=approval_id)
+                                  reason=reason, action="insert")
 
     if parent and p.get("parent_consumed") and parent["status"] != "Depleted":
         before = dict(parent)
         conn.execute("UPDATE sample SET status='Depleted', record_updated_at=? WHERE sample_id=?",
                      (now_iso(), parent["sample_id"]))
         audit.log(conn, "sample", parent["sample_id"], "update",
-                  before={"status": before["status"]}, after={"status": "Depleted"}, approval_id=approval_id)
+                  before={"status": before["status"]}, after={"status": "Depleted"}, reason=reason)
     return created, violations
 
 
@@ -206,7 +209,7 @@ def _validate_new_parent(conn, cur, new_parent_id):
             raise ValueError("New parent is a descendant of this sample (would create a cycle)")
 
 
-def update_sample(conn, sample_id, changes, approval_id=None):
+def update_sample(conn, sample_id, changes, reason=None):
     d = diff_changes(conn, sample_id, changes)
     if not d:
         return {}
@@ -214,7 +217,7 @@ def update_sample(conn, sample_id, changes, approval_id=None):
     attr_changes = {f[5:]: new for f, (_, new) in d.items() if f.startswith("attr:")}
     sets = {f: new for f, (_, new) in d.items() if not f.startswith("attr:")}
     if attr_changes:
-        attributes.set_values(conn, sample_id, attr_changes, approval_id=approval_id)
+        attributes.set_values(conn, sample_id, attr_changes, reason=reason)
     if not sets:
         return d
     if "parent_id" in sets:
@@ -229,11 +232,11 @@ def update_sample(conn, sample_id, changes, approval_id=None):
     conn.execute(f"UPDATE sample SET {assign} WHERE sample_id=?", list(sets.values()) + [sample_id])
     audit.log(conn, "sample", sample_id, "update",   # attribute changes were audited by set_values
               before={f: old for f, (old, _) in d.items() if f in sets}, after={f: new for f, (_, new) in d.items() if f in sets},
-              approval_id=approval_id)
+              reason=reason)
     return d
 
 
-def delete_sample(conn, sample_id, approval_id=None):
+def delete_sample(conn, sample_id, reason=None):
     cur = get_sample(conn, sample_id)
     if cur is None or cur["deleted_at"]:
         raise ValueError("Sample not found or already deleted")
@@ -241,10 +244,10 @@ def delete_sample(conn, sample_id, approval_id=None):
     if kids:
         raise ValueError("Cannot delete a sample that has active children: " + ", ".join(k["sample_id"] for k in kids))
     conn.execute("UPDATE sample SET deleted_at=?, record_updated_at=? WHERE sample_id=?", (now_iso(), now_iso(), sample_id))
-    audit.log(conn, "sample", sample_id, "delete", before=cur, approval_id=approval_id)
+    audit.log(conn, "sample", sample_id, "delete", before=cur, reason=reason)
 
 
-def restore_sample(conn, sample_id, approval_id=None):
+def restore_sample(conn, sample_id, reason=None):
     cur = get_sample(conn, sample_id)
     if cur is None or not cur["deleted_at"]:
         raise ValueError("Sample not found or not deleted")
@@ -253,7 +256,7 @@ def restore_sample(conn, sample_id, approval_id=None):
         if par["deleted_at"]:
             raise ValueError("Restore the parent first")
     conn.execute("UPDATE sample SET deleted_at=NULL, record_updated_at=? WHERE sample_id=?", (now_iso(), sample_id))
-    audit.log(conn, "sample", sample_id, "restore", after=cur, approval_id=approval_id)
+    audit.log(conn, "sample", sample_id, "restore", after=cur, reason=reason)
 
 
 # ---------------------------------------------------------------- lineage

@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 
 from ..auth import login_required, writer_required
 from ..db import get_db
-from .. import samples as svc, approvals, audit, ids, rules, attributes, attachments
+from .. import samples as svc, audit, ids, rules, attributes, attachments
 from .helpers import codes, code_meaning_map
 
 bp = Blueprint("samples", __name__, url_prefix="/samples")
@@ -29,15 +29,6 @@ def _form_payload(extra=()):
 def _missing(payload, required):
     return [FIELD_LABELS.get(f, f.replace("_", " ").capitalize()) for f in required
             if not str(payload.get(f) or "").strip()]
-
-
-def _needs_approval(diff):
-    mode = current_app.config["SAMPLE_EDIT_APPROVAL"]
-    if mode == "all":
-        return True
-    if mode == "provenance":
-        return bool(set(diff) & current_app.config["PROVENANCE_FIELDS"])
-    return False
 
 
 @bp.route("/")
@@ -80,10 +71,11 @@ def detail(sample_id):
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime, id", (sample_id,)).fetchall()
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL ORDER BY uri", (sample_id,)).fetchall()
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
-    pending = conn.execute("SELECT * FROM approval_request WHERE target_id=? AND status='pending'", (sample_id,)).fetchall()
+    flags = {"edits": sum(1 for h in history if h["action"] in ("update", "delete", "restore")),
+             "overrides": sum(1 for h in history if h["action"] == "insert" and (h["reason"] or "").startswith("Rule override"))}
     participant = conn.execute("SELECT * FROM participant WHERE participant_id=?", (s["participant_id"],)).fetchone()
     return render_template("samples/detail.html", s=s, children=children, ancestors=svc.ancestors(conn, sample_id),
-                           custody=custody, files=files, history=history, pending=pending, participant=participant,
+                           custody=custody, files=files, history=history, flags=flags, participant=participant,
                            attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
                            users=_users(), parties=codes("party"), purposes=codes("custody_purpose"),
                            label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"),
@@ -105,7 +97,7 @@ def tree(root_id):
 # ------------------------------------------------------------------ create
 
 def _users():
-    return get_db().execute("SELECT initials, display_name FROM user WHERE active=1 ORDER BY initials").fetchall()
+    return get_db().execute("SELECT initials, display_name FROM account WHERE active=1 ORDER BY initials").fetchall()
 
 
 def _lists():
@@ -125,7 +117,7 @@ def _check_coded(conn, payload, fields=CODED_FIELDS):
         if v and not conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1", (cat, v)).fetchone():
             raise ValueError(f"{f.replace('_', ' ').capitalize()} '{v}' is not in the {cat} list (add it under Codes)")
     op = payload.get("created_by")
-    if op and not conn.execute("SELECT 1 FROM user WHERE initials=? AND active=1", (op,)).fetchone():
+    if op and not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (op,)).fetchone():
         raise ValueError(f"Operator '{op}' is not an active user")
 
 
@@ -151,23 +143,18 @@ def _handle_create(payload, template, **ctx):
         for d in attributes.definitions_for(conn, payload.get("fraction"), payload.get("material")):
             if d["required"] and not payload["attributes"].get(d["key"]):
                 raise ValueError(f"{d['label']} is required for {payload.get('fraction')}-{payload.get('material')} tubes")
-        if action == "request_override":
-            just = request.form.get("justification", "").strip()
-            if not just:
-                flash("A justification is required to request an override", "error")
-                prefix, violations = svc.preview(conn, payload)
-                return _render_form(template, payload, violations, prefix, **ctx)
+        just = request.form.get("justification", "").strip()
+        if action == "override" and not just:
+            flash("A justification is required to override a derivation rule", "error")
             prefix, violations = svc.preview(conn, payload)
-            rid = approvals.request(conn, "create_sample", payload, just, violations=violations)
-            conn.commit()
-            flash(f"Override request #{rid} submitted; another user must approve it", "ok")
-            return redirect(url_for("approvals.detail", request_id=rid))
-        created, violations = svc.create_samples(conn, payload)
-        if violations:
+            return _render_form(template, payload, violations, prefix, **ctx)
+        created, violations = svc.create_samples(conn, payload, force=(action == "override"), reason=just or None)
+        if violations and not created:
             prefix, _ = svc.preview(conn, payload)
             return _render_form(template, payload, violations, prefix, **ctx)
         conn.commit()
-        flash(f"Created {len(created)} tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else ""), "ok")
+        flash(f"Created {len(created)} tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else "")
+              + (" (rule override recorded in the audit log)" if violations else ""), "ok")
         return redirect(url_for("samples.detail", sample_id=created[0]))
     except ValueError as e:
         conn.rollback()
@@ -254,8 +241,7 @@ def edit(sample_id):
         abort(404)
     attr_defs = attributes.definitions_for(conn, s["fraction_code"], s["material_code"])
     attr_vals = {k: r["value"] for k, r in attributes.get(conn, sample_id).items()}
-    edit_ctx = {**_lists(), "attr_defs": attr_defs, "attr_options": {d["key"]: attributes.options(conn, d) for d in attr_defs},
-                "needs_approval": current_app.config["SAMPLE_EDIT_APPROVAL"] != "none"}
+    edit_ctx = {**_lists(), "attr_defs": attr_defs, "attr_options": {d["key"]: attributes.options(conn, d) for d in attr_defs}}
     if request.method == "POST":
         changes = {f: request.form.get(f, "") for f in svc.EDITABLE_FIELDS}
         changes["attributes"] = {d["key"]: request.form.get("attr_" + d["key"], "") for d in attr_defs}
@@ -265,21 +251,9 @@ def edit(sample_id):
             if not diff:
                 flash("No changes", "ok")
                 return redirect(url_for("samples.detail", sample_id=sample_id))
-            if _needs_approval(diff):
-                just = request.form.get("justification", "").strip()
-                if not just:
-                    flash("Edits to sample records need a justification and a second user's approval", "error")
-                    return render_template("samples/edit.html", s=s, p=changes, attr_vals=changes["attributes"], **edit_ctx)
-                payload = {f: n for f, (_, n) in diff.items() if not f.startswith("attr:")}
-                payload["attributes"] = {f[5:]: n for f, (_, n) in diff.items() if f.startswith("attr:")}
-                rid = approvals.request(conn, "update_sample", payload, just,
-                                        target_id=sample_id, violations={f: [o, n] for f, (o, n) in diff.items()})
-                conn.commit()
-                flash(f"Change request #{rid} submitted for approval", "ok")
-                return redirect(url_for("approvals.detail", request_id=rid))
-            svc.update_sample(conn, sample_id, changes)
+            svc.update_sample(conn, sample_id, changes, reason=request.form.get("justification", "").strip() or None)
             conn.commit()
-            flash("Sample updated", "ok")
+            flash(f"Sample updated ({len(diff)} field(s) changed; recorded in the audit log)", "ok")
             return redirect(url_for("samples.detail", sample_id=sample_id))
         except ValueError as e:
             conn.rollback()
@@ -295,24 +269,15 @@ def delete(sample_id):
     s = svc.get_sample(conn, sample_id)
     if s is None:
         abort(404)
-    action = "restore_sample" if s["deleted_at"] else "delete_sample"
-    just = request.form.get("justification", "").strip()
+    just = request.form.get("justification", "").strip() or None
     try:
-        if current_app.config["SAMPLE_EDIT_APPROVAL"] == "none":
-            (svc.restore_sample if s["deleted_at"] else svc.delete_sample)(conn, sample_id)
-            conn.commit()
-            flash("Done", "ok")
+        if s["deleted_at"]:
+            svc.restore_sample(conn, sample_id, reason=just)
+            flash("Record restored (recorded in the audit log)", "ok")
         else:
-            if not just:
-                flash("A justification is required", "error")
-                return redirect(url_for("samples.detail", sample_id=sample_id))
-            # fail early on things that approval cannot fix
-            if action == "delete_sample" and conn.execute(
-                    "SELECT 1 FROM sample WHERE parent_id=? AND deleted_at IS NULL", (sample_id,)).fetchone():
-                raise ValueError("Cannot delete a sample with active children; delete the children first")
-            rid = approvals.request(conn, action, {}, just, target_id=sample_id)
-            conn.commit()
-            flash(f"{action.replace('_', ' ').title()} request #{rid} submitted for approval", "ok")
+            svc.delete_sample(conn, sample_id, reason=just)
+            flash("Record deleted; it stays in the history and its aliquot number is not reused", "ok")
+        conn.commit()
     except ValueError as e:
         conn.rollback()
         flash(str(e), "error")
@@ -332,7 +297,7 @@ def add_custody(sample_id):
     if not (f["event_datetime"] and f["from_party"] and f["to_party"] and f["purpose"]):
         flash("Date/time, from, to and purpose are required", "error")
         return redirect(url_for("samples.detail", sample_id=sample_id))
-    ok_party = lambda v: conn.execute("SELECT 1 FROM user WHERE initials=? AND active=1", (v,)).fetchone() or \
+    ok_party = lambda v: conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (v,)).fetchone() or \
         conn.execute("SELECT 1 FROM code_list WHERE category='party' AND code=? AND active=1", (v,)).fetchone()
     if not (ok_party(f["from_party"]) and ok_party(f["to_party"])):
         flash("From and To must be a user or an entry in the party list", "error")

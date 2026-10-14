@@ -246,7 +246,7 @@ def walkthrough():
             ("header nav a:has-text('Register')", "Register: the only place records are created", "bottom"),
             ("header nav a:has-text('Samples')", "Samples & Participants: read-only browsing", "bottom"),
             ("header .jump input", "Jump box: scan or paste a tube ID to open it", "bottom"),
-            ("header nav a:has-text('Approvals')", "Approvals queue; the badge counts pending requests", "bottom"),
+            ("header nav a:has-text('Audit')", "Audit: every write, with edits and overrides flagged", "bottom"),
             ("h2:has-text('Quick actions')", "Quick actions, counts, recent tubes and recent activity", "right"),
         ], caption="The dashboard after signing in. Nothing on it is editable; it links to the three working areas.")
 
@@ -309,7 +309,7 @@ def walkthrough():
             ("h1 code", "The issued ID: IGI-MP-participant-date-PF-BLK-NAT-01"),
             ("a:has-text('Derive new tube')", "Derive children directly from this tube", "right"),
             ("h2:has-text('Metadata')", "Metadata recorded on the form", "right"),
-            ("a.btn:has-text('Edit')", "Edit goes through two-person approval"),
+            ("a.btn:has-text('Edit')", "Edit applies at once and is flagged in the history"),
             ("h2:has-text('Chain of custody')", "Append-only hand-off log", "right"),
         ], full=True, max_h=1500, caption="The tube page for the new root specimen.")
 
@@ -361,14 +361,21 @@ def walkthrough():
         fill_common(page, sop_code="SOP-001", quantity=2, unit="mL", notes="Attempted serum from pleural fluid.")
         page.click("button[value=create]")
         page.wait_for_selector(".violations")
-        page.fill(".violations textarea[name=justification]", "Demonstration of an override request.")
+        page.fill(".violations textarea[name=justification]", "Pilot: serum-like supernatant requested by the biomarker group; recorded as an exception.")
         S.take(page, "11_rule_block", [
             (".violations h3", "The rule table blocks this derivation; nothing was saved"),
             (".violations ul", "The specific rules violated", "right"),
-            ("button[value=request_override]", "Request override: sends it to a second user"),
-        ], full=True, max_h=1500, caption="Trying to register serum from pleural fluid. The derivation rules refuse and offer an override request instead.")
-        page.click("button[value=request_override]")
-        page.wait_for_load_state()
+            ("button[value=override]", "Create anyway: needs a justification, and is flagged in the audit log"),
+        ], full=True, max_h=1500, caption="Trying to register serum from pleural fluid. The derivation rules refuse; the operator may override with a written justification.")
+        page.click("button[value=override]")
+        page.wait_for_url(BASE + "/samples/IGI-*")
+        SER1 = last_seg(page)
+        meta["ids"]["ser"] = SER1
+        S.take(page, "12_override_created", [
+            (".flash", "Created, with the override noted"),
+            ("a.tag.warn", "The tube carries a 'rule override' flag for life", "right"),
+            ("h2:has-text('Record history')", "The history row holds the rules broken and the justification", "right"),
+        ], full=True, max_h=2000, caption="The tube created by the override. It is flagged on its page and in the audit log, with the justification.")
 
         # 12. HMW DNA from a cryovial
         page.goto(BASE + f"/samples/{CPU1}/derive")
@@ -426,79 +433,50 @@ def walkthrough():
         form.locator("button").click()
         page.wait_for_load_state()
 
-        # 17. Edit -> approval
+        # 17. Edit (direct, audited)
         page.goto(BASE + f"/samples/{HMD1}/edit")
         fill(page, "quantity", "36")
         fill(page, "attr_concentration_ng_ul", "82.7")
         page.fill("textarea[name=justification]", "Used 4 uL for TapeStation and Qubit re-check; concentration updated from the re-measurement.")
         S.take(page, "17_edit_form", [
-            ("p.muted", "Edits are applied only after a second user approves", "right"),
+            ("p.muted", "Changes apply at once and are flagged in the audit log", "right"),
             ("input[name=quantity]", "Quantity 40 to 36"),
             ("[name=attr_concentration_ng_ul]", "Metadata is edited on the same form"),
-            ("textarea[name=justification]", "A justification is required and shown to the approver"),
-            ("form button[type=submit]", "Submit for approval"),
-        ], full=True, max_h=1700, caption="Modifying a record. Nothing changes until someone else approves.")
+            ("textarea[name=justification]", "Optional reason, kept with the audit row"),
+            ("form button[type=submit]", "Save"),
+        ], full=True, max_h=1700, caption="Modifying a record. The before and after values and the reason go to the audit log.")
         page.click("form button[type=submit]")
-        page.wait_for_url(BASE + "/approvals/*")
-        S.take(page, "18_edit_submitted", [
-            (".flash", "The request is queued; the tube still shows the old values"),
-            ("header nav a:has-text('Approvals')", "Pending count on the Approvals link", "bottom"),
-            ("p.muted:has-text('different user')", "The requester cannot decide their own request"),
-        ], full=True, max_h=1100, caption="After submitting the edit, the requester lands on the request itself and can only wait.")
+        page.wait_for_url(BASE + f"/samples/{HMD1}")
+        S.take(page, "18_edit_saved", [
+            (".flash", "Saved; the number of changed fields is reported"),
+            ("a.tag:has-text('edited')", "The tube is marked as edited from now on", "right"),
+            ("tr:has(th:has-text('Quantity')) td", "Quantity now 36", "right"),
+            ("h2:has-text('Record history')", "Flagged rows: the edit with before/after and the reason, and the custody status change", "right"),
+        ], full=True, max_h=2100, caption="The DNA tube straight after the edit. Flagged history rows are anything other than the original creation.")
 
-        # 19. Approvals (second user)
+        # 19. A second user's edit (the audit log shows who did what)
         page2 = login(ctx_as, "asmith")
         page2.click("form button")
         page2.wait_for_url(BASE + "/**")
-        page2.goto(BASE + "/approvals")
-        S.take(page2, "19_approvals_list", [
-            ("p.tabs", "Pending, approved, rejected, failed"),
-            ("table tbody tr", "Each request: what, which tube, who asked and why", "bottom"),
-        ], caption="Alex Smith's view of the queue. The requester cannot approve their own request.")
-        row = page2.locator("table tbody tr", has_text="update_sample")
-        row.locator("a").first.click()
-        page2.wait_for_url(BASE + "/approvals/*")
-        S.take(page2, "20_approval_detail", [
-            ("table.compact", "Who, which tube, and the justification", "right"),
-            ("h3:has-text('Field changes')", "Exactly what will change, old to new", "right"),
-            ("button[value=approve]", "Approve and apply", "bottom"),
-            ("button[value=reject]", "Reject", "bottom"),
-        ], caption="The approver sees the exact diff before deciding.")
-        page2.fill("input[name=note]", "Re-measurement confirmed.")
-        page2.click("button[value=approve]")
-        page2.wait_for_load_state()
-        S.take(page2, "21_approval_decided", [
-            ("tr:has(th:has-text('Decision'))", "Decision, by whom, and when"),
-        ], caption="The decision is recorded on the request, and the change is applied to the tube.")
-        # reject the override
-        page2.goto(BASE + "/approvals")
-        row = page2.locator("table tbody tr", has_text="create_sample")
-        row.locator("a").first.click()
-        page2.wait_for_url(BASE + "/approvals/*")
-        S.take(page2, "22_override_detail", [
-            ("h3:has-text('Rule violations')", "The rules that would be overridden", "right"),
-            ("h3:has-text('Requested tube')", "The full payload of the tube that would be created", "right"),
-            ("button[value=reject]", "Reject", "bottom"),
-        ], full=True, max_h=1500, caption="The override request from the earlier rule block, as seen by the approver.")
-        page2.fill("input[name=note]", "Serum cannot come from pleural fluid. Register as PFS (supernatant) instead.")
-        page2.click("button[value=reject]")
-        page2.wait_for_load_state()
+        page2.goto(BASE + f"/samples/{CPU2}/edit")
+        sel(page2, "box", "B04")
+        sel(page2, "position", "C3")
+        page2.fill("textarea[name=justification]", "Moved during the LN2 rack reorganisation.")
+        page2.click("form button[type=submit]")
+        page2.wait_for_url(BASE + f"/samples/{CPU2}")
 
-        # 23. Tube after approval
-        page.goto(BASE + f"/samples/{HMD1}")
-        S.take(page, "23_after_approval", [
-            ("tr:has(th:has-text('Quantity')) td", "Quantity now 36", "right"),
-            ("h2:has-text('Chain of custody')", "The hand-off recorded earlier", "right"),
-            ("h2:has-text('Record history')", "Every change with before and after values and the approval number", "right"),
-        ], full=True, max_h=2100, caption="The DNA tube after the approved edit.")
-
-        # 24. Audit log
+        # 24. Audit log: everything for one tube, then changes only
         page.goto(BASE + f"/admin/audit?record={HMD1}")
         S.take(page, "24_audit", [
-            ("form.filters", "Filter by table, record ID or user", "right"),
+            ("form.filters", "Filter by table, record ID or user, or show changes only", "right"),
             ("th:has-text('Before')", "Before and After as key: value lines", "bottom"),
-            ("th:has-text('Appr.')", "Link to the approval that authorised the change", "bottom"),
-        ], caption="The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here.")
+            ("th:has-text('Reason')", "The operator's stated reason for edits, deletions and overrides", "bottom"),
+        ], caption="The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here; edits are flagged.")
+        page.goto(BASE + "/admin/audit?changes=1")
+        S.take(page, "24b_audit_changes", [
+            ("input[name=changes]", "Changes only: edits, deletions, restores and rule overrides", "top"),
+            ("table tbody tr.flag", "Each flagged row names who, when, what changed and why", "bottom"),
+        ], full=True, max_h=2400, caption="The changes-only view: the review queue replaced by a filter. Alex Smith's vial move, Jane Doe's edit, the custody status change and the earlier rule override are all here.")
 
         # 25. QC import
         src = ROOT / "tests" / "fixtures" / "instrument_exports" / "countess3_synthetic.csv"

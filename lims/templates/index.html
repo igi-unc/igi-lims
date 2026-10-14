@@ -5,7 +5,6 @@
   <div class="tile"><div class="n">{{ totals.collections }}</div><div>collections</div></div>
   <div class="tile"><div class="n">{{ totals.participants }}</div><div>participants</div></div>
   <div class="tile"><div class="n">{{ totals.files }}</div><div>data files</div></div>
-  <div class="tile"><div class="n">{{ pending_count }}</div><div><a href="{{ url_for('approvals.list_requests') }}">pending approvals</a></div></div>
 </div>
 <div class="card">
   <h2>Quick actions</h2>
@@ -27,7 +26,8 @@
 </div>
 <div class="card">
   <h2>Recent activity</h2>
-  <ul class="plain">{% for a in recent %}<li><span class="muted">{{ a.ts }}</span> {{ a.username }} {{ a.action }} {{ a.table_name }} <code>{{ a.record_id }}</code></li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ul>
+  <p class="muted"><a href="{{ url_for('admin.audit_log', changes=1) }}">All edits, deletions and overrides</a></p>
+  <ul class="plain">{% for a in recent %}<li><span class="muted">{{ a.ts }}</span> {{ a.username }} {% if a.action != 'insert' %}<span class="tag">{{ a.action }}</span>{% else %}{{ a.action }}{% endif %} {{ a.table_name }} <code>{{ a.record_id }}</code>{% if a.reason and a.reason.startswith('Rule override') %} <span class="tag warn">rule override</span>{% endif %}</li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ul>
 </div>
 </div>
 {% endblock %}

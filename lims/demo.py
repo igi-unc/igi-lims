@@ -2,8 +2,9 @@
 
 `flask seed-demo` adds a malignant-pleural-effusion participant with three
 collections (two pleural taps and one blood draw) processed all the way to
-sequencing libraries, a peptide eluate and data files, plus custody events,
-one approved change request and one pending request to approve live.
+sequencing libraries, a peptide eluate and data files, plus custody events
+and two audited edits (one of them a second user's) so the flagged history
+has something to show.
 
 Everything goes through the same service functions as the web forms, so the
 derivation rules, controlled vocabularies and audit log apply. The lists that
@@ -12,7 +13,7 @@ plausible entries so the dropdowns are not all NA.
 """
 from flask import g
 
-from . import approvals, attributes, audit, ids
+from . import attributes, audit, ids
 from . import samples as svc
 
 # (category, code, meaning) — added with INSERT OR IGNORE, so re-running is safe
@@ -59,17 +60,17 @@ def _code(conn, cat, code):
     return conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1", (cat, code)).fetchone()
 
 
-def seed_demo(conn, username, approver=None):
+def seed_demo(conn, username, second=None):
     """Create the demo participant. Returns a summary dict. Raises if the data would violate the rules."""
-    user = conn.execute("SELECT * FROM user WHERE username=? AND active=1", (username,)).fetchone()
+    user = conn.execute("SELECT * FROM account WHERE username=? AND active=1", (username,)).fetchone()
     if user is None:
         raise ValueError(f"No active user {username!r}")
     g.user = dict(user)
     ini = user["initials"]
-    if approver is None:
-        row = conn.execute("SELECT username FROM user WHERE active=1 AND role IN ('admin','user') AND username<>? "
+    if second is None:   # another account that makes one of the demo edits
+        row = conn.execute("SELECT username FROM account WHERE active=1 AND role IN ('admin','user') AND username<>? "
                            "ORDER BY role, username", (username,)).fetchone()
-        approver = row["username"] if row else None
+        second = row["username"] if row else None
 
     for i, (cat, code, meaning) in enumerate(LIST_ENTRIES):
         conn.execute("INSERT OR IGNORE INTO code_list(category, code, meaning, active, sort_order) VALUES (?,?,?,1,?)",
@@ -296,26 +297,40 @@ def seed_demo(conn, username, approver=None):
                 "freeze_method": "MRFROSTY", "storage_phase": "LN2 vapor", "qc_result": "pass"})
 
     # =====================================================================
-    # Change requests: one already approved, one left pending for the demo
+    # Audited edits: one by the seeding user, one by a second account
     # =====================================================================
-    approved_id = pending_id = None
-    if approver:
-        changes = {"quantity": 1.0}
-        diff = svc.diff_changes(conn, pfs[0], changes)
-        approved_id = approvals.request(conn, "update_sample", changes,
-                                        "Took 0.5 mL of supernatant for the cytokine panel (not tracked as a tube).",
-                                        target_id=pfs[0], violations={f: [o, n] for f, (o, n) in diff.items()})
-        req = conn.execute("SELECT * FROM approval_request WHERE id=?", (approved_id,)).fetchone()
-        requester = g.user
-        g.user = dict(conn.execute("SELECT * FROM user WHERE username=?", (approver,)).fetchone())
-        approvals.apply(conn, req, note="Confirmed with the freezer log.")
-        g.user = requester
-
-    changes = {"box": "B04", "position": "A1"}
-    diff = svc.diff_changes(conn, cpu[4], changes)
-    pending_id = approvals.request(conn, "update_sample", changes,
-                                   "Vial moved to box B04 during the LN2-1 reorganisation on 2026-10-12.",
-                                   target_id=cpu[4], violations={f: [o, n] for f, (o, n) in diff.items()})
+    edits = []
+    svc.update_sample(conn, pfs[0], {"quantity": 1.0},
+                      reason="Took 0.5 mL of supernatant for the cytokine panel (not tracked as a tube).")
+    edits.append(pfs[0])
+    if second:
+        me = g.user
+        g.user = dict(conn.execute("SELECT * FROM account WHERE username=?", (second,)).fetchone())
+        svc.update_sample(conn, cpu[4], {"box": "B04", "position": "A1"},
+                          reason="Vial moved to box B04 during the LN2-1 reorganisation on 2026-10-12.")
+        g.user = me
+        edits.append(cpu[4])
 
     return {"participant": pid, "external_id": EXTERNAL_ID, "tubes": len(created), "roots": [pf1, pb1, pf2],
-            "approved_request": approved_id, "pending_request": pending_id, "approver": approver}
+            "edits": edits, "second": second}
+
+
+# ---------------------------------------------------------------- public demonstration instance
+
+DEMO_USERS = [  # username, display name, initials, role
+    ("demo", "Demo Admin", "DA", "admin"),
+    ("reviewer", "Second Reviewer", "SR", "user"),
+    ("viewer", "Read-only Viewer", "RV", "viewer"),
+]
+
+
+def reset_demo(conn, password):
+    """Wipe the database and rebuild it with the demo accounts and the demo participant."""
+    from .db import reset_db
+    from .auth import create_user
+    reset_db(conn)
+    for username, name, initials, role in DEMO_USERS:
+        create_user(conn, username, name, initials, password, role)
+    info = seed_demo(conn, "demo", second="reviewer")
+    conn.commit()
+    return info

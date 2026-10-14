@@ -20,7 +20,7 @@ def all_categories(conn):
 @bp.route("/users")
 @admin_required
 def users():
-    rows = get_db().execute("SELECT * FROM user ORDER BY username").fetchall()
+    rows = get_db().execute("SELECT * FROM account ORDER BY username").fetchall()
     return render_template("admin/users.html", rows=rows)
 
 
@@ -32,7 +32,7 @@ def user_new():
         f = request.form
         if len(f["password"]) < 8:
             flash("Password must be at least 8 characters", "error")
-        elif conn.execute("SELECT 1 FROM user WHERE username=?", (f["username"].strip(),)).fetchone():
+        elif conn.execute("SELECT 1 FROM account WHERE username=?", (f["username"].strip(),)).fetchone():
             flash("Username already exists", "error")
         else:
             create_user(conn, f["username"].strip(), f["display_name"].strip(), f["initials"].strip().upper(),
@@ -48,7 +48,7 @@ def user_new():
 @admin_required
 def user_update(username):
     conn = get_db()
-    u = conn.execute("SELECT * FROM user WHERE username=?", (username,)).fetchone()
+    u = conn.execute("SELECT * FROM account WHERE username=?", (username,)).fetchone()
     if u is None:
         abort(404)
     action = request.form.get("action")
@@ -56,17 +56,17 @@ def user_update(username):
         if username == g.user["username"]:
             flash("You cannot deactivate yourself", "error")
         else:
-            conn.execute("UPDATE user SET active=? WHERE username=?", (0 if u["active"] else 1, username))
+            conn.execute("UPDATE account SET active=? WHERE username=?", (0 if u["active"] else 1, username))
             audit.log(conn, "user", username, "update", before={"active": u["active"]}, after={"active": 0 if u["active"] else 1})
     elif action == "role":
-        conn.execute("UPDATE user SET role=? WHERE username=?", (request.form["role"], username))
+        conn.execute("UPDATE account SET role=? WHERE username=?", (request.form["role"], username))
         audit.log(conn, "user", username, "update", before={"role": u["role"]}, after={"role": request.form["role"]})
     elif action == "reset_password":
         pw = request.form.get("password", "")
         if len(pw) < 8:
             flash("Password must be at least 8 characters", "error")
             return redirect(url_for("admin.users"))
-        conn.execute("UPDATE user SET password_hash=? WHERE username=?", (hash_password(pw), username))
+        conn.execute("UPDATE account SET password_hash=? WHERE username=?", (hash_password(pw), username))
         audit.log(conn, "user", username, "update", after={"password": "reset by admin"})
     conn.commit()
     return redirect(url_for("admin.users"))
@@ -159,12 +159,18 @@ def audit_log():
         where.append("record_id LIKE ?"); params.append(f"%{f['record']}%")
     if f["user"]:
         where.append("username=?"); params.append(f["user"])
+    changes_only = request.args.get("changes") == "1"
+    if changes_only:   # edits, deletes, restores and rule overrides: anything that is not a plain insert or a login
+        where.append("(action NOT IN ('insert','login') OR reason IS NOT NULL)")
     page = max(int(request.args.get("page", 1)), 1)
     sql = "SELECT * FROM audit_log" + (" WHERE " + " AND ".join(where) if where else "") + \
           f" ORDER BY id DESC LIMIT 101 OFFSET {(page - 1) * 100}"
     rows = conn.execute(sql, params).fetchall()
     tables = [r[0] for r in conn.execute("SELECT DISTINCT table_name FROM audit_log ORDER BY 1")]
-    return render_template("admin/audit.html", rows=rows[:100], has_more=len(rows) > 100, page=page, f=f, tables=tables)
+    if changes_only:
+        f["changes"] = "1"
+    return render_template("admin/audit.html", rows=rows[:100], has_more=len(rows) > 100, page=page, f=f, tables=tables,
+                           changes_only=changes_only)
 
 
 @bp.route("/fields", methods=("GET", "POST"))

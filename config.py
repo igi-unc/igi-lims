@@ -42,26 +42,29 @@ PARTICIPANT_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 PARTICIPANT_LENGTH = 7
 
 # ---------------------------------------------------------------------------
-# Two-person agreement
-#
-# Rule violations on sample creation always need a second user's approval.
-# SAMPLE_EDIT_APPROVAL controls edits/deletes of existing sample records:
-#   "all"        -> every edit or delete of a sample goes to the approval queue
-#   "provenance" -> only parent/ID/delete changes need approval; status,
-#                   quantity, location, notes are direct (but audited)
-#   "none"       -> edits are direct (audited)
-# ---------------------------------------------------------------------------
-SAMPLE_EDIT_APPROVAL = "all"
-PROVENANCE_FIELDS = {"parent_id", "root_id", "sample_id"}
-
-# ---------------------------------------------------------------------------
 # Flask / runtime
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.environ.get("LIMS_SECRET_KEY", "change-me-before-deploying")
 DATABASE = os.environ.get("LIMS_DATABASE", os.path.join(os.path.dirname(__file__), "instance", "lims.db"))
+# A PostgreSQL URL switches the backend (used on Vercel with Supabase); leave unset for SQLite.
+# POSTGRES_URL is what the Supabase integration on the Vercel marketplace sets.
+DATABASE_URL = os.environ.get("LIMS_DATABASE_URL") or os.environ.get("POSTGRES_URL") or None
 # Uploaded files (QC exports, traces, images). Point at a gcsfuse mount on the GCP VM.
-ATTACHMENT_DIR = os.environ.get("LIMS_ATTACHMENT_DIR", os.path.join(os.path.dirname(__file__), "instance", "attachments"))
+# On Vercel the project directory is read-only, so the fallback is the (ephemeral) temp directory;
+# set the Supabase Storage variables below for files that persist.
+ATTACHMENT_DIR = os.environ.get("LIMS_ATTACHMENT_DIR") or (
+    "/tmp/igi-lims-attachments" if os.environ.get("VERCEL") else os.path.join(os.path.dirname(__file__), "instance", "attachments"))
+SUPABASE_URL = os.environ.get("LIMS_SUPABASE_URL") or os.environ.get("SUPABASE_URL") or None    # https://<ref>.supabase.co
+SUPABASE_SERVICE_KEY = os.environ.get("LIMS_SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or None
+STORAGE_BUCKET = os.environ.get("LIMS_STORAGE_BUCKET", "lims-attachments")
+
+# Public demonstration instance: credentials shown on the login page, data rebuilt by
+# `flask demo-reset` or the /cron/demo-reset endpoint (Vercel cron with CRON_SECRET).
+DEMO_MODE = os.environ.get("LIMS_DEMO_MODE") == "1"
+DEMO_PASSWORD = os.environ.get("LIMS_DEMO_PASSWORD", "try-the-lims")
+CRON_SECRET = os.environ.get("CRON_SECRET") or None
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = bool(os.environ.get("VERCEL"))     # always HTTPS there
 SESSION_COOKIE_SAMESITE = "Lax"
 PERMANENT_SESSION_LIFETIME = 60 * 60 * 12

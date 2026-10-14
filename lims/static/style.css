@@ -71,3 +71,10 @@ ul.plist li { padding:4px 6px; border-radius:4px; } ul.plist li.sel { background
 .panel .t { font-size:15px; margin-bottom:6px; }
 .kv div { white-space:nowrap; } .kv .k { color:var(--muted); } .kv .k::after { content:":"; }
 .cols3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; } @media (max-width:1000px){ .cols3{grid-template-columns:1fr;} }
+
+/* flagged audit rows (anything that is not a plain creation) and inline tags */
+tr.flag td:first-child { border-left: 3px solid var(--warn); }
+.tag { display:inline-block; padding:0 7px; border-radius:10px; font-size:12px; background:#fef3c7; color:#92400e; text-decoration:none; }
+.tag.warn { background:#fee2e2; color:#991b1b; }
+.demo-banner { background:#fef3c7; color:#92400e; padding:6px 12px; border-radius:6px; margin:0 0 12px; font-size:13px; }
+.demo-banner button.small { padding:2px 8px; font-size:12px; margin-left:8px; }

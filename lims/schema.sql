@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS derivation_rule (
     PRIMARY KEY (rule_type, from_code, to_code)
 );
 
-CREATE TABLE IF NOT EXISTS user (
+CREATE TABLE IF NOT EXISTS account (   -- "user" is reserved in PostgreSQL
     username        TEXT PRIMARY KEY,
     display_name    TEXT NOT NULL,
     initials        TEXT NOT NULL,
@@ -116,24 +116,6 @@ CREATE TABLE IF NOT EXISTS data_file (
 CREATE INDEX IF NOT EXISTS idx_file_sample ON data_file(sample_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_file_uri ON data_file(uri) WHERE deleted_at IS NULL;
 
--- Two-person agreement queue. A request holds the full intended action; a
--- different user approves it, and the action is applied at approval time.
-CREATE TABLE IF NOT EXISTS approval_request (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    action_type    TEXT NOT NULL,                  -- create_sample, update_sample, delete_sample, restore_sample
-    target_id      TEXT,                           -- sample_id for updates/deletes
-    payload        TEXT NOT NULL,                  -- JSON
-    violations     TEXT,                           -- JSON list of rule violations (create) or field diff (update)
-    justification  TEXT NOT NULL,
-    requested_by   TEXT NOT NULL,
-    requested_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
-    status         TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','failed')),
-    decided_by     TEXT,
-    decided_at     TEXT,
-    decision_note  TEXT,
-    result         TEXT                            -- JSON: ids created, or error text
-);
-
 CREATE TABLE IF NOT EXISTS audit_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     ts            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -143,7 +125,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action        TEXT NOT NULL,                   -- insert, update, delete, restore, login
     before_json   TEXT,
     after_json    TEXT,
-    approval_id   INTEGER REFERENCES approval_request(id)
+    reason        TEXT                            -- operator's justification (edit, delete, rule override)
 );
 CREATE INDEX IF NOT EXISTS idx_audit_record ON audit_log(table_name, record_id);
 

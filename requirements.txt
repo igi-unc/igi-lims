@@ -1,6 +1,8 @@
 # Python 3.9+ runs the app; 3.10+ also gets the Qubit/NanoDrop QC readers (allotropy)
 flask>=3.0
 gunicorn>=21
+psycopg[binary]>=3.1          # PostgreSQL backend (Supabase); unused with SQLite
+psycopg_pool>=3.2
 pytest>=7
 allotropy>=0.1.140; python_version >= "3.10"   # Qubit/NanoDrop readers; skipped on older Pythons
 pypdf>=4          # only used when extracting vendor PDFs; safe to omit in production

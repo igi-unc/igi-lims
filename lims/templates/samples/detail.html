@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ s.sample_id }} · IGI LIMS{% endblock %}{% block content %}
-<h1><code>{{ s.sample_id }}</code> <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}</h1>
-{% if pending %}<div class="flash error">Pending approval request(s) on this record: {% for r in pending %}<a href="{{ url_for('approvals.detail', request_id=r.id) }}">#{{ r.id }} {{ r.action_type }}</a> {% endfor %}</div>{% endif %}
+<h1><code>{{ s.sample_id }}</code> <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}
+{% if flags.edits %} <a class="tag" href="#history" title="This record has been changed since it was created; see Record history">edited ×{{ flags.edits }}</a>{% endif %}
+{% if flags.overrides %} <a class="tag warn" href="#history" title="Created against a derivation rule; see Record history for the justification">rule override</a>{% endif %}</h1>
 
 <div class="card">
 <h2>Provenance</h2>
@@ -36,9 +37,9 @@
 <p><a class="btn secondary" href="{{ url_for('samples.edit', sample_id=s.sample_id) }}">Edit</a></p>
 <details><summary>{% if s.deleted_at %}Restore{% else %}Delete{% endif %} this record</summary>
 <form method="post" action="{{ url_for('samples.delete', sample_id=s.sample_id) }}">
-  <p class="muted">Deletion is a soft delete; the record and its aliquot number are kept. A second user must approve.</p>
-  <label><span class="lbl">Justification</span><textarea name="justification" required></textarea></label>
-  <button type="submit" class="danger">Request {% if s.deleted_at %}restore{% else %}deletion{% endif %}</button>
+  <p class="muted">Deletion is a soft delete; the record and its aliquot number are kept and the action is flagged in the audit log.</p>
+  <label><span class="lbl">Reason (optional; kept in the audit log)</span><textarea name="justification"></textarea></label>
+  <button type="submit" class="danger">{% if s.deleted_at %}Restore{% else %}Delete{% endif %} this record</button>
 </form></details>
 {% endif %}
 <h2>Metadata</h2>
@@ -109,12 +110,13 @@
 </div>
 </div>
 
-<div class="card">
+<div class="card" id="history">
 <h2>Record history</h2>
-<table class="compact"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Change</th><th>Approval</th></tr></thead><tbody>
-{% for h in history %}<tr><td>{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ h.action }}</td>
+<p class="muted">Every write to this record. Rows other than the original creation are flagged; rule overrides carry their justification.</p>
+<table class="compact"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Change</th><th>Reason</th></tr></thead><tbody>
+{% for h in history %}<tr class="{% if h.action != 'insert' or h.reason %}flag{% endif %}"><td>{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ h.action }}</td>
 <td>{% if h.action == 'update' %}<div class="cols"><div><span class="muted">before</span>{{ h.before_json|kv }}</div><div><span class="muted">after</span>{{ h.after_json|kv }}</div></div>{% elif h.action == 'insert' %}<span class="muted">created</span>{% else %}{{ h.action }}{% endif %}</td>
-<td>{% if h.approval_id %}<a href="{{ url_for('approvals.detail', request_id=h.approval_id) }}">#{{ h.approval_id }}</a>{% endif %}</td></tr>{% endfor %}
+<td>{{ h.reason or '' }}</td></tr>{% endfor %}
 </tbody></table>
 </div>
 {% endblock %}

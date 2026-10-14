@@ -18,7 +18,7 @@ bp = Blueprint("auth", __name__)
 
 def create_user(conn, username, display_name, initials, password, role="user"):
     conn.execute(
-        "INSERT INTO user(username, display_name, initials, password_hash, role) VALUES (?,?,?,?,?)",
+        "INSERT INTO account(username, display_name, initials, password_hash, role) VALUES (?,?,?,?,?)",
         (username, display_name, initials, hash_password(password), role),
     )
 
@@ -28,7 +28,7 @@ def load_user():
     username = session.get("username")
     g.user = None
     if username:
-        row = get_db().execute("SELECT * FROM user WHERE username=? AND active=1", (username,)).fetchone()
+        row = get_db().execute("SELECT * FROM account WHERE username=? AND active=1", (username,)).fetchone()
         g.user = row
 
 
@@ -64,7 +64,7 @@ def login():
         username = request.form["username"].strip()
         password = request.form["password"]
         conn = get_db()
-        row = conn.execute("SELECT * FROM user WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM account WHERE username=?", (username,)).fetchone()
         if row and row["active"] and check_password_hash(row["password_hash"], password):
             session.clear()
             session["username"] = row["username"]
@@ -93,7 +93,7 @@ def change_password():
         elif request.form["new"] != request.form["confirm"] or len(request.form["new"]) < 8:
             flash("New passwords must match and be at least 8 characters", "error")
         else:
-            conn.execute("UPDATE user SET password_hash=? WHERE username=?",
+            conn.execute("UPDATE account SET password_hash=? WHERE username=?",
                          (hash_password(request.form["new"]), g.user["username"]))
             audit.log(conn, "user", g.user["username"], "update", after={"password": "changed"})
             conn.commit()

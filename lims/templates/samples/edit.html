@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Edit · IGI LIMS{% endblock %}{% block content %}
 <h1>Edit <code>{{ s.sample_id }}</code></h1>
-{% if needs_approval %}<p class="muted">Edits to sample records are applied only after a second user approves them.</p>{% endif %}
+<p class="muted">Changes are applied immediately and flagged in the audit log with the before and after values.</p>
 <div class="card">
 <form method="post">
 <div class="grid">
@@ -25,9 +25,9 @@
     {% elif d.type == 'datetime' %}<input type="datetime-local" name="attr_{{ d.key }}" value="{{ cur }}">
     {% else %}<input type="text" name="attr_{{ d.key }}" value="{{ cur }}">{% endif %}</label>
   {% endfor %}{% endif %}
-  {% if needs_approval %}<label class="wide"><span class="lbl">Justification (required; shown to the approver)</span><textarea name="justification" required></textarea></label>{% endif %}
+  <label class="wide"><span class="lbl">Reason for the change (optional; kept in the audit log)</span><textarea name="justification"></textarea></label>
 </div>
-<p><button type="submit">{% if needs_approval %}Submit for approval{% else %}Save{% endif %}</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=s.sample_id) }}">Cancel</a></p>
+<p><button type="submit">Save</button> <a class="btn secondary" href="{{ url_for('samples.detail', sample_id=s.sample_id) }}">Cancel</a></p>
 </form>
 </div>
 {% endblock %}

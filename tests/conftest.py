@@ -3,17 +3,23 @@ import tempfile
 import pytest
 
 from lims import create_app
-from lims.db import init_db, get_db
+from lims.db import init_db, reset_db, get_db
 from lims.auth import create_user
+
+# Set LIMS_TEST_DATABASE_URL=postgresql://... to run the whole suite against PostgreSQL instead of SQLite.
+PG_URL = os.environ.get("LIMS_TEST_DATABASE_URL")
 
 
 @pytest.fixture
 def app():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    app = create_app({"TESTING": True, "DATABASE": path, "SECRET_KEY": "test", "WTF_CSRF_ENABLED": False})
+    app = create_app({"TESTING": True, "DATABASE": path, "DATABASE_URL": PG_URL, "SECRET_KEY": "test", "WTF_CSRF_ENABLED": False})
     with app.app_context():
-        init_db()
+        if PG_URL:
+            reset_db()
+        else:
+            init_db()
         conn = get_db()
         create_user(conn, "alice", "Alice A", "AA", "password1", "admin")
         create_user(conn, "bob", "Bob B", "BB", "password1", "user")

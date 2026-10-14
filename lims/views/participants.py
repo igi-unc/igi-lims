@@ -64,8 +64,8 @@ def detail(participant_id):
     if p is None:
         abort(404)
     collections = conn.execute(
-        "SELECT root_id, collection_date, specimen_code, COUNT(*) n, SUM(status='Available') n_avail "
-        "FROM sample WHERE participant_id=? AND deleted_at IS NULL GROUP BY root_id ORDER BY collection_date, root_id",
+        "SELECT root_id, collection_date, specimen_code, COUNT(*) n, SUM(CASE WHEN status='Available' THEN 1 ELSE 0 END) n_avail "
+        "FROM sample WHERE participant_id=? AND deleted_at IS NULL GROUP BY root_id, collection_date, specimen_code ORDER BY collection_date, root_id",
         (participant_id,)).fetchall()
     return render_template("participants/detail.html", p=p, collections=collections, meanings=code_meaning_map())
 

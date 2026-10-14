@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Register derived specimen · IGI LIMS{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "_macros.html" import status_loc %}{% block title %}Register derived specimen · IGI LIMS{% endblock %}{% block content %}
 <h1>Register</h1>
 {% include "_register_tabs.html" %}
 <h2>Derived specimen</h2>
@@ -19,20 +19,19 @@
   {% if eligible %}
   <form method="post">
     <input type="hidden" name="participant" value="{{ participant }}"><input type="hidden" name="fraction" value="{{ fraction }}"><input type="hidden" name="material" value="{{ material }}">
-    <table class="compact"><thead><tr><th></th><th>Parent tube</th><th>Status</th><th>Qty</th><th>Location</th><th>Processed</th></tr></thead><tbody>
+    <table class="compact"><thead><tr><th></th><th>Parent tube</th><th>Status / location</th><th>Qty</th><th>Processed</th></tr></thead><tbody>
     {% for t, v in eligible %}<tr>
       <td><input type="radio" name="parent_id" value="{{ t.sample_id }}" required id="p{{ loop.index }}"></td>
       <td><label for="p{{ loop.index }}"><code>{{ t.sample_id }}</code></label></td>
-      <td><span class="status {{ t.status }}">{{ t.status }}</span></td>
+      <td>{{ status_loc(t) }}</td>
       <td class="num">{% if t.quantity is not none %}{{ t.quantity }} {{ t.unit or '' }}{% endif %}</td>
-      <td>{{ [t.freezer, t.rack, t.box, t.position]|reject('none')|reject('equalto','NA')|join(' / ') }}</td>
       <td>{{ t.created_datetime or '' }} {{ t.created_by or '' }}</td></tr>{% endfor %}
     </tbody></table>
     <p><button type="submit">Continue with this parent</button></p>
   </form>
   {% else %}
   <p class="flash error">No tube from {{ participant }} can be the parent of a <code>{{ fraction }}-{{ material }}</code> tube under the current rules.
-  {% if not ineligible %}This participant has no tubes yet.{% else %}Check the reasons below. If this is a legitimate exception, scan the intended parent in Step 3 and request an override on the next page.{% endif %}</p>
+  {% if not ineligible %}This participant has no tubes yet.{% else %}Check the reasons below. If this is a legitimate exception, scan the intended parent in Step 3 and override the rule on the next page (the override is recorded in the audit log).{% endif %}</p>
   {% endif %}
   {% if ineligible %}
   <details><summary>{{ ineligible|length }} tube(s) not eligible</summary>

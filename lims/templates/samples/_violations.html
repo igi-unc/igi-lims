@@ -2,8 +2,8 @@
 <div class="violations">
   <h3>Blocked by derivation rules</h3>
   <ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>
-  <p>Nothing was saved. If this is a legitimate exception, request an override; a second user must approve it before the tubes are created.</p>
+  <p>Nothing was saved. If this is a legitimate exception, give the reason and create the tube(s) anyway. The override and your justification are written to the audit log and flagged on the tube.</p>
   <label><span class="lbl">Justification for override</span><textarea name="justification"></textarea></label>
-  <button type="submit" name="action" value="request_override" class="secondary">Request override</button>
+  <button type="submit" name="action" value="override" class="secondary">Create anyway (override)</button>
 </div>
 {% endif %}

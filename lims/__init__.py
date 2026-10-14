@@ -13,8 +13,8 @@ def create_app(test_config=None):
     db.init_app(app)
     app.register_blueprint(auth.bp)
 
-    from .views import main, samples, participants, approvals, admin, api, qcimport
-    for m in (main, samples, participants, approvals, admin, api, qcimport):
+    from .views import main, samples, participants, admin, api, qcimport, demo
+    for m in (main, samples, participants, admin, api, qcimport, demo):
         app.register_blueprint(m.bp)
 
     @app.template_filter("kv")
@@ -33,14 +33,6 @@ def create_app(test_config=None):
         rows = "".join(f"<div><span class='k'>{escape(k)}</span> {escape('' if v is None else v)}</div>"
                        for k, v in obj.items())
         return Markup(f"<div class='kv'>{rows}</div>")
-
-    @app.context_processor
-    def inject():
-        from .db import get_db
-        pending = 0
-        if getattr(g, "user", None):
-            pending = get_db().execute("SELECT COUNT(*) FROM approval_request WHERE status='pending'").fetchone()[0]
-        return {"pending_count": pending}
 
     @app.errorhandler(403)
     def forbidden(e):

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}Samples · IGI LIMS{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "_macros.html" import status_loc %}{% block title %}Samples · IGI LIMS{% endblock %}{% block content %}
 <h1>Samples &amp; Participants</h1>
 {% include "_browse_tabs.html" %}
 <form method="get" class="card filters">
@@ -15,18 +15,17 @@
 </form>
 {% if f.root %}<p>Showing collection rooted at <a href="{{ url_for('samples.tree', root_id=f.root) }}"><code>{{ f.root }}</code></a> (<a href="{{ url_for('samples.tree', root_id=f.root) }}">tree view</a>)</p>{% endif %}
 <table>
-<thead><tr><th>Sample ID</th><th>Parent</th><th>Status</th><th>Qty</th><th>Location</th><th>Processed</th><th>By</th></tr></thead>
+<thead><tr><th>Sample ID</th><th>Parent</th><th>Status / location</th><th>Qty</th><th>Processed</th><th>By</th></tr></thead>
 <tbody>
 {% for s in rows %}
 <tr class="{% if s.deleted_at %}del{% endif %}">
   <td><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a>{% if s.deleted_at %} <span class="muted">(deleted)</span>{% endif %}</td>
   <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id.split('-')[-3:]|join('-') }}</code></a>{% else %}<span class="muted">root</span>{% endif %}</td>
-  <td><span class="status {{ s.status }}">{{ s.status }}</span></td>
+  <td>{{ status_loc(s) }}</td>
   <td class="num">{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% endif %}</td>
-  <td>{{ [s.freezer, s.rack, s.box, s.position]|reject('none')|join(' / ') }}</td>
   <td>{{ s.created_datetime or '' }}</td><td>{{ s.created_by or '' }}</td>
 </tr>
-{% else %}<tr><td colspan="7" class="muted">No samples match.</td></tr>{% endfor %}
+{% else %}<tr><td colspan="6" class="muted">No samples match.</td></tr>{% endfor %}
 </tbody></table>
 <p>{% if page > 1 %}<a href="{{ url_for('samples.list_samples', page=page-1, **f) }}">← previous</a>{% endif %}
    {% if has_more %}<a href="{{ url_for('samples.list_samples', page=page+1, **f) }}">next →</a>{% endif %}</p>

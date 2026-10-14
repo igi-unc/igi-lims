@@ -98,15 +98,13 @@ def test_attributes_on_create_edit_and_required(app, alice, client, tmp_path):
     assert b"Assay is required" in r.data
     r = derive(alice, P + "PF-BLK-DNA-01", fraction="BLK", material="LIB", attr_assay="WGS", attr_pcr_cycles="6")
     assert b"Created 1" in r.data
-    # editing an attribute goes through approval like any other edit
+    # editing an attribute is direct and audited like any other edit
     sid = P + "PF-BLK-LIB-01"
     r = alice.post(f"/samples/{sid}/edit", data={"parent_id": P + "PF-BLK-DNA-01", "status": "Available", "quantity": "1", "unit": "NA", "created_by": "AA",
                                                  "created_datetime": "2026-09-29T10:00", "sop_code": "NA", "biobank_source": "IH",
                                                  "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1", "notes": "NA",
                                                  "attr_assay": "WGS", "attr_pcr_cycles": "8", "justification": "typo"}, follow_redirects=True)
-    assert b"Change request #1 submitted" in r.data
-    login(client, "bob")
-    client.post("/approvals/1/decide", data={"decision": "approve"}, follow_redirects=True)
+    assert b"Sample updated" in r.data
     with app.app_context():
         assert get_db().execute("SELECT value FROM sample_attribute WHERE sample_id=? AND key='pcr_cycles'", (sid,)).fetchone()[0] == "8"
 

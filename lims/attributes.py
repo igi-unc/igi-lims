@@ -114,7 +114,7 @@ def collect_from_form(conn, form, fraction, material):
 
 
 def validate_dict(conn, values, fraction, material):
-    """Coerce an already-collected {key: value} dict (e.g. from an approval payload)."""
+    """Coerce an already-collected {key: value} dict (e.g. from a QC import)."""
     defs = {d["key"]: d for d in definitions_for(conn, fraction, material, active_only=False)}
     out = {}
     for k, v in (values or {}).items():
@@ -164,8 +164,9 @@ def labels(conn):
     return out
 
 
-def set_values(conn, sample_id, values, source_attachment_id=None, approval_id=None):
-    """Upsert values. None deletes. Returns {key: (old, new)} of actual changes and writes one audit row."""
+def set_values(conn, sample_id, values, source_attachment_id=None, reason=None, action="update"):
+    """Upsert values. None deletes. Returns {key: (old, new)} of actual changes and writes one audit row.
+    Pass action="insert" for values recorded while the tube is being created, so they are not flagged as edits."""
     cur = {k: r["value"] for k, r in get(conn, sample_id).items()}
     changes = {}
     for k, v in values.items():
@@ -183,9 +184,9 @@ def set_values(conn, sample_id, values, source_attachment_id=None, approval_id=N
                 "updated_by=excluded.updated_by, updated_at=excluded.updated_at",
                 (sample_id, k, v, source_attachment_id, _username()))
     if changes:
-        audit.log(conn, "sample", sample_id, "update",
-                  before={"attr:" + k: o for k, (o, _) in changes.items()},
+        audit.log(conn, "sample", sample_id, action,
+                  before={"attr:" + k: o for k, (o, _) in changes.items()} if action != "insert" else None,
                   after={"attr:" + k: n for k, (_, n) in changes.items()}
                   | ({"source_attachment": source_attachment_id} if source_attachment_id else {}),
-                  approval_id=approval_id)
+                  reason=reason)
     return changes

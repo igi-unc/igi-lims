@@ -1,9 +1,9 @@
 # IGI LIMS
 
 Chain-of-custody database and web interface for IGI biological specimens.
-SQLite + Flask, no external services. One row per tube; every tube records
-the tube it was made from, so provenance from the collected specimen to the
-sequencing file is a chain of parent links.
+Flask with SQLite (local) or PostgreSQL (hosted). One row per tube; every tube
+records the tube it was made from, so provenance from the collected specimen to
+the sequencing file is a chain of parent links.
 
 ## Quick start (development)
 
@@ -27,8 +27,8 @@ Log in, add participants, register a collected specimen (root tube), then use
 
 Adds one malignant-pleural-effusion participant (site ID MPE-021) with three
 collections processed through to libraries, a peptide eluate and data files:
-43 tubes, custody events, one approved change request and one pending request
-that a second account can approve live. It also fills the empty lists (SOPs,
+43 tubes, custody events and two audited edits (one by a second account) so
+the flagged history has something to show. It also fills the empty lists (SOPs,
 freezers, racks, boxes, lots, indexes, submissions, instruments) with a few
 plausible entries. Re-running refuses rather than duplicating; delete the
 participant's tubes or start from a fresh database to reseed. The data is
@@ -71,11 +71,11 @@ http://127.0.0.1:5000 on the laptop.
 * **Derivation rules** (*Rules* page) decide which fractions a specimen may
   have, which fraction/material transitions are allowed, and what a root tube
   may arrive as. A violation blocks creation and offers *Request override*.
-* **Two-person agreement.** Overrides, and (by default) every edit or delete of
-  a sample record, go to the *Approvals* queue. The requester cannot approve
-  their own request. The approver's decision applies the change and the audit
-  log records the approval ID. `SAMPLE_EDIT_APPROVAL` in `config.py` relaxes
-  this to `provenance` (only parent/ID/delete changes) or `none`.
+* **Changes are flagged, not queued.** Edits, deletes, restores and rule
+  overrides apply immediately with the operator's stated reason. The audit log
+  and the tube's history flag every row that is not a plain creation; a
+  *changes only* filter lists them system-wide, and tubes carry *edited* and
+  *rule override* tags. (An earlier two-person approval queue was removed.)
 * **Deletes are soft.** The record stays, the aliquot number stays reserved,
   and a tube with active children cannot be deleted.
 * **Audit log** of every write (who, when, before, after).
@@ -99,11 +99,10 @@ http://127.0.0.1:5000 on the laptop.
   stored file. Readers: Qubit 4 and NanoDrop One via
   [allotropy](https://github.com/Benchling-Open-Source/allotropy), TapeStation
   XML, Countess 3 CSV (columns from the vendor guide, see
-  `docs/countess3_csv_columns.md`). QC imports are direct and audited; manual
-  metadata edits go through the approval queue like other edits.
+  `docs/countess3_csv_columns.md`). QC imports and manual metadata edits are
+  both direct and audited.
 
-Roles: `admin` (everything), `user` (create, derive, edit, approve), `viewer`
-(read only).
+Roles: `admin` (everything), `user` (create, derive, edit), `viewer` (read only).
 
 ## JSON API (read only)
 
@@ -120,7 +119,17 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 | `/api/tree/<root_id>` | nested tree for a collection |
 | `/api/files?assay=&participant=` | data files joined to tubes |
 
-## Deployment on a GCP VM
+## Hosting
+
+### Public demo on Vercel + Supabase
+
+See `docs/DEPLOY_VERCEL_SUPABASE.md`. In short: a free Supabase project holds
+the Postgres database and a private storage bucket; Vercel runs the Flask app
+from this repository; `flask demo-reset` (and a nightly cron) rebuilds the demo
+accounts and data. Set `LIMS_DATABASE_URL` to a `postgresql://` URL and the app
+uses Postgres instead of SQLite; nothing else changes.
+
+### On a GCP VM (SQLite)
 
 ```bash
 export LIMS_SECRET_KEY="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
@@ -145,7 +154,9 @@ Back up by copying `lims.db` while the app is idle, or use `sqlite3 lims.db
 `tests/test_workflow.py` walks the spec's worked MPE collection (section 5)
 through the web interface and checks the back-tracking chain from the ONT
 library to the original fluid. `tests/test_demo.py` checks that the demo seed
-obeys the rules and vocabularies.
+obeys the rules and vocabularies and that the demo reset works. Set
+`LIMS_TEST_DATABASE_URL=postgresql://...` to run the same suite against
+PostgreSQL.
 
 ## Documentation
 
@@ -161,20 +172,21 @@ it after UI changes (needs `pip install -r requirements-docs.txt` and a one-time
 ## Layout
 
 ```
-config.py            ID format, approval policy, runtime settings
+config.py            ID format, runtime settings (database, storage, demo mode)
 app.py               entry point (flask / gunicorn)
 lims/schema.sql      tables
 lims/seed.py         initial code lists and derivation rules
-lims/demo.py         `flask seed-demo`: one participant's worth of demonstration data
+lims/demo.py         `flask seed-demo` / `flask demo-reset`: demonstration data and accounts
+lims/db.py           SQLite or PostgreSQL connection; CLI commands
+lims/storage.py      attachment bytes: local directory or Supabase Storage bucket
 lims/ids.py          compose / parse / validate IDs, issue aliquots
 lims/rules.py        derivation rule checks
 lims/samples.py      create / update / delete / lineage (service layer)
-lims/approvals.py    two-person approval queue
 lims/attributes.py   per-fraction / per-material metadata (definitions + values)
 lims/attachments.py  stored files
 lims/qc_parsers.py   instrument export readers (Qubit, NanoDrop, TapeStation, Countess)
 lims/seed_attributes.py  initial field definitions
-lims/views/          Flask blueprints (samples, participants, approvals, admin, api)
+lims/views/          Flask blueprints (samples, participants, admin, api, qcimport, demo)
 lims/templates/      server-rendered pages
 lims/static/tree.js  provenance tree drawing
 NOTES.md             open questions and decisions to revisit

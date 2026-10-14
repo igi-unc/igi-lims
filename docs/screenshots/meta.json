@@ -1,10 +1,11 @@
 {
  "ids": {
-  "participant": "NDAKVTX",
-  "root": "IGI-MP-NDAKVTX-261006-PF-BLK-NAT-01",
-  "cpu1": "IGI-MP-NDAKVTX-261006-PF-PFM-CPU-01",
-  "cpu2": "IGI-MP-NDAKVTX-261006-PF-PFM-CPU-02",
-  "hmd1": "IGI-MP-NDAKVTX-261006-PF-PFM-HMD-01"
+  "participant": "JETQPDN",
+  "root": "IGI-MP-JETQPDN-261006-PF-BLK-NAT-01",
+  "cpu1": "IGI-MP-JETQPDN-261006-PF-PFM-CPU-01",
+  "cpu2": "IGI-MP-JETQPDN-261006-PF-PFM-CPU-02",
+  "ser": "IGI-MP-JETQPDN-261006-PF-SER-NAT-01",
+  "hmd1": "IGI-MP-JETQPDN-261006-PF-PFM-HMD-01"
  },
  "shots": {
   "01_login": {
@@ -19,7 +20,7 @@
     "Register: the only place records are created",
     "Samples & Participants: read-only browsing",
     "Jump box: scan or paste a tube ID to open it",
-    "Approvals queue; the badge counts pending requests",
+    "Audit: every write, with edits and overrides flagged",
     "Quick actions, counts, recent tubes and recent activity"
    ],
    "caption": "The dashboard after signing in. Nothing on it is editable; it links to the three working areas."
@@ -66,7 +67,7 @@
     "The issued ID: IGI-MP-participant-date-PF-BLK-NAT-01",
     "Derive children directly from this tube",
     "Metadata recorded on the form",
-    "Edit goes through two-person approval",
+    "Edit applies at once and is flagged in the history",
     "Append-only hand-off log"
    ],
    "caption": "The tube page for the new root specimen."
@@ -102,9 +103,17 @@
    "callouts": [
     "The rule table blocks this derivation; nothing was saved",
     "The specific rules violated",
-    "Request override: sends it to a second user"
+    "Create anyway: needs a justification, and is flagged in the audit log"
    ],
-   "caption": "Trying to register serum from pleural fluid. The derivation rules refuse and offer an override request instead."
+   "caption": "Trying to register serum from pleural fluid. The derivation rules refuse; the operator may override with a written justification."
+  },
+  "12_override_created": {
+   "callouts": [
+    "Created, with the override noted",
+    "The tube carries a 'rule override' flag for life",
+    "The history row holds the rules broken and the justification"
+   ],
+   "caption": "The tube created by the override. It is flagged on its page and in the audit log, with the justification."
   },
   "13_tree": {
    "callouts": [
@@ -137,67 +146,37 @@
   },
   "17_edit_form": {
    "callouts": [
-    "Edits are applied only after a second user approves",
+    "Changes apply at once and are flagged in the audit log",
     "Quantity 40 to 36",
     "Metadata is edited on the same form",
-    "A justification is required and shown to the approver",
-    "Submit for approval"
+    "Optional reason, kept with the audit row",
+    "Save"
    ],
-   "caption": "Modifying a record. Nothing changes until someone else approves."
+   "caption": "Modifying a record. The before and after values and the reason go to the audit log."
   },
-  "18_edit_submitted": {
+  "18_edit_saved": {
    "callouts": [
-    "The request is queued; the tube still shows the old values",
-    "Pending count on the Approvals link",
-    "The requester cannot decide their own request"
-   ],
-   "caption": "After submitting the edit, the requester lands on the request itself and can only wait."
-  },
-  "19_approvals_list": {
-   "callouts": [
-    "Pending, approved, rejected, failed",
-    "Each request: what, which tube, who asked and why"
-   ],
-   "caption": "Alex Smith's view of the queue. The requester cannot approve their own request."
-  },
-  "20_approval_detail": {
-   "callouts": [
-    "Who, which tube, and the justification",
-    "Exactly what will change, old to new",
-    "Approve and apply",
-    "Reject"
-   ],
-   "caption": "The approver sees the exact diff before deciding."
-  },
-  "21_approval_decided": {
-   "callouts": [
-    "Decision, by whom, and when"
-   ],
-   "caption": "The decision is recorded on the request, and the change is applied to the tube."
-  },
-  "22_override_detail": {
-   "callouts": [
-    "The rules that would be overridden",
-    "The full payload of the tube that would be created",
-    "Reject"
-   ],
-   "caption": "The override request from the earlier rule block, as seen by the approver."
-  },
-  "23_after_approval": {
-   "callouts": [
+    "Saved; the number of changed fields is reported",
+    "The tube is marked as edited from now on",
     "Quantity now 36",
-    "The hand-off recorded earlier",
-    "Every change with before and after values and the approval number"
+    "Flagged rows: the edit with before/after and the reason, and the custody status change"
    ],
-   "caption": "The DNA tube after the approved edit."
+   "caption": "The DNA tube straight after the edit. Flagged history rows are anything other than the original creation."
   },
   "24_audit": {
    "callouts": [
-    "Filter by table, record ID or user",
+    "Filter by table, record ID or user, or show changes only",
     "Before and After as key: value lines",
-    "Link to the approval that authorised the change"
+    "The operator's stated reason for edits, deletions and overrides"
    ],
-   "caption": "The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here."
+   "caption": "The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here; edits are flagged."
+  },
+  "24b_audit_changes": {
+   "callouts": [
+    "Changes only: edits, deletions, restores and rule overrides",
+    "Each flagged row names who, when, what changed and why"
+   ],
+   "caption": "The changes-only view: the review queue replaced by a filter. Alex Smith's vial move, Jane Doe's edit, the custody status change and the earlier rule override are all here."
   },
   "25_qc_upload": {
    "callouts": [

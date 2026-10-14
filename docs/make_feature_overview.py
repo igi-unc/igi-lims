@@ -145,8 +145,9 @@ story += [
         "<b>Derivation rules.</b> A rule table decides which fractions a specimen type may have, which fraction and material "
         "transitions are allowed, and which materials a root tube may arrive as. A violation blocks creation and offers an "
         "override request instead.",
-        "<b>Two-person agreement.</b> Overrides, and by default every edit, delete or restore of a tube record, go to an "
-        "approval queue. The requester cannot approve their own request. The approver's decision applies the change.",
+        "<b>Changes are flagged, not queued.</b> Edits, deletions, restores and rule overrides apply immediately, "
+        "with the operator's reason, and are flagged in the audit log and on the tube page. The audit log has a "
+        "changes-only view for review.",
         "<b>Soft deletes and a full audit log.</b> Deleting a tube keeps the record and its aliquot number, and is refused "
         "while the tube has active children. Every write is recorded with who, when, and before and after values.",
     ]),
@@ -186,7 +187,8 @@ story += shot("10_derived_detail", "6.3 The result",
 story += shot("11_rule_block", "6.4 When the rules say no",
               "Here the operator tried to register serum derived from pleural fluid, from a parent that is already "
               "depleted. The form refuses, lists the reasons, and offers an override request with a mandatory justification. "
-              "A second user will see that request in the approval queue (section 8).")
+              "The override needs a written justification and is flagged for life on the tube and in the audit log.")
+story += shot("12_override_created", "6.5 The tube created by the override")
 story += [p("A third derivation, not shown as a form, extracted high-molecular-weight DNA from the first cryovial "
             f"to make {HMD1}. It appears in the tree and is the tube edited in section 8.")]
 
@@ -198,29 +200,25 @@ story += shot("14_tree_hover", "7.2 Hover for details")
 story += shot("15_tree_panel", "7.3 Click to pin")
 
 story += [PageBreak()]
-story += shot("16_custody_form", "8.1 Record a hand-off", before=[p("8. Walkthrough: custody, editing and approval", H1)], intro=
+story += shot("16_custody_form", "8.1 Record a hand-off", before=[p("8. Walkthrough: custody and editing", H1)], intro=
               "Custody events are append-only. Each records from, to, purpose, time and condition. "
               "The DNA tube is handed to the sequencing core here and marked In use in the same step.")
 story += shot("17_edit_form", "8.2 Modify a record",
               "Jane Doe re-measured the DNA and used some of it for QC, so the quantity and the concentration need to "
               "change. The edit form is the same for tube fields and metadata.")
-story += shot("18_edit_submitted", "8.3 The request is queued")
-story += shot("19_approvals_list", "8.4 The approval queue, seen by a second user")
-story += shot("20_approval_detail", "8.5 Reviewing a change request")
-story += shot("21_approval_decided", "8.6 After the decision")
-story += shot("22_override_detail", "8.7 Reviewing the override request from section 6.4",
-              "The same queue holds rule-override requests. The approver sees the rules that would be broken and the "
-              "full payload of the tube that would be created. In this example the request was rejected with a note "
-              "suggesting the correct fraction code.")
-story += shot("23_after_approval", "8.8 The tube after the approved edit",
-              "Quantity and concentration now show the new values. The history lists the approved change with the "
-              "approval number, the custody event's status change, and the original creation.")
+story += shot("18_edit_saved", "8.3 The tube after the edit",
+              "Quantity and concentration show the new values at once. The tube is marked as edited, and the history "
+              "lists the change with before and after values and the reason, next to the custody status change and the "
+              "original creation. A second user (Alex Smith) then moves a cryovial to another box the same way.")
 
 story += [PageBreak(), p("9. Walkthrough: the audit log", H1)]
 story += shot("24_audit", "9.1 Everything that happened to one tube",
               "The audit log is the system-wide version of the history block on each tube page. It covers "
               "participants, tubes, custody, data files, metadata, attachments, code lists, fields and users. "
               "Before and After are shown as one key and value per line so a reviewer can read them without parsing JSON.")
+story += shot("24b_audit_changes", "9.2 Changes only",
+              "One checkbox hides routine creations and logins and leaves edits, deletions, restores and rule overrides, "
+              "each with who, when, before, after and the stated reason. This is the review view that replaces an approval queue.")
 
 story += [PageBreak(), p("10. Walkthrough: importing instrument QC files", H1),
           p("Common instrument exports can be loaded directly instead of typing numbers into metadata fields. "
@@ -240,7 +238,7 @@ story += shot("29_fields", "11.2 Fields: which metadata each fraction and materi
               "There is no text type. A field can be marked required.", max_h=4.2 * inch)
 story += shot("30_rules", "11.3 Rules: allowed specimens, fractions and transitions", max_h=4.0 * inch)
 story += shot("31_users", "11.4 Users and roles",
-              "Roles are admin (everything), user (create, derive, edit, approve) and viewer (read only).", max_h=3.6 * inch)
+              "Roles are admin (everything), user (create, derive, edit) and viewer (read only).", max_h=3.6 * inch)
 
 # --------------------------------------------------------------------------- reference
 story += [PageBreak(), p("12. Also available", H1),
@@ -267,18 +265,17 @@ story += [PageBreak(), p("12. Also available", H1),
     p("Technical summary", H2),
     bullets([
         "Python 3.10, Flask 3, Jinja templates, a small amount of vanilla JavaScript for the tree and dynamic forms.",
-        "SQLite in WAL mode with foreign keys on; one file database, backed up by copying the file.",
-        "Tables: code_list, derivation_rule, user, participant, sample, custody_event, data_file, approval_request, "
+        "SQLite (one file, WAL mode) for local use, or PostgreSQL (Supabase) when hosted on Vercel; the same code runs on both.",
+        "Tables: code_list, derivation_rule, account, participant, sample, custody_event, data_file, "
         "audit_log, attribute_definition, sample_attribute, attachment.",
         "Instrument parsing via allotropy (Benchling open source) for Qubit and NanoDrop; TapeStation and Countess parsed directly.",
-        "38 automated tests cover ID composition, the registration and approval workflow, parsers, import, metadata and vocabulary enforcement.",
-        "Deployment target: a GCP VM behind gunicorn, reachable by collaborators over the web; not yet set up.",
+        "42 automated tests cover ID composition, registration, editing, overrides, parsers, import, metadata and vocabulary enforcement; they run against SQLite and PostgreSQL.",
+        "Hosting: a public demonstration instance on Vercel with Supabase Postgres (docs/DEPLOY_VERCEL_SUPABASE.md); a GCP VM remains an option for production.",
     ]),
     p("13. Open questions (tracked in NOTES.md)", H1),
     bullets([
         "Participant code format: seven letters as specified, or a site-style code such as P101.",
         "NTC and NRM are three-character specimen codes but the ID segment is two characters.",
-        "Whether every edit should require two-person approval, or only provenance changes.",
         "The seeded derivation rules are a proposal and need review by the lab.",
         "Which metadata fields should be required.",
         "Most admin-extendable lists start with only NA and need real freezers, racks, boxes, SOPs and kits before first use.",

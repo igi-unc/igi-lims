@@ -4,13 +4,15 @@
   <label><span class="lbl">Table</span><select name="table"><option value="">any</option>{% for t in tables %}<option {% if f.table == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Record ID contains</span><input type="text" name="record" value="{{ f.record }}"></label>
   <label><span class="lbl">User</span><input type="text" name="user" value="{{ f.user }}"></label>
+  <label><input type="checkbox" name="changes" value="1" {% if changes_only %}checked{% endif %}> changes only (edits, deletions, restores, rule overrides)</label>
   <button type="submit">Filter</button>
 </form>
-<table><thead><tr><th>When</th><th>User</th><th>Table</th><th>Record</th><th>Action</th><th>Before</th><th>After</th><th>Appr.</th></tr></thead><tbody>
-{% for a in rows %}<tr><td>{{ a.ts }}</td><td>{{ a.username }}</td><td>{{ a.table_name }}</td>
+<p class="muted">Every write is logged with who, when, before and after. Flagged rows are anything other than a plain creation or a login; the Reason column holds the operator's justification for edits, deletions and rule overrides.</p>
+<table><thead><tr><th>When</th><th>User</th><th>Table</th><th>Record</th><th>Action</th><th>Before</th><th>After</th><th>Reason</th></tr></thead><tbody>
+{% for a in rows %}<tr class="{% if a.action not in ('insert','login') or a.reason %}flag{% endif %}"><td>{{ a.ts }}</td><td>{{ a.username }}</td><td>{{ a.table_name }}</td>
 <td>{% if a.table_name == 'sample' %}<a href="{{ url_for('samples.detail', sample_id=a.record_id) }}"><code>{{ a.record_id }}</code></a>{% else %}<code>{{ a.record_id }}</code>{% endif %}</td>
-<td>{{ a.action }}</td><td>{{ a.before_json|kv }}</td><td>{{ a.after_json|kv }}</td>
-<td>{% if a.approval_id %}<a href="{{ url_for('approvals.detail', request_id=a.approval_id) }}">#{{ a.approval_id }}</a>{% endif %}</td></tr>{% endfor %}
+<td>{% if a.action not in ('insert','login') %}<span class="tag">{{ a.action }}</span>{% else %}{{ a.action }}{% endif %}</td><td>{{ a.before_json|kv }}</td><td>{{ a.after_json|kv }}</td>
+<td>{{ a.reason or '' }}</td></tr>{% endfor %}
 </tbody></table>
 <p>{% if page > 1 %}<a href="{{ url_for('admin.audit_log', page=page-1, **f) }}">← newer</a>{% endif %} {% if has_more %}<a href="{{ url_for('admin.audit_log', page=page+1, **f) }}">older →</a>{% endif %}</p>
 {% endblock %}

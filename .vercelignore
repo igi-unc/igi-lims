@@ -1,0 +1,7 @@
+.venv
+instance
+docs/screenshots
+docs/*.pdf
+tests
+.pytest_cache
+__pycache__

@@ -17,11 +17,11 @@
    processing date inside the ID. Those are a `config.py` edit (plus a column
    if a new segment is added). Operator and processing date are stored in the
    database per the spec's own rule ("processing dates go in the database").
-3. **Edit approval scope.** "Require agreement for record overrides" is
-   implemented literally: every edit or delete of a sample needs a second user.
-   If routine updates (location, quantity, status) turn out to be too slow,
-   set `SAMPLE_EDIT_APPROVAL = "provenance"` in `config.py`. Custody events,
-   file links, and participant edits are direct but audited.
+3. **Approval queue removed (2026-10-14).** After the demo Steven asked to
+   drop two-person approval and rely on the audit log. Edits, deletes and rule
+   overrides are now direct, carry an optional (override: required) reason,
+   and are flagged in the audit log, on the tube page and in a changes-only
+   audit view. Old databases keep their `approval_request` table unused.
 4. **Participant code generation.** Generated codes use A–Z minus I and O
    (7 letters). Confirm this against the IRB/HIPAA review of label contents,
    and whether codes should instead be issued by a central IGI registry.
@@ -65,13 +65,17 @@
   `root_id` groups a collection and the participant page lists them.
 * Site/external ID live on the participant; biobank source on the tube.
 * Status change to Depleted happens via the "all parent material used" box on
-  the derive form, so it does not need approval.
+  the derive form.
+* Status and location are one column in tables: an Available tube shows where
+  it is; anything else shows its status (plus the location unless Depleted).
+* PostgreSQL support is a translation layer in `lims/db.py` (placeholders,
+  strftime, INSERT OR IGNORE, lastrowid, LIKE→ILIKE, schema DDL). SQL in the
+  code base stays in the SQLite dialect; the suite runs on both backends.
 * Aliquot numbers are issued from `MAX(aliquot)` over all tubes with the same
   prefix, including deleted ones, so they are never reused.
 * Metadata keys are shared across codes (`cell_count` on TUM and CPU is one
   value per tube). QC-imported values record the source attachment; manual
-  edits go through the approval queue like any other sample edit, QC imports
-  do not (the value comes from an instrument file and is audited).
+  edits and QC imports are both direct and audited.
 * TapeStation is parsed from the XML directly rather than via allotropy,
   because allotropy's electrophoresis output buries RIN/DIN in calculated-data
   documents and drops region tables (cfDNA %, average size, molarity).
