@@ -38,7 +38,7 @@ built with the same service functions as the forms, so it obeys the rules.
 
 ```bash
 git clone git@github.com:igi-unc/igi-lims.git && cd igi-lims
-python3 --version                                 # needs 3.10 or newer
+python3 --version                                 # 3.9 works; 3.10+ also enables Qubit/NanoDrop import
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 export FLASK_APP=app
 .venv/bin/flask init-db
@@ -49,6 +49,8 @@ export FLASK_APP=app
 ```
 
 On Windows use `.venv\Scripts\` in place of `.venv/bin/` and `set FLASK_APP=app`.
+On Python 3.9 pip skips allotropy, so Import QC accepts TapeStation and Countess
+files but not Qubit or NanoDrop until a newer Python is used.
 To reuse a database from another machine, copy its `instance/lims.db` (and the
 `instance/attachments` folder) into the clone before starting; the server must
 not be running while the file is copied.
