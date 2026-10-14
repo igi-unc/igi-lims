@@ -19,6 +19,44 @@ export FLASK_APP=app
 Log in, add participants, register a collected specimen (root tube), then use
 **Derive** on any tube to create children (cryo tubes, pellets, DNA, libraries).
 
+### Demonstration data
+
+```bash
+.venv/bin/flask seed-demo --user <username>     # records are attributed to this account
+```
+
+Adds one malignant-pleural-effusion participant (site ID MPE-021) with three
+collections processed through to libraries, a peptide eluate and data files:
+43 tubes, custody events, one approved change request and one pending request
+that a second account can approve live. It also fills the empty lists (SOPs,
+freezers, racks, boxes, lots, indexes, submissions, instruments) with a few
+plausible entries. Re-running refuses rather than duplicating; delete the
+participant's tubes or start from a fresh database to reseed. The data is
+built with the same service functions as the forms, so it obeys the rules.
+
+### Running on your own laptop
+
+```bash
+git clone git@github.com:igi-unc/igi-lims.git && cd igi-lims
+python3 --version                                 # needs 3.10 or newer
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+export FLASK_APP=app
+.venv/bin/flask init-db
+.venv/bin/flask create-user you --name "Your Name" --initials YN --role admin
+.venv/bin/flask create-user second --name "Second Person" --initials SP --role user
+.venv/bin/flask seed-demo --user second
+.venv/bin/flask run                               # then open http://127.0.0.1:5000
+```
+
+On Windows use `.venv\Scripts\` in place of `.venv/bin/` and `set FLASK_APP=app`.
+To reuse a database from another machine, copy its `instance/lims.db` (and the
+`instance/attachments` folder) into the clone before starting; the server must
+not be running while the file is copied.
+
+Alternatively leave the server running on a workstation and tunnel to it:
+`ssh -L 5000:127.0.0.1:5000 user@workstation`, then open
+http://127.0.0.1:5000 on the laptop.
+
 ## What is enforced
 
 * **Sample IDs** follow `config.py` (`ID_SEGMENTS`), currently the 35-character
@@ -104,7 +142,19 @@ Back up by copying `lims.db` while the app is idle, or use `sqlite3 lims.db
 
 `tests/test_workflow.py` walks the spec's worked MPE collection (section 5)
 through the web interface and checks the back-tracking chain from the ONT
-library to the original fluid.
+library to the original fluid. `tests/test_demo.py` checks that the demo seed
+obeys the rules and vocabularies.
+
+## Documentation
+
+`docs/IGI_LIMS_feature_overview.pdf` is an illustrated walkthrough. To rebuild
+it after UI changes (needs `pip install -r requirements-docs.txt` and a one-time
+`playwright install chromium`):
+
+```bash
+.venv/bin/python docs/walkthrough_capture.py     # demo DB + annotated screenshots (~2 min)
+.venv/bin/python docs/make_feature_overview.py   # lays them out as the PDF
+```
 
 ## Layout
 
@@ -113,6 +163,7 @@ config.py            ID format, approval policy, runtime settings
 app.py               entry point (flask / gunicorn)
 lims/schema.sql      tables
 lims/seed.py         initial code lists and derivation rules
+lims/demo.py         `flask seed-demo`: one participant's worth of demonstration data
 lims/ids.py          compose / parse / validate IDs, issue aliquots
 lims/rules.py        derivation rule checks
 lims/samples.py      create / update / delete / lineage (service layer)

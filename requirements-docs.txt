@@ -1,0 +1,6 @@
+# Only needed to rebuild docs/IGI_LIMS_feature_overview.pdf
+-r requirements.txt
+reportlab
+playwright
+pillow
+pymupdf
