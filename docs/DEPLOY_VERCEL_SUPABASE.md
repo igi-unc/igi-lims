@@ -25,10 +25,18 @@ file for credentials.
    `#`, `&`, `?` or spaces if it has any). This is `LIMS_DATABASE_URL`.
    Use the *transaction* pooler on port 6543: it is IPv4 and made for serverless
    functions; the "direct" string is IPv6-only and does not work from Vercel.
-4. **Project Settings → API**: copy the **Project URL** (`https://<ref>.supabase.co`)
-   and the **service_role** secret key. These are `LIMS_SUPABASE_URL` and
-   `LIMS_SUPABASE_SERVICE_KEY`. The service key bypasses row security; it is
-   used only server-side and must never be put in a browser or the repo.
+4. The project URL is `https://<ref>.supabase.co`, where `<ref>` is the
+   20-letter project reference that appears in your browser's address bar
+   (`supabase.com/dashboard/project/<ref>`) and in the pooler string after
+   `postgres.`. The dashboard also shows it in **Connect → App Frameworks** and
+   in **Project Settings → Data API**. This is `LIMS_SUPABASE_URL`.
+5. **Project Settings → API Keys** (the gear icon in the left sidebar; the page
+   used to be called "API"). Open the **Legacy anon, service_role** tab and
+   copy the **service_role** key (click Reveal; it starts with `eyJ`). This is
+   `LIMS_SUPABASE_SERVICE_KEY`. Use the legacy key rather than a new
+   `sb_secret_...` key: it is what the app's storage client was written and
+   tested against. The service key bypasses row security; it is used only
+   server-side and must never be put in a browser or the repo.
 
 The storage bucket (`lims-attachments`, private) is created by the app on the
 first upload; nothing to do in the Storage tab.
@@ -44,7 +52,7 @@ first upload; nothing to do in the Storage tab.
    |---|---|
    | `LIMS_DATABASE_URL` | the transaction-pooler string from step 1.3 |
    | `LIMS_SUPABASE_URL` | the project URL from step 1.4 |
-   | `LIMS_SUPABASE_SERVICE_KEY` | the service_role key from step 1.4 |
+   | `LIMS_SUPABASE_SERVICE_KEY` | the service_role key from step 1.5 |
    | `LIMS_SECRET_KEY` | output of `python3 -c 'import secrets;print(secrets.token_hex(32))'` |
    | `LIMS_DEMO_MODE` | `1` |
    | `LIMS_DEMO_PASSWORD` | the password visitors will type on the login page |
