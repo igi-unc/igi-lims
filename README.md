@@ -30,9 +30,12 @@ collections processed through to libraries, a peptide eluate and data files:
 43 tubes, custody events and two audited edits (one by a second account) so
 the flagged history has something to show. It also fills the empty lists (SOPs,
 freezers, racks, boxes, lots, indexes, submissions, instruments) with a few
-plausible entries. Re-running refuses rather than duplicating; delete the
-participant's tubes or start from a fresh database to reseed. The data is
-built with the same service functions as the forms, so it obeys the rules.
+plausible entries. Three smaller participants follow in the other cohorts
+(AML-007: marrow and blood, with a vial shipped and one destroyed; TNBC-103:
+core biopsy as FFPE and OCT blocks plus blood; NUT-002: snap-frozen lymph node
+through to a nanopore library, blood not yet processed), 75 tubes in all.
+Re-running skips the participants that already exist. The data is built with
+the same service functions as the forms, so it obeys the rules.
 
 ### Running on your own laptop
 

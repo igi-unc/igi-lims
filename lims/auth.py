@@ -1,5 +1,5 @@
 import functools
-from flask import Blueprint, g, redirect, render_template, request, session, url_for, flash, abort
+from flask import Blueprint, current_app, g, redirect, render_template, request, session, url_for, flash, abort
 from werkzeug.security import check_password_hash
 from werkzeug.security import generate_password_hash as _gph
 
@@ -64,7 +64,18 @@ def login():
         username = request.form["username"].strip()
         password = request.form["password"]
         conn = get_db()
-        row = conn.execute("SELECT * FROM account WHERE username=?", (username,)).fetchone()
+        try:
+            row = conn.execute("SELECT * FROM account WHERE username=?", (username,)).fetchone()
+        except Exception as e:   # unreachable database, or a database that has never been initialised
+            conn.rollback()
+            current_app.logger.error("login failed before checking the password: %s", e)
+            msg = str(e).lower()
+            if "account" in msg and ("no such table" in msg or "does not exist" in msg):
+                flash("The database has no tables yet. Run `flask init-db` (or, for a demo instance, "
+                      "call /cron/demo-reset with the cron secret) and try again.", "error")
+            else:
+                flash("Cannot reach the database: " + str(e).strip().splitlines()[0], "error")
+            return render_template("login.html")
         if row and row["active"] and check_password_hash(row["password_hash"], password):
             session.clear()
             session["username"] = row["username"]

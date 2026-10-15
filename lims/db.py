@@ -277,8 +277,8 @@ def create_user_command(username, name, initials, role, password):
 @click.command("seed-demo")
 @click.option("--user", "username", default=None, help="Account the demo records are attributed to (default: first active user)")
 def seed_demo_command(username):
-    """Add one demonstration participant with three collections processed through to data files."""
-    from .demo import seed_demo
+    """Add the demonstration participants: one processed through to data files, three smaller ones in other cohorts."""
+    from .demo import seed_demo, seed_extra_participants, EXTRA_PARTICIPANTS
     conn = get_db()
     if username is None:
         row = conn.execute("SELECT username FROM account WHERE active=1 ORDER BY CASE role WHEN 'user' THEN 0 ELSE 1 END, username").fetchone()
@@ -287,19 +287,27 @@ def seed_demo_command(username):
         username = row["username"]
     try:
         info = seed_demo(conn, username)
+        conn.commit()
+        click.echo(f"Demo participant {info['participant']} (site ID {info['external_id']}): {info['tubes']} tubes, "
+                   f"roots {', '.join(info['roots'])}")
+        click.echo("Edited tubes (flagged in the audit log): " + ", ".join(info["edits"])
+                   + (f"; the second edit is by {info['second']}" if info["second"] else ""))
     except ValueError as e:
         conn.rollback()
-        raise click.ClickException(str(e))
-    conn.commit()
-    click.echo(f"Demo participant {info['participant']} (site ID {info['external_id']}): {info['tubes']} tubes, "
-               f"roots {', '.join(info['roots'])}")
-    click.echo("Edited tubes (flagged in the audit log): " + ", ".join(info["edits"])
-               + (f"; the second edit is by {info['second']}" if info["second"] else ""))
+        click.echo(f"Main demo participant skipped: {e}")
+    try:
+        extra = seed_extra_participants(conn, username)
+        conn.commit()
+        for pid, n in extra.items():
+            click.echo(f"Demo participant {pid}: {n} tubes")
+    except ValueError as e:
+        conn.rollback()
+        raise click.ClickException(f"Extra demo participants not added: {e}")
 
 
 @click.command("demo-reset")
 def demo_reset_command():
-    """Wipe the database and rebuild the public demo (accounts demo / reviewer / viewer + the demo participant)."""
+    """Wipe the database and rebuild the public demo (accounts demo / reviewer / viewer + four demo participants)."""
     from .demo import reset_demo, DEMO_USERS
     info = reset_demo(get_db(), current_app.config["DEMO_PASSWORD"])
     click.echo(f"Demo rebuilt on {describe()}: participant {info['participant']}, {info['tubes']} tubes")

@@ -61,7 +61,7 @@ def _code(conn, cat, code):
 
 
 def seed_demo(conn, username, second=None):
-    """Create the demo participant. Returns a summary dict. Raises if the data would violate the rules."""
+    """Create the main demo participant. Returns a summary dict. Raises if the data would violate the rules."""
     user = conn.execute("SELECT * FROM account WHERE username=? AND active=1", (username,)).fetchone()
     if user is None:
         raise ValueError(f"No active user {username!r}")
@@ -79,54 +79,11 @@ def seed_demo(conn, username, second=None):
         pass  # core vocabularies come from seed.py
 
     # --- participant -------------------------------------------------------
-    existing = conn.execute("SELECT participant_id FROM participant WHERE external_participant_id=?", (EXTERNAL_ID,)).fetchone()
-    if existing:
-        raise ValueError(f"Demo participant already exists as {existing['participant_id']} (site ID {EXTERNAL_ID})")
-    pid = ids.new_participant_code(conn)
-    prow = {"participant_id": pid, "cohort_code": "MP", "external_participant_id": EXTERNAL_ID, "site_code": "UNC",
-            "notes": "Demonstration participant. Enrolled 2026-09-22, consent v3. Two pleural taps and one blood draw.",
-            "created_by": username}
-    conn.execute("INSERT INTO participant(participant_id, cohort_code, external_participant_id, site_code, notes, created_by) "
-                 "VALUES (:participant_id, :cohort_code, :external_participant_id, :site_code, :notes, :created_by)", prow)
-    audit.log(conn, "participant", pid, "insert", after=prow)
+    pid = _new_participant(conn, username, "MP", EXTERNAL_ID,
+                           "Demonstration participant. Enrolled 2026-09-22, consent v3. Two pleural taps and one blood draw.")
 
     created = []
-
-    def tube(parent=None, *, count=1, when, sop, qty, unit, loc=("NA", "NA", "NA", "NA"), status="Available",
-             notes="NA", attrs=None, consumed=False, biobank="IH", **comp):
-        payload = {"count": count, "created_datetime": when, "created_by": ini, "sop_code": sop,
-                   "biobank_source": biobank, "quantity": qty, "unit": unit,
-                   "freezer": loc[0], "rack": loc[1], "box": loc[2], "position": loc[3],
-                   "status": status, "notes": notes, "attributes": attrs or {}, "parent_consumed": consumed}
-        if parent:
-            payload["parent_id"] = parent
-        else:
-            payload["participant"] = pid
-        payload.update(comp)
-        made, violations = svc.create_samples(conn, payload)
-        if violations:
-            raise ValueError(f"Demo data violates rules for {comp}: {violations}")
-        created.extend(made)
-        return made
-
-    def custody(sid, when, frm, to, purpose, condition="good", notes=None, set_status=None):
-        cur = conn.execute(
-            "INSERT INTO custody_event(sample_id, event_datetime, from_party, to_party, purpose, condition_on_receipt, "
-            "initials, notes, recorded_by) VALUES (?,?,?,?,?,?,?,?,?)",
-            (sid, when, frm, to, purpose, condition, ini, notes, username))
-        audit.log(conn, "custody_event", cur.lastrowid, "insert",
-                  after={"sample_id": sid, "event_datetime": when, "from_party": frm, "to_party": to, "purpose": purpose})
-        if set_status:
-            svc.update_sample(conn, sid, {"status": set_status})
-
-    def data_file(sid, uri, assay, run_id, md5, pipeline, version, notes=None):
-        f = {"uri": uri, "assay_code": assay, "run_id": run_id, "checksum_md5": md5, "pipeline": pipeline,
-             "pipeline_version": version, "notes": notes}
-        cur = conn.execute(
-            "INSERT INTO data_file(sample_id, uri, assay_code, run_id, checksum_md5, pipeline, pipeline_version, notes, recorded_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (sid, uri, assay, run_id, md5, pipeline, version, notes, username))
-        audit.log(conn, "data_file", cur.lastrowid, "insert", after={"sample_id": sid, **f})
+    tube, custody, data_file = _helpers(conn, username, ini, pid, created)
 
     bucket = "gs://igi-mp-trial-data"
 
@@ -315,6 +272,209 @@ def seed_demo(conn, username, second=None):
             "edits": edits, "second": second}
 
 
+def _helpers(conn, username, ini, pid, created):
+    """Closures that create tubes, custody events and data files for one participant through the service layer."""
+
+    def tube(parent=None, *, count=1, when, sop, qty, unit, loc=("NA", "NA", "NA", "NA"), status="Available",
+             notes="NA", attrs=None, consumed=False, biobank="IH", **comp):
+        payload = {"count": count, "created_datetime": when, "created_by": ini, "sop_code": sop,
+                   "biobank_source": biobank, "quantity": qty, "unit": unit,
+                   "freezer": loc[0], "rack": loc[1], "box": loc[2], "position": loc[3],
+                   "status": status, "notes": notes, "attributes": attrs or {}, "parent_consumed": consumed}
+        if parent:
+            payload["parent_id"] = parent
+        else:
+            payload["participant"] = pid
+        payload.update(comp)
+        made, violations = svc.create_samples(conn, payload)
+        if violations:
+            raise ValueError(f"Demo data violates rules for {comp}: {violations}")
+        created.extend(made)
+        return made
+
+    def custody(sid, when, frm, to, purpose, condition="good", notes=None, set_status=None):
+        cur = conn.execute(
+            "INSERT INTO custody_event(sample_id, event_datetime, from_party, to_party, purpose, condition_on_receipt, "
+            "initials, notes, recorded_by) VALUES (?,?,?,?,?,?,?,?,?)",
+            (sid, when, frm, to, purpose, condition, ini, notes, username))
+        audit.log(conn, "custody_event", cur.lastrowid, "insert",
+                  after={"sample_id": sid, "event_datetime": when, "from_party": frm, "to_party": to, "purpose": purpose})
+        if set_status:
+            svc.update_sample(conn, sid, {"status": set_status})
+
+    def data_file(sid, uri, assay, run_id, md5, pipeline, version, notes=None):
+        f = {"uri": uri, "assay_code": assay, "run_id": run_id, "checksum_md5": md5, "pipeline": pipeline,
+             "pipeline_version": version, "notes": notes}
+        cur = conn.execute(
+            "INSERT INTO data_file(sample_id, uri, assay_code, run_id, checksum_md5, pipeline, pipeline_version, notes, recorded_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (sid, uri, assay, run_id, md5, pipeline, version, notes, username))
+        audit.log(conn, "data_file", cur.lastrowid, "insert", after={"sample_id": sid, **f})
+
+    return tube, custody, data_file
+
+
+def _new_participant(conn, username, cohort, external_id, notes):
+    existing = conn.execute("SELECT participant_id FROM participant WHERE external_participant_id=?", (external_id,)).fetchone()
+    if existing:
+        raise ValueError(f"Demo participant already exists as {existing['participant_id']} (site ID {external_id})")
+    pid = ids.new_participant_code(conn)
+    prow = {"participant_id": pid, "cohort_code": cohort, "external_participant_id": external_id, "site_code": "UNC",
+            "notes": notes, "created_by": username}
+    conn.execute("INSERT INTO participant(participant_id, cohort_code, external_participant_id, site_code, notes, created_by) "
+                 "VALUES (:participant_id, :cohort_code, :external_participant_id, :site_code, :notes, :created_by)", prow)
+    audit.log(conn, "participant", pid, "insert", after=prow)
+    return pid
+
+
+# Smaller participants in the other cohorts, so the picker and the trees have something to compare.
+EXTRA_PARTICIPANTS = [
+    ("AM", "AML-007", "Demonstration participant. Diagnostic marrow and blood at presentation; marrow shipped for a collaborator's assay."),
+    ("TN", "TNBC-103", "Demonstration participant. Core biopsy before neoadjuvant therapy: FFPE and OCT blocks plus a blood draw."),
+    ("NC", "NUT-002", "Demonstration participant. Lymph node resection with snap-frozen tumour; blood received, not yet processed."),
+]
+
+
+def seed_extra_participants(conn, username):
+    """Three shorter participants (AML, TNBC, NUT carcinoma). Returns {participant_id: tube_count}."""
+    user = conn.execute("SELECT * FROM account WHERE username=? AND active=1", (username,)).fetchone()
+    if user is None:
+        raise ValueError(f"No active user {username!r}")
+    g.user = dict(user)
+    ini = user["initials"]
+    conn.execute("INSERT OR IGNORE INTO code_list(category, code, meaning, active, sort_order) VALUES (?,?,?,1,?)",
+                 ("party", "COLLAB", "Collaborating laboratory (external)", 199))
+    for i, (cat, code, meaning) in enumerate(LIST_ENTRIES):
+        conn.execute("INSERT OR IGNORE INTO code_list(category, code, meaning, active, sort_order) VALUES (?,?,?,1,?)",
+                     (cat, code, meaning, 100 + i))
+    out = {}
+    bucket = "gs://igi-mp-trial-data"
+
+    # --- AML: bone marrow aspirate + blood, 2026-09-30 -------------------------
+    cohort, ext, note = EXTRA_PARTICIPANTS[0]
+    pid = _new_participant(conn, username, cohort, ext, note)
+    created = []
+    tube, custody, data_file = _helpers(conn, username, ini, pid, created)
+    [bm] = tube(participant=pid, collection_date="2026-09-30", specimen="BM", fraction="BLK", material="NAT",
+                when="2026-09-30T11:40", sop="SOP-008", qty=8, unit="mL", notes="Diagnostic marrow aspirate, 8 mL in heparin. Fully used for the mononuclear prep.",
+                attrs={"container_type": "HEP", "time_collected": "2026-09-30T10:55", "time_received": "2026-09-30T11:40",
+                       "transport_temp": "ambient", "appearance": "bloody", "hemolysis_grade": "none", "qc_result": "pass"})
+    custody(bm, "2026-09-30T11:40", "CLINIC", ini, "STORE", notes="Receipt from the hematology clinic.")
+    blasts = tube(bm, count=5, when="2026-09-30T15:30", sop="SOP-002", qty=1, unit="mL", loc=("LN2-1", "R2", "B01", "A1"),
+                  fraction="TUM", material="CPU", consumed=True, notes="Ficoll mononuclear cells, 85% blasts by morphology; 5 vials.",
+                  attrs={"enrichment_method": "NONE", "kit": "NA", "kit_lot": "NA", "markers": "NA", "purity_pct": 85,
+                         "purity_method": "cytology", "cell_count": 50000000, "viability_pct": 94, "count_method": "Countess",
+                         "cryo_medium": "FBS_DMSO", "cells_per_vial": 10000000, "freeze_method": "MRFROSTY",
+                         "storage_phase": "LN2 vapor", "qc_result": "pass"})
+    [dna] = tube(blasts[0], when="2026-10-02T10:15", sop="SOP-005", qty=60, unit="uL", loc=("FRZ-A", "R4", "B01", "A1"),
+                 consumed=True, fraction="TUM", material="DNA", notes="DNeasy from vial 1 for the diagnostic exome.",
+                 attrs={"extraction_kit": "DNEASY", "kit_lot": "LOT-DN2206", "concentration_ng_ul": 110.0,
+                        "concentration_method": "Qubit", "a260_280": 1.85, "a260_230": 2.2, "volume_ul": 60, "din": 9.1,
+                        "elution_buffer": "EB", "input_cells": 10000000, "qc_result": "pass"})
+    [lib] = tube(dna, when="2026-10-03T16:00", sop="SOP-006", qty=15, unit="uL", loc=("FRZ-B", "R1", "B02", "A1"),
+                 status="Depleted", fraction="TUM", material="LIB", notes="Tumour exome, xGen v2 capture.",
+                 attrs={"assay": "WES", "prep_kit": "ILMN_DNA", "capture_kit": "XGEN_V2", "pcr_cycles": 8, "umi": "no",
+                        "rna_selection": "NA", "stranded": "NA", "mean_fragment_bp": 310, "concentration_nm": 7.0,
+                        "submission_id": "HTSF-26-0433", "input_ng": 200, "index_id": "UDI0012", "qc_result": "pass"})
+    custody(lib, "2026-10-08T09:15", ini, "HTSF", "SEQ", notes="Submission HTSF-26-0433; NovaSeq X.")
+    data_file(lib, f"{bucket}/wes/{lib}/", "WES", "NX-260412-0433", "45c48cce2e2d7fbdea1afc51c7c6ad26",
+              "nf-core/sarek", "3.4.4", "fastq + somatic VCF (tumour only)")
+    # one vial shipped to a collaborator, one destroyed after a thaw
+    custody(blasts[1], "2026-10-09T14:00", ini, "COLLAB", "SHIP", notes="Dry-shipper to the collaborating lab for the ex vivo drug screen.",
+            set_status="Shipped")
+    svc.update_sample(conn, blasts[2], {"status": "Destroyed"},
+                      reason="Vial found thawed in the LN2-1 rack during the 2026-10-12 inventory; discarded per SOP-002.")
+    [pb] = tube(participant=pid, collection_date="2026-09-30", specimen="PB", fraction="BLK", material="NAT",
+                when="2026-09-30T11:40", sop="SOP-008", qty=10, unit="mL", notes="One 10 mL EDTA tube drawn with the marrow.",
+                attrs={"container_type": "EDTA", "time_collected": "2026-09-30T10:50", "time_received": "2026-09-30T11:40",
+                       "transport_temp": "ambient", "appearance": "clear", "hemolysis_grade": "none", "qc_result": "pass"})
+    custody(pb, "2026-09-30T11:40", "CLINIC", ini, "STORE")
+    tube(pb, count=3, when="2026-09-30T13:00", sop="SOP-008", qty=1, unit="mL", loc=("FRZ-A", "R3", "B03", "A1"),
+         fraction="PLA", material="NAT", notes="Double-spun plasma.",
+         attrs={"spin_protocol": "2000G10", "time_to_spin_min": 60, "hemolysis_grade": "none", "qc_result": "pass"})
+    tube(pb, count=2, when="2026-09-30T16:10", sop="SOP-002", qty=1, unit="mL", loc=("LN2-1", "R2", "B01", "B1"),
+         fraction="PBM", material="CPU", consumed=True, notes="PBMC as the germline comparator; 2 vials.",
+         attrs={"isolation_method": "FICOLL", "rbc_lysis": "no", "cell_count": 9000000, "viability_pct": 95,
+                "count_method": "Countess", "cryo_medium": "CS10", "cells_per_vial": 4500000,
+                "freeze_method": "MRFROSTY", "storage_phase": "LN2 vapor", "qc_result": "pass"})
+    out[pid] = len(created)
+
+    # --- TNBC: core biopsy -> FFPE + OCT, blood -> PBMC in use ---------------
+    cohort, ext, note = EXTRA_PARTICIPANTS[1]
+    pid = _new_participant(conn, username, cohort, ext, note)
+    created = []
+    tube, custody, data_file = _helpers(conn, username, ini, pid, created)
+    [tu] = tube(participant=pid, collection_date="2026-10-01", specimen="TU", fraction="BLK", material="NAT",
+                when="2026-10-01T09:50", sop="SOP-001", qty=4, unit="NA", notes="Four ultrasound-guided 14G cores from the primary breast lesion. Two to pathology (FFPE), two frozen in OCT.",
+                attrs={"container_type": "PLAIN", "time_collected": "2026-10-01T09:20", "time_received": "2026-10-01T09:50",
+                       "transport_temp": "ice", "appearance": "NA", "hemolysis_grade": "NA", "qc_result": "pass"})
+    custody(tu, "2026-10-01T09:50", "CLINIC", ini, "STORE", notes="Cores received on ice from radiology.")
+    [ffpe] = tube(tu, when="2026-10-02T12:00", sop="SOP-001", qty=1, unit="NA", loc=("NA", "NA", "NA", "NA"),
+                  fraction="TUM", material="FFP", notes="FFPE block from cores 1-2 (pathology accession in Notes of the data file). Stored at room temperature in the pathology archive.",
+                  attrs={"block_id": "NA", "fixation_time_h": 18, "block_age_years": 0, "sections_count": 0,
+                         "section_thickness_um": 5, "tumor_pct": 70, "macrodissected": "no", "qc_result": "pass"})
+    [oct_] = tube(tu, when="2026-10-01T10:10", sop="SOP-001", qty=1, unit="NA", loc=("FRZ-A", "R4", "B02", "A1"),
+                  consumed=True, fraction="TUM", material="OCT", notes="Cores 3-4 embedded in OCT and frozen on dry ice.",
+                  attrs={"tissue_mass_mg": 30, "block_id": "NA", "sections_cut": 0, "tumor_pct": 65, "qc_result": "pass"})
+    [rna] = tube(ffpe, when="2026-10-07T11:30", sop="SOP-005", qty=25, unit="uL", loc=("FRZ-A", "R4", "B03", "A1"),
+                 fraction="TUM", material="RNA", notes="AllPrep FFPE from 6 x 10 um sections.",
+                 attrs={"extraction_kit": "ALLPREP", "kit_lot": "NA", "input_mass_mg": 0, "concentration_ng_ul": 22.0,
+                        "concentration_method": "Qubit", "a260_280": 1.95, "a260_230": 1.6, "volume_ul": 25, "rin": 2.4,
+                        "dv200": 48, "dnase_treated": "yes", "elution_buffer": "H2O", "qc_result": "borderline"})
+    [lib] = tube(rna, when="2026-10-09T15:00", sop="SOP-006", qty=15, unit="uL", loc=("FRZ-B", "R1", "B02", "A2"),
+                 fraction="TUM", material="LIB", notes="rRNA-depleted RNA-seq library from FFPE RNA; awaiting submission.",
+                 attrs={"assay": "RSQ", "prep_kit": "KAPA_HYPER", "capture_kit": "NONE", "pcr_cycles": 14, "umi": "no",
+                        "rna_selection": "rRNA depletion", "stranded": "yes", "mean_fragment_bp": 280, "concentration_nm": 3.9,
+                        "submission_id": "NA", "kit_lot": "LOT-KH338", "input_ng": 100, "index_id": "UDI0013", "qc_result": "borderline"})
+    [pb] = tube(participant=pid, collection_date="2026-10-01", specimen="PB", fraction="BLK", material="NAT",
+                when="2026-10-01T09:50", sop="SOP-008", qty=10, unit="mL", notes="One 10 mL EDTA tube drawn before the biopsy.",
+                attrs={"container_type": "EDTA", "time_collected": "2026-10-01T09:05", "time_received": "2026-10-01T09:50",
+                       "transport_temp": "ambient", "appearance": "clear", "hemolysis_grade": "mild", "qc_result": "pass"})
+    custody(pb, "2026-10-01T09:50", "CLINIC", ini, "STORE")
+    tube(pb, count=2, when="2026-10-01T11:00", sop="SOP-008", qty=1, unit="mL", loc=("FRZ-A", "R3", "B03", "B1"),
+         fraction="PLA", material="NAT", attrs={"spin_protocol": "2000G10", "time_to_spin_min": 50, "hemolysis_grade": "mild", "qc_result": "pass"})
+    pbm = tube(pb, count=2, when="2026-10-01T14:20", sop="SOP-002", qty=1, unit="mL", loc=("LN2-1", "R2", "B02", "A1"),
+               fraction="PBM", material="CPU", consumed=True, notes="SepMate PBMC; 2 vials.",
+               attrs={"isolation_method": "SEPMATE", "rbc_lysis": "no", "cell_count": 8000000, "viability_pct": 97,
+                      "count_method": "Countess", "cryo_medium": "CS10", "cells_per_vial": 4000000,
+                      "freeze_method": "MRFROSTY", "storage_phase": "LN2 vapor", "qc_result": "pass"})
+    svc.update_sample(conn, pbm[0], {"status": "In use"}, reason="Checked out for the germline DNA extraction.")
+    out[pid] = len(created)
+
+    # --- NUT carcinoma: lymph node resection, snap frozen -> HMW RNA -> ONT; blood untouched ---
+    cohort, ext, note = EXTRA_PARTICIPANTS[2]
+    pid = _new_participant(conn, username, cohort, ext, note)
+    created = []
+    tube, custody, data_file = _helpers(conn, username, ini, pid, created)
+    [ln] = tube(participant=pid, collection_date="2026-10-08", specimen="LN", fraction="BLK", material="NAT",
+                when="2026-10-08T13:30", sop="SOP-001", qty=1200, unit="mg", notes="Cervical lymph node from the resection; 1.2 g received fresh from the OR in saline.",
+                attrs={"container_type": "PLAIN", "time_collected": "2026-10-08T12:45", "time_received": "2026-10-08T13:30",
+                       "transport_temp": "ice", "appearance": "NA", "hemolysis_grade": "NA", "qc_result": "pass"})
+    custody(ln, "2026-10-08T13:30", "CLINIC", ini, "STORE", notes="Receipt from the OR; divided within 20 min.")
+    snf = tube(ln, count=4, when="2026-10-08T13:50", sop="SOP-001", qty=200, unit="mg", loc=("FRZ-A", "R4", "B04", "A1"),
+               fraction="TUM", material="SNF", consumed=True, notes="Four ~200 mg pieces snap frozen in isopentane; remainder to pathology.",
+               attrs={"tissue_mass_mg": 200, "ischemia_time_min": 55, "freeze_method": "ISOPENTANE", "tumor_pct": 80,
+                      "necrosis_pct": 10, "qc_result": "pass"})
+    [hmr] = tube(snf[0], when="2026-10-10T10:00", sop="SOP-005", qty=50, unit="uL", loc=("FRZ-A", "R4", "B03", "B1"),
+                 consumed=True, fraction="TUM", material="HMR", notes="TRIzol RNA from piece 1 for direct-RNA nanopore.",
+                 attrs={"extraction_kit": "TRIZOL", "kit_lot": "NA", "input_mass_mg": 200, "concentration_ng_ul": 310.0,
+                        "concentration_method": "NanoDrop", "a260_280": 2.05, "a260_230": 2.1, "volume_ul": 50, "rin": 9.0,
+                        "dv200": 95, "dnase_treated": "yes", "elution_buffer": "H2O", "qc_result": "pass"})
+    [lib] = tube(hmr, when="2026-10-13T14:30", sop="SOP-006", qty=30, unit="uL", loc=("FRZ-B", "R1", "B02", "A3"),
+                 status="In use", fraction="TUM", material="LIB", notes="Direct RNA library; loading on the PromethION this week.",
+                 attrs={"assay": "ONT", "prep_kit": "NA", "capture_kit": "NONE", "pcr_cycles": 0, "umi": "no",
+                        "rna_selection": "polyA", "stranded": "yes", "concentration_nm": 20.0, "input_ng": 500,
+                        "submission_id": "NA", "index_id": "NA", "qc_result": "not assessed"})
+    [pb] = tube(participant=pid, collection_date="2026-10-08", specimen="PB", fraction="BLK", material="NAT",
+                when="2026-10-08T13:30", sop="SOP-008", qty=10, unit="mL", loc=("FRZ-A", "R3", "B04", "A1"),
+                notes="One 10 mL EDTA tube from the pre-op draw; whole blood held at 4 C, not yet processed.",
+                attrs={"container_type": "EDTA", "time_collected": "2026-10-08T07:30", "time_received": "2026-10-08T13:30",
+                       "transport_temp": "4C", "appearance": "clear", "hemolysis_grade": "none", "qc_result": "not assessed"})
+    custody(pb, "2026-10-08T13:30", "CLINIC", ini, "STORE")
+    out[pid] = len(created)
+    return out
+
+
 # ---------------------------------------------------------------- public demonstration instance
 
 DEMO_USERS = [  # username, display name, initials, role
@@ -325,12 +485,13 @@ DEMO_USERS = [  # username, display name, initials, role
 
 
 def reset_demo(conn, password):
-    """Wipe the database and rebuild it with the demo accounts and the demo participant."""
+    """Wipe the database and rebuild it with the demo accounts, the main demo participant and three smaller ones."""
     from .db import reset_db
     from .auth import create_user
     reset_db(conn)
     for username, name, initials, role in DEMO_USERS:
         create_user(conn, username, name, initials, password, role)
     info = seed_demo(conn, "demo", second="reviewer")
+    info["extra"] = seed_extra_participants(conn, "demo")
     conn.commit()
     return info

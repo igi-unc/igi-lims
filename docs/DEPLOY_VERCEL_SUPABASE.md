@@ -72,7 +72,7 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://<your-project>.vercel.app/
 ```
 
 It answers `{"reset": true, "participant": "...", "tubes": 43}` after a few
-seconds. Open the site: the login page names the three demo accounts (the
+seconds (that count is the main participant; three smaller ones are created too). Open the site: the login page names the three demo accounts (the
 password is not shown), and `demo` / `reviewer` / `viewer` all work with
 `LIMS_DEMO_PASSWORD`. Send testers the URL and the password separately.
 
