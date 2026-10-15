@@ -125,8 +125,10 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 
 See `docs/DEPLOY_VERCEL_SUPABASE.md`. In short: a free Supabase project holds
 the Postgres database and a private storage bucket; Vercel runs the Flask app
-from this repository; `flask demo-reset` (and a nightly cron) rebuilds the demo
-accounts and data. Set `LIMS_DATABASE_URL` to a `postgresql://` URL and the app
+from this repository; one authenticated request to `/cron/demo-reset` (sent
+nightly by Vercel's cron, or by hand) creates the tables and rebuilds the demo
+accounts and data, so nothing has to run on a laptop. Secrets live only in the
+Vercel dashboard. Set `LIMS_DATABASE_URL` to a `postgresql://` URL and the app
 uses Postgres instead of SQLite; nothing else changes.
 
 ### On a GCP VM (SQLite)

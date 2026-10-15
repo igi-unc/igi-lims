@@ -7,6 +7,11 @@ demo login shown on the login page; only the owner needs the two accounts.
 
 Everything below is done once. Budget about 20 minutes.
 
+**Secrets never go in the repo.** The connection string, the service key, the
+Flask secret and the cron secret are typed into the Vercel dashboard only. The
+repo already ignores `.env` files, and nothing in the code reads a committed
+file for credentials.
+
 ## 1. Supabase: create the project
 
 1. https://supabase.com/dashboard → **New project**. Pick the free plan, a
@@ -28,24 +33,7 @@ Everything below is done once. Budget about 20 minutes.
 The storage bucket (`lims-attachments`, private) is created by the app on the
 first upload; nothing to do in the Storage tab.
 
-## 2. Load the schema and demo data from your laptop
-
-In the clone on your laptop (same venv as before, `git pull` first):
-
-```bash
-export FLASK_APP=app
-export LIMS_DATABASE_URL='postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres'
-export LIMS_DEMO_PASSWORD='choose-the-password-visitors-will-use'
-.venv/bin/pip install -r requirements.txt       # adds psycopg
-.venv/bin/flask demo-reset                      # creates tables, demo / reviewer / viewer accounts, demo participant
-```
-
-`demo-reset` wipes whatever is in that database and rebuilds it, so it is also
-the command to run whenever you want a clean slate. Check it worked with
-`.venv/bin/flask run` and http://127.0.0.1:5000 (your laptop is now talking to
-Supabase).
-
-## 3. Vercel: deploy from GitHub
+## 2. Vercel: deploy from GitHub
 
 1. https://vercel.com/new → **Import** the `igi-unc/igi-lims` repository.
    Framework preset: Vercel detects Flask from `app.py`; leave the build
@@ -59,24 +47,44 @@ Supabase).
    | `LIMS_SUPABASE_SERVICE_KEY` | the service_role key from step 1.4 |
    | `LIMS_SECRET_KEY` | output of `python3 -c 'import secrets;print(secrets.token_hex(32))'` |
    | `LIMS_DEMO_MODE` | `1` |
-   | `LIMS_DEMO_PASSWORD` | the same password you used in step 2 |
+   | `LIMS_DEMO_PASSWORD` | the password visitors will type on the login page |
    | `CRON_SECRET` | another `secrets.token_hex(32)` value |
 
 3. **Deploy**. The first build takes two or three minutes (allotropy pulls in
-   pandas). When it finishes, open the URL: the login page shows the three
-   demo accounts and the password.
+   pandas). The site is up when the build finishes, but the database is still
+   empty, so the login page will not accept a login until step 3.
 
-`vercel.json` already sets the function timeout and a cron job that calls
-`/cron/demo-reset` daily at 08:00 UTC (03:00/04:00 Eastern) with
-`Authorization: Bearer $CRON_SECRET`, which rebuilds the database and the
-demo accounts. Admins also get a **Reset demo data now** button in the banner.
+## 3. Load the schema and demo data (one command)
+
+The deployed app creates its own tables. Ask it to do so once, from any
+terminal, using the `CRON_SECRET` you chose:
+
+```bash
+curl -H "Authorization: Bearer <CRON_SECRET>" https://<your-project>.vercel.app/cron/demo-reset
+```
+
+It answers `{"reset": true, "participant": "...", "tubes": 43}` after a few
+seconds. Open the site: the login page shows the three demo accounts and the
+password, and `demo` / `reviewer` / `viewer` all work.
+
+That same endpoint is what Vercel's cron calls daily at 08:00 UTC (03:00 or
+04:00 Eastern) with `Authorization: Bearer $CRON_SECRET` (see `vercel.json`),
+so the data is rebuilt every night. Admins also get a **Reset demo data now**
+button in the banner. Running the curl again at any time gives a clean slate.
+
+You never need to run the app on your laptop for this. If you prefer to work
+against the Supabase database locally anyway (for example to debug), the same
+code does it: `git pull`, `.venv/bin/pip install -r requirements.txt`, then set
+`LIMS_DATABASE_URL`, `LIMS_DEMO_MODE=1` and `LIMS_DEMO_PASSWORD` in the shell
+and run `.venv/bin/flask demo-reset` or `.venv/bin/flask run`. Without
+`LIMS_DATABASE_URL` the laptop keeps using its local SQLite file as before.
 
 Every push to `main` redeploys automatically. Pull requests get preview URLs
 that share the same database, so treat them as the same demo.
 
 ## Optional: the Supabase integration on the Vercel marketplace
 
-Instead of steps 1 and 3.2 you can add Supabase from **Vercel → Storage →
+Instead of steps 1 and 2.2 you can add Supabase from **Vercel → Storage →
 Supabase**. The integration creates the Supabase project and injects
 `POSTGRES_URL`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` into the Vercel
 project; the app reads those names as fallbacks, so only `LIMS_SECRET_KEY`,
