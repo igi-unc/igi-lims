@@ -51,9 +51,10 @@ def test_demo_reset_and_cron_endpoint(app, client):
         users = sorted(r[0] for r in conn.execute("SELECT username FROM account"))
         assert users == ["demo", "reviewer", "viewer"]          # the fixture's alice/bob/vic are gone
         assert conn.execute("SELECT count(*) FROM participant").fetchone()[0] == 1
-    # login page advertises the accounts; the demo admin can reset again from the dashboard
+    # login page names the accounts but never shows the password; the demo admin can reset again from the dashboard
     r = client.get("/login")
-    assert b"pw-for-demo" in r.data and b"Demonstration instance" in r.data
+    assert b"Demonstration instance" in r.data and b"viewer" in r.data
+    assert b"pw-for-demo" not in r.data
     from conftest import login
     login(client, "demo", "pw-for-demo")
     r = client.post("/demo/reset", follow_redirects=True)

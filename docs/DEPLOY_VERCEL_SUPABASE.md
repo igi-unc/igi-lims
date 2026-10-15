@@ -55,7 +55,7 @@ first upload; nothing to do in the Storage tab.
    | `LIMS_SUPABASE_SERVICE_KEY` | the service_role key from step 1.5 |
    | `LIMS_SECRET_KEY` | output of `python3 -c 'import secrets;print(secrets.token_hex(32))'` |
    | `LIMS_DEMO_MODE` | `1` |
-   | `LIMS_DEMO_PASSWORD` | the password visitors will type on the login page |
+   | `LIMS_DEMO_PASSWORD` | the password for the three demo accounts; share it with testers yourself, the site never displays it |
    | `CRON_SECRET` | another `secrets.token_hex(32)` value |
 
 3. **Deploy**. The first build takes two or three minutes (allotropy pulls in
@@ -72,8 +72,9 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://<your-project>.vercel.app/
 ```
 
 It answers `{"reset": true, "participant": "...", "tubes": 43}` after a few
-seconds. Open the site: the login page shows the three demo accounts and the
-password, and `demo` / `reviewer` / `viewer` all work.
+seconds. Open the site: the login page names the three demo accounts (the
+password is not shown), and `demo` / `reviewer` / `viewer` all work with
+`LIMS_DEMO_PASSWORD`. Send testers the URL and the password separately.
 
 That same endpoint is what Vercel's cron calls daily at 08:00 UTC (03:00 or
 04:00 Eastern) with `Authorization: Bearer $CRON_SECRET` (see `vercel.json`),
@@ -102,8 +103,10 @@ IPv6 string, set `LIMS_DATABASE_URL` explicitly.
 
 ## What to know about this setup
 
-* **It is public.** Anyone with the URL can log in with the demo accounts and
-  see or change the fictional data. Do not enter real participant data. The
+* **It is public.** Anyone with the URL and the demo password can log in and
+  see or change the fictional data. The password is not shown on the site,
+  but it is shared, so change `LIMS_DEMO_PASSWORD` in Vercel and run the
+  reset if it gets out. Do not enter real participant data. The
   nightly reset undoes everything.
 * **Supabase free tier pauses a project after 7 days without activity.** The
   nightly cron keeps it awake. If it does pause, un-pause it in the dashboard.
