@@ -102,3 +102,16 @@ def test_extra_participants_follow_the_rules(app, client):
     login(client, "vic")
     for pid in extra:
         assert client.get(f"/browse?participant={pid}").status_code == 200
+
+
+def test_postgres_tables_are_locked_down(app):
+    """On Supabase every public table is reachable through the REST API; init must turn RLS on for all of them."""
+    import pytest
+    from lims.db import get_db, is_postgres, ALL_TABLES
+    with app.app_context():
+        conn = get_db()
+        if not is_postgres(conn):
+            pytest.skip("Postgres only")
+        off = [r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public' AND NOT rowsecurity")]
+        assert off == []
+        assert conn.execute("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND rowsecurity").fetchone()[0] >= len(ALL_TABLES) - 1

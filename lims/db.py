@@ -226,6 +226,24 @@ def _migrate(conn):
         """)
 
 
+def _lock_down_postgres(conn):
+    """Supabase exposes every table in the public schema through its REST API (PostgREST) to anyone holding
+    the project's anon key. This app talks to Postgres directly as the table owner and never uses that API,
+    so turn row level security on with no policies (the owner is unaffected; everyone else sees nothing)
+    and take away the REST roles' grants as well. Harmless on a plain Postgres where those roles do not exist."""
+    tables = [t for t in ALL_TABLES
+              if conn.execute("SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=?", (t,)).fetchone()]
+    for t in tables:
+        conn.execute(f"ALTER TABLE {t} ENABLE ROW LEVEL SECURITY")
+    rest_roles = [r[0] for r in conn.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated')")]
+    if rest_roles:
+        roles = ", ".join(rest_roles)
+        conn.execute(f"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {roles}")
+        conn.execute(f"REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {roles}")
+        conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM {roles}")
+        conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {roles}")
+
+
 def init_db(conn=None):
     conn = conn or get_db()
     _migrate(conn)
@@ -233,6 +251,8 @@ def init_db(conn=None):
         conn.executescript(f.read().decode("utf8"))
     seed_module.seed(conn)
     seed_attributes.seed(conn)
+    if is_postgres(conn):
+        _lock_down_postgres(conn)
     conn.commit()
 
 

@@ -101,6 +101,36 @@ project; the app reads those names as fallbacks, so only `LIMS_SECRET_KEY`,
 that `POSTGRES_URL` points at the pooler on port 6543; if it is the direct
 IPv6 string, set `LIMS_DATABASE_URL` explicitly.
 
+## Supabase's "RLS Disabled in Public" security advisor
+
+Supabase exposes every table in the `public` schema through its own REST API
+(PostgREST) to anyone who holds the project's anon key, and its security
+advisor flags tables that have no row level security. This app never uses
+that API: it connects to Postgres directly as the table owner. So the schema
+setup turns row level security on for every table with no policies (which
+makes the REST API return nothing) and revokes the REST roles' grants on the
+tables as well. The advisor is satisfied the next time the schema is built,
+which is the next demo reset (nightly, or the curl in step 3).
+
+If you want it clean right now, or want to check, paste this into
+**SQL Editor** in the Supabase dashboard and run it:
+
+```sql
+do $$ declare t text;
+begin
+  for t in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('alter table public.%I enable row level security', t);
+  end loop;
+end $$;
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
+```
+
+Then **Advisors → Security** → Refresh. The app keeps working because the
+`postgres` role it connects as owns the tables and is not subject to RLS.
+
 ## What to know about this setup
 
 * **It is public.** Anyone with the URL and the demo password can log in and
