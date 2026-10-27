@@ -68,6 +68,12 @@
   the derive form.
 * Status and location are one column in tables: an Available tube shows where
   it is; anything else shows its status (plus the location unless Depleted).
+* Label fields are read-only with corrections (Steven, 2026-10-27). Locked now:
+  collection date (always was, it is in the ID) and operator (printed on the
+  label). Add `created_datetime` to `LABEL_FIELDS` when v2.1 puts the
+  processing date in the ID. Corrections never rewrite the stored value, so
+  lists, searches and trees still show what was printed; the tube page and the
+  API show the corrected value beside it.
 * GitHub issues #1-#3 (2026-10-27): location conflicts warn and ask for a
   second submit rather than block (a slot can legitimately hold several tubes,
   e.g. one box position for a bag); the combined base+derived form offers no

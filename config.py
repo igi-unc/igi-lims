@@ -32,6 +32,15 @@ ID_SEGMENTS = [
     ("aliquot",         r"(?:0[1-9]|[1-9]\d)",                             "int"),
 ]
 ID_SEPARATOR = "-"
+
+# Fields printed on the tube label. Once a tube exists they cannot be edited, because the
+# printed label (and any file named after the ID) would then disagree with the record.
+# A mistake is fixed by adding a correction: an audited note with the right value and a
+# reason, shown beside the original. Collection-level fields (the collection date) are
+# corrected once for the whole collection. When nomenclature v2.1 puts the processing date
+# in the ID, add "created_datetime" here.
+LABEL_FIELDS = ["collection_date", "created_by"]
+COLLECTION_FIELDS = ["collection_date"]   # shared by every tube of a collection; corrected on the root
 ID_LENGTH = 35          # set to None to skip the fixed-length check
 ALIQUOT_WIDTH = 2
 ALIQUOT_MAX = 99

@@ -65,7 +65,9 @@ def sample(sample_id):
         abort(404)
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL", (sample_id,)).fetchall()
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime", (sample_id,)).fetchall()
-    return jsonify({"sample": _row(s), "files": [_row(f) for f in files], "custody": [_row(c) for c in custody]})
+    corrections = svc.corrections_for(conn, s)
+    return jsonify({"sample": _row(s), "files": [_row(f) for f in files], "custody": [_row(c) for c in custody],
+                    "corrections": [_row(c) for c in corrections], "corrected_values": svc.effective_values(s, corrections)})
 
 
 @bp.route("/samples/<sample_id>/lineage")

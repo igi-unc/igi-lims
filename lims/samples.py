@@ -18,6 +18,17 @@ EDITABLE_FIELDS = [
     "quantity", "unit", "freezer", "rack", "box", "position", "status", "notes",
 ]
 LOCATION_FIELDS = ["freezer", "rack", "box", "position"]
+FIELD_NAMES = {"collection_date": "Collection date", "created_by": "Operator", "created_datetime": "Processing date"}
+
+
+def label_fields():
+    return list(current_app.config.get("LABEL_FIELDS", []))
+
+
+def editable_fields():
+    """Fields the Edit form may change: everything except what is printed on the label."""
+    locked = set(label_fields())
+    return [f for f in EDITABLE_FIELDS if f not in locked]
 
 
 def now_iso():
@@ -179,6 +190,7 @@ def diff_changes(conn, sample_id, changes):
     if cur is None:
         raise ValueError("Sample not found")
     out = {}
+    locked = set(label_fields())
     for f in EDITABLE_FIELDS:
         if f not in changes:
             continue
@@ -192,6 +204,9 @@ def diff_changes(conn, sample_id, changes):
                 raise ValueError("Quantity must be a number")
         old = cur[f]
         if old != new:
+            if f in locked:
+                raise ValueError(f"{FIELD_NAMES.get(f, f)} is printed on the label and cannot be edited; "
+                                 "add a correction on the tube page instead")
             out[f] = (old, new)
     if isinstance(changes.get("attributes"), dict):
         new_attrs = attributes.validate_dict(conn, changes["attributes"], cur["fraction_code"], cur["material_code"])
@@ -339,3 +354,70 @@ def label_rows(sample):
     n = len(parts)
     # project, cohort, participant | date, specimen, fraction | material, aliquot
     return [sep.join(parts[:3]), sep.join(parts[3:n - 2]), sep.join(parts[n - 2:])]
+
+
+# ------------------------------------------------------------------ corrections to label fields
+
+def _correction_target(sample, field):
+    """Collection-level fields are corrected once, on the collection's root tube."""
+    return sample["root_id"] if field in current_app.config.get("COLLECTION_FIELDS", []) else sample["sample_id"]
+
+
+def corrections_for(conn, sample):
+    """Corrections that apply to this tube, oldest first: its own, plus collection-level ones on its root."""
+    coll = list(current_app.config.get("COLLECTION_FIELDS", []))
+    q = "SELECT * FROM sample_correction WHERE sample_id=?"
+    params = [sample["sample_id"]]
+    if coll and sample["root_id"] != sample["sample_id"]:
+        q = ("SELECT * FROM sample_correction WHERE (sample_id=? AND field NOT IN (%s)) OR (sample_id=? AND field IN (%s))"
+             % (",".join("?" for _ in coll), ",".join("?" for _ in coll)))
+        params = [sample["sample_id"], *coll, sample["root_id"], *coll]
+    return conn.execute(q + " ORDER BY id", params).fetchall()
+
+
+def effective_values(sample, corrections):
+    """{field: value now believed correct} for the label fields (latest correction wins)."""
+    out = {}
+    for c in corrections:
+        out[c["field"]] = c["corrected_value"]
+    return out
+
+
+def _check_correction_value(conn, field, value):
+    if field == "collection_date":
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            raise ValueError("The corrected collection date must be a date (YYYY-MM-DD)")
+    if field == "created_datetime":
+        try:
+            return datetime.fromisoformat(value).strftime("%Y-%m-%dT%H:%M")
+        except ValueError:
+            raise ValueError("The corrected processing date must be a date and time")
+    if field == "created_by":
+        if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (value,)).fetchone():
+            raise ValueError(f"Operator '{value}' is not an active user")
+        return value
+    return value
+
+
+def add_correction(conn, sample_id, field, value, reason):
+    """Record the right value for a label field without changing the stored value or the ID. Returns the target tube ID."""
+    s = get_sample(conn, sample_id)
+    if s is None:
+        raise ValueError("Sample not found")
+    if field not in label_fields():
+        raise ValueError(f"{field} is not a label field; change it with Edit")
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("A reason is required for a correction")
+    value = _check_correction_value(conn, field, (value or "").strip())
+    target = get_sample(conn, _correction_target(s, field))
+    current = effective_values(target, corrections_for(conn, target)).get(field, target[field])
+    if value == current:
+        raise ValueError(f"{FIELD_NAMES.get(field, field)} is already {value}")
+    cur = conn.execute("INSERT INTO sample_correction(sample_id, field, original_value, corrected_value, reason, recorded_by) "
+                       "VALUES (?,?,?,?,?,?)", (target["sample_id"], field, current, value, reason, _username()))
+    audit.log(conn, "sample", target["sample_id"], "correct", before={field: current},
+              after={field: value, "correction_id": cur.lastrowid, "note": "label value unchanged"}, reason=reason)
+    return target["sample_id"]

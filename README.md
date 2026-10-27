@@ -82,6 +82,13 @@ http://127.0.0.1:5000 on the laptop.
 * **Deletes are soft.** The record stays, the aliquot number stays reserved,
   and a tube with active children cannot be deleted.
 * **Audit log** of every write (who, when, before, after).
+* **Label values are read-only.** Fields printed on the tube label (today the
+  collection date and the operator; `LABEL_FIELDS` in `config.py`) cannot be
+  edited once the tube exists. A mistake is fixed with *Correct a value printed
+  on the label* on the tube page: the right value and a required reason are
+  recorded beside the original and flagged in the audit log, while the label,
+  the ID and the stored value stay as printed. A collection-date correction
+  applies to every tube of that collection. The API returns both values.
 * **Occupied slots are flagged.** Registering or moving a tube into a
   freezer/rack/box/position that already holds an Available or In-use tube
   shows a warning naming the occupant; submitting again confirms that the slot

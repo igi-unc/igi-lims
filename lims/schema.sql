@@ -84,6 +84,18 @@ CREATE INDEX IF NOT EXISTS idx_sample_participant ON sample(participant_id, coll
 CREATE INDEX IF NOT EXISTS idx_sample_status ON sample(status);
 
 -- Append-only: one row per hand-off.
+CREATE TABLE IF NOT EXISTS sample_correction (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    sample_id        TEXT NOT NULL REFERENCES sample(sample_id),   -- the root tube for collection-level fields
+    field            TEXT NOT NULL,                                 -- a field from config.LABEL_FIELDS
+    original_value   TEXT,                                          -- value in effect before this correction
+    corrected_value  TEXT NOT NULL,
+    reason           TEXT NOT NULL,
+    recorded_by      TEXT NOT NULL,
+    recorded_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_correction_sample ON sample_correction(sample_id);
+
 CREATE TABLE IF NOT EXISTS custody_event (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     sample_id            TEXT NOT NULL REFERENCES sample(sample_id),

@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}{{ s.sample_id }} · IGI LIMS{% endblock %}{% block content %}
 <h1><code>{{ s.sample_id }}</code> <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}
 {% if flags.edits %} <a class="tag" href="#history" title="This record has been changed since it was created; see Record history">edited ×{{ flags.edits }}</a>{% endif %}
+{% if flags.corrections %} <a class="tag warn" href="#corrections" title="A value printed on the label has been corrected; the label and ID are unchanged">corrected</a>{% endif %}
 {% if flags.overrides %} <a class="tag warn" href="#history" title="Created against a derivation rule; see Record history for the justification">rule override</a>{% endif %}</h1>
 
 <div class="card">
@@ -20,13 +21,14 @@
 <h2>Tube</h2>
 <table class="compact"><tbody>
 <tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=s.participant_id) }}">{{ s.participant_id }}</a> · cohort {{ s.cohort_code }} ({{ meanings.cohort.get(s.cohort_code,'') }}){% if participant and participant.external_participant_id %} · site ID {{ participant.external_participant_id }} ({{ participant.site_code or '?' }}){% endif %}</td></tr>
-<tr><th>Collected</th><td>{{ s.collection_date }}</td></tr>
+<tr><th>Collected</th><td>{{ s.collection_date }}{% if 'collection_date' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.collection_date }}</a>{% endif %}</td></tr>
 <tr><th>Specimen</th><td>{{ s.specimen_code }} – {{ meanings.specimen.get(s.specimen_code,'') }}</td></tr>
 <tr><th>Fraction</th><td>{{ s.fraction_code }} – {{ meanings.fraction.get(s.fraction_code,'') }}</td></tr>
 <tr><th>Material</th><td>{{ s.material_code }} – {{ meanings.material.get(s.material_code,'') }}</td></tr>
 <tr><th>Aliquot</th><td>{{ '%02d'|format(s.aliquot) }}</td></tr>
 <tr><th>Parent</th><td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id }}</code></a>{% else %}<span class="muted">none (root specimen)</span>{% endif %}</td></tr>
-<tr><th>Processed</th><td>{{ s.created_datetime or '—' }} by {{ s.created_by or '—' }}{% if s.sop_code %} under {{ s.sop_code }}{% endif %}</td></tr>
+<tr><th>Processed</th><td>{{ s.created_datetime or '—' }}{% if 'created_datetime' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.created_datetime }}</a>{% endif %}
+  by {{ s.created_by or '—' }}{% if 'created_by' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.created_by }}</a>{% endif %}{% if s.sop_code %} under {{ s.sop_code }}{% endif %}</td></tr>
 <tr><th>Biobank source</th><td>{{ s.biobank_source or '—' }} {{ meanings.biobank_source.get(s.biobank_source, '') }}</td></tr>
 <tr><th>Quantity</th><td>{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% else %}—{% endif %}</td></tr>
 <tr><th>Location</th><td>{{ [s.freezer, s.rack, s.box, s.position]|reject('none')|join(' / ') or '—' }}</td></tr>
@@ -35,6 +37,29 @@
 </tbody></table>
 {% if g.user.role != 'viewer' %}
 <p><a class="btn secondary" href="{{ url_for('samples.edit', sample_id=s.sample_id) }}">Edit</a></p>
+<details id="add-correction"><summary>Correct a value printed on the label</summary>
+<form method="post" action="{{ url_for('samples.correct', sample_id=s.sample_id) }}">
+  <p class="muted">{% for f in label_fields %}{{ field_names.get(f, f) }}{% if not loop.last %}, {% endif %}{% endfor %} are on the label, so they cannot be edited. A correction records the right value and the reason beside the original; the label, the ID and the stored value stay as printed. A collection date correction applies to all {{ collection_size }} tube(s) from this collection.</p>
+  <div class="grid">
+  <label><span class="lbl">Field</span><select name="field" required>{% for f in label_fields %}<option value="{{ f }}">{{ field_names.get(f, f) }}</option>{% endfor %}</select></label>
+  {% for f in label_fields %}
+  <label data-corr="{{ f }}"><span class="lbl">Correct {{ field_names.get(f, f)|lower }}</span>
+    {% if f == 'collection_date' %}<input type="date" name="value_{{ f }}">
+    {% elif f == 'created_datetime' %}<input type="datetime-local" name="value_{{ f }}">
+    {% elif f == 'created_by' %}<select name="value_{{ f }}"><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}">{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select>
+    {% else %}<input type="text" name="value_{{ f }}">{% endif %}</label>
+  {% endfor %}
+  <label class="wide"><span class="lbl">Reason (required; kept in the audit log)</span><textarea name="reason" required></textarea></label>
+  </div>
+  <button type="submit" class="secondary">Record correction</button>
+</form>
+<script>
+(function () {
+  const form = document.currentScript.previousElementSibling, sel = form.querySelector("select[name=field]");
+  function show() { form.querySelectorAll("[data-corr]").forEach(l => { l.style.display = l.dataset.corr === sel.value ? "" : "none"; }); }
+  sel.addEventListener("change", show); show();
+})();
+</script></details>
 <details><summary>{% if s.deleted_at %}Restore{% else %}Delete{% endif %} this record</summary>
 <form method="post" action="{{ url_for('samples.delete', sample_id=s.sample_id) }}">
   <p class="muted">Deletion is a soft delete; the record and its aliquot number are kept and the action is flagged in the audit log.</p>
@@ -42,6 +67,10 @@
   <button type="submit" class="danger">{% if s.deleted_at %}Restore{% else %}Delete{% endif %} this record</button>
 </form></details>
 {% endif %}
+{% if corrections %}<h2 id="corrections">Corrections</h2>
+<table class="compact"><thead><tr><th>Field</th><th>As printed</th><th>Corrected to</th><th>Reason</th><th>By</th></tr></thead><tbody>
+{% for c in corrections %}<tr class="flag"><td>{{ field_names.get(c.field, c.field) }}{% if c.sample_id != s.sample_id %} <span class="muted">(whole collection)</span>{% endif %}</td><td>{{ c.original_value or '—' }}</td><td><strong>{{ c.corrected_value }}</strong></td><td>{{ c.reason }}</td><td class="muted">{{ c.recorded_by }}, {{ c.recorded_at }}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
 <h2>Metadata</h2>
 <table class="compact"><tbody>
 {% for d, v in attrs %}<tr><th>{{ d.label if d else v.key }}</th><td>{{ v.value }}{% if d and d.unit %} {{ d.unit }}{% endif %}
@@ -115,7 +144,7 @@
 <p class="muted">Every write to this record. Rows other than the original creation are flagged; rule overrides carry their justification.</p>
 <table class="compact"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Change</th><th>Reason</th></tr></thead><tbody>
 {% for h in history %}<tr class="{% if h.action != 'insert' or h.reason %}flag{% endif %}"><td>{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ h.action }}</td>
-<td>{% if h.action == 'update' %}<div class="cols"><div><span class="muted">before</span>{{ h.before_json|kv }}</div><div><span class="muted">after</span>{{ h.after_json|kv }}</div></div>{% elif h.action == 'insert' %}<span class="muted">created</span>{% else %}{{ h.action }}{% endif %}</td>
+<td>{% if h.action in ('update', 'correct') %}<div class="cols"><div><span class="muted">before</span>{{ h.before_json|kv }}</div><div><span class="muted">after</span>{{ h.after_json|kv }}</div></div>{% elif h.action == 'insert' %}<span class="muted">created</span>{% else %}{{ h.action }}{% endif %}</td>
 <td>{{ h.reason or '' }}</td></tr>{% endfor %}
 </tbody></table>
 </div>

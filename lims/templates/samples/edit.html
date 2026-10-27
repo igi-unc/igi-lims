@@ -1,12 +1,14 @@
 {% extends "base.html" %}{% block title %}Edit · IGI LIMS{% endblock %}{% block content %}
 <h1>Edit <code>{{ s.sample_id }}</code></h1>
-<p class="muted">Changes are applied immediately and flagged in the audit log with the before and after values.</p>
+<p class="muted">Changes are applied immediately and flagged in the audit log with the before and after values. Values printed on the label cannot be edited here; use <a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}#add-correction">Correct a value printed on the label</a> on the tube page.</p>
 <div class="card">
 <form method="post">
 <div class="grid">
   <label><span class="lbl">Parent tube ID</span><input type="text" name="parent_id" value="{{ p.parent_id or '' }}" {% if not s.parent_id %}placeholder="root specimen (no parent)"{% endif %}></label>
-  <label><span class="lbl">Processed on</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}"></label>
-  <label><span class="lbl">Operator</span><select name="created_by"><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}" {% if p.created_by == u.initials %}selected{% endif %}>{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select></label>
+  {% if 'created_datetime' in config.LABEL_FIELDS %}<label><span class="lbl">Processed on (on the label)</span><input type="datetime-local" value="{{ s.created_datetime or '' }}" disabled title="Printed on the label; use Correct on the tube page"></label>
+  {% else %}<label><span class="lbl">Processed on</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}"></label>{% endif %}
+  {% if 'created_by' in config.LABEL_FIELDS %}<label><span class="lbl">Operator (on the label)</span><input type="text" value="{{ s.created_by or '' }}" disabled title="Printed on the label; use Correct on the tube page"></label>
+  {% else %}<label><span class="lbl">Operator</span><select name="created_by"><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}" {% if p.created_by == u.initials %}selected{% endif %}>{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select></label>{% endif %}
   <label><span class="lbl">SOP / protocol</span><select name="sop_code"><option value="">—</option>{% for c in sops %}<option value="{{ c.code }}" {% if p.sop_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Biobank source</span><select name="biobank_source"><option value="">—</option>{% for c in biobanks %}<option value="{{ c.code }}" {% if p.biobank_source == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Quantity</span><input type="number" step="any" name="quantity" value="{{ p.quantity if p.quantity is not none else '' }}"></label>

@@ -71,7 +71,9 @@ def detail(sample_id):
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime, id", (sample_id,)).fetchall()
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL ORDER BY uri", (sample_id,)).fetchall()
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
+    corrections = svc.corrections_for(conn, s)
     flags = {"edits": sum(1 for h in history if h["action"] in ("update", "delete", "restore")),
+             "corrections": len(corrections),
              "overrides": sum(1 for h in history if h["action"] == "insert" and (h["reason"] or "").startswith("Rule override"))}
     participant = conn.execute("SELECT * FROM participant WHERE participant_id=?", (s["participant_id"],)).fetchone()
     return render_template("samples/detail.html", s=s, children=children, ancestors=svc.ancestors(conn, sample_id),
@@ -79,6 +81,9 @@ def detail(sample_id):
                            attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
                            users=_users(), parties=codes("party"), purposes=codes("custody_purpose"),
                            label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"),
+                           corrections=corrections, effective=svc.effective_values(s, corrections),
+                           label_fields=svc.label_fields(), field_names=svc.FIELD_NAMES,
+                           collection_size=conn.execute("SELECT count(*) FROM sample WHERE root_id=?", (s["root_id"],)).fetchone()[0],
                            json=json)
 
 
@@ -329,7 +334,7 @@ def edit(sample_id):
     attr_vals = {k: r["value"] for k, r in attributes.get(conn, sample_id).items()}
     edit_ctx = {**_lists(), "attr_defs": attr_defs, "attr_options": {d["key"]: attributes.options(conn, d) for d in attr_defs}}
     if request.method == "POST":
-        changes = {f: request.form.get(f, "") for f in svc.EDITABLE_FIELDS}
+        changes = {f: request.form.get(f, "") for f in svc.editable_fields()}
         changes["attributes"] = {d["key"]: request.form.get("attr_" + d["key"], "") for d in attr_defs}
         try:
             _check_coded(conn, changes)
@@ -352,6 +357,25 @@ def edit(sample_id):
             flash(str(e), "error")
             return render_template("samples/edit.html", s=s, p=changes, attr_vals=changes["attributes"], **edit_ctx)
     return render_template("samples/edit.html", s=s, p=dict(s), attr_vals=attr_vals, **edit_ctx)
+
+
+@bp.route("/<sample_id>/correct", methods=("POST",))
+@writer_required
+def correct(sample_id):
+    """Add a correction to a label field (the stored value and the ID stay as printed)."""
+    conn = get_db()
+    if svc.get_sample(conn, sample_id) is None:
+        abort(404)
+    field = request.form.get("field", "")
+    try:
+        target = svc.add_correction(conn, sample_id, field, request.form.get("value_" + field, ""), request.form.get("reason", ""))
+        conn.commit()
+        flash(f"Correction recorded for {svc.FIELD_NAMES.get(field, field).lower()}"
+              + (" on the whole collection" if target != sample_id else "") + "; the label and ID are unchanged.", "ok")
+    except ValueError as e:
+        conn.rollback()
+        flash(str(e), "error")
+    return redirect(url_for("samples.detail", sample_id=sample_id))
 
 
 @bp.route("/<sample_id>/delete", methods=("POST",))
