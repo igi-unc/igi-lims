@@ -78,7 +78,8 @@
 {% else %}<tr><td class="muted">No metadata recorded.{% if g.user.role != 'viewer' %} Add it with Edit, or via Import QC.{% endif %}</td></tr>{% endfor %}
 </tbody></table>
 <h3>Label</h3>
-<div class="label">{% for row in label %}{{ row }}<br>{% endfor %}{{ s.created_by or '' }}</div>
+<img class="label-img" src="{{ url_for('samples.label_svg', sample_id=s.sample_id) }}" alt="{% for row in label %}{{ row }} {% endfor %}{{ s.created_by or '' }}">
+<p class="muted small">Preview of the printed label. The 2D code (Data Matrix) holds the full sample ID.</p>
 </div>
 
 <div class="card">

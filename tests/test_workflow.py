@@ -58,8 +58,10 @@ def test_worked_example(app, alice):
     assert alice.get("/participants/KXRTQVA").status_code == 200
     assert alice.get("/").status_code == 200
     # label layout breaks at hyphens
-    html = alice.get(f"/samples/{P}PF-TUM-HMD-01").data.decode()
-    assert "IGI-MP-KXRTQVA<br>260929-PF-TUM<br>HMD-01<br>" in html
+    svg = alice.get(f"/samples/{P}PF-TUM-HMD-01/label.svg").data.decode()
+    import re
+    rows = re.findall(r"<text [^>]*>([^<]*)</text>", svg)
+    assert rows[:3] == ["IGI-MP-KXRTQVA", "260929-PF-TUM", "HMD-01"]
 
 
 def test_aliquots_never_reused(app, alice):

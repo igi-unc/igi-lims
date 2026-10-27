@@ -82,6 +82,11 @@ http://127.0.0.1:5000 on the laptop.
 * **Deletes are soft.** The record stays, the aliquot number stays reserved,
   and a tube with active children cannot be deleted.
 * **Audit log** of every write (who, when, before, after).
+* **Label preview with a 2D barcode.** Every tube page, and the panel that
+  opens when you click a tube in the Samples & Participants tree, shows the
+  label as it should print: the ID broken at hyphens beside a Data Matrix code
+  that encodes exactly the sample ID. It is a preview only; printing is not
+  wired to a label printer yet.
 * **Label values are read-only.** Fields printed on the tube label (today the
   collection date and the operator; `LABEL_FIELDS` in `config.py`) cannot be
   edited once the tube exists. A mistake is fixed with *Correct a value printed

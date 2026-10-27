@@ -6,3 +6,4 @@ psycopg_pool>=3.2
 pytest>=7
 allotropy>=0.1.140; python_version >= "3.10"   # Qubit/NanoDrop readers; skipped on older Pythons
 pypdf>=4          # only used when extracting vendor PDFs; safe to omit in production
+ppf-datamatrix>=0.2           # 2D barcode on the label preview (pure Python)

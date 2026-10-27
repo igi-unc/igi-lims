@@ -359,6 +359,19 @@ def edit(sample_id):
     return render_template("samples/edit.html", s=s, p=dict(s), attr_vals=attr_vals, **edit_ctx)
 
 
+@bp.route("/<sample_id>/label.svg")
+@login_required
+def label_svg(sample_id):
+    """Preview of the printed label with its 2D barcode."""
+    from .. import labels
+    s = svc.get_sample(get_db(), sample_id)
+    if s is None:
+        abort(404)
+    resp = current_app.response_class(labels.label_svg(s), mimetype="image/svg+xml")
+    resp.headers["Cache-Control"] = "private, max-age=3600"   # the label never changes once the tube exists
+    return resp
+
+
 @bp.route("/<sample_id>/correct", methods=("POST",))
 @writer_required
 def correct(sample_id):

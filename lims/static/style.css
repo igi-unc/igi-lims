@@ -48,6 +48,9 @@ button.small { padding:2px 8px; font-size:12px; }
 .chain .here { font-weight:700; }
 ul.plain { list-style:none; padding:0; margin:0; } ul.plain li { padding:2px 0; }
 ul.tree, ul.tree ul { list-style:none; padding-left:18px; margin:0; } ul.tree li { padding:1px 0; border-left:1px dotted var(--line); padding-left:8px; }
+.label-img { display:block; width:320px; max-width:100%; height:auto; margin:6px 0; }
+.label-wrap { margin:4px 0 8px; }
+p.small, .muted.small { font-size:12px; }
 .label { font-family: ui-monospace, Menlo, Consolas, monospace; background:#fff; border:1px dashed var(--line); display:inline-block; padding:6px 10px; line-height:1.3; }
 pre.json { background:#f0f2f5; padding:8px; border-radius:4px; overflow:auto; font-size:12px; max-height:260px; }
 details summary { cursor:pointer; color:var(--accent); }

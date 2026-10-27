@@ -81,6 +81,7 @@
       ["Processed", (s.created_datetime || "") + " " + (s.created_by || "") + (s.sop_code ? " · " + s.sop_code : "")],
       ["Biobank", meaning("biobank_source", s.biobank_source)], ["Notes", s.notes || ""]];
     return `<div class="t"><code>${esc(s.sample_id)}</code> <span class="status ${esc(s.status)}">${esc(s.status)}</span></div>` +
+      `<div class="label-wrap"><img class="label-img" src="/samples/${encodeURIComponent(s.sample_id)}/label.svg" alt="label"></div>` +
       `<table class="compact">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join("")}${attrRows(s)}</table>` +
       `<p><a class="btn secondary" href="/samples/${s.sample_id}">Open tube page</a> ` +
       `<button type="button" class="small secondary" id="tree-panel-close">close</button></p>`;
