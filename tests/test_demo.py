@@ -115,3 +115,21 @@ def test_postgres_tables_are_locked_down(app):
         off = [r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public' AND NOT rowsecurity")]
         assert off == []
         assert conn.execute("SELECT count(*) FROM pg_tables WHERE schemaname='public' AND rowsecurity").fetchone()[0] >= len(ALL_TABLES) - 1
+
+
+def test_missing_table_is_created_on_first_request(app, alice):
+    """A redeploy that adds a table must not 500 before the next reset."""
+    from lims.db import get_db, is_postgres
+    from conftest import make_root
+    make_root(alice)
+    with app.app_context():
+        conn = get_db()
+        sid = conn.execute("SELECT sample_id FROM sample").fetchone()[0]
+        conn.execute("DROP TABLE sample_correction" + (" CASCADE" if is_postgres(conn) else ""))
+        conn.commit()
+    app.extensions.pop("igi_schema_ok", None)      # as on a fresh serverless instance
+    r = alice.get(f"/samples/{sid}")
+    assert r.status_code == 200
+    with app.app_context():
+        assert get_db().execute("SELECT count(*) FROM sample_correction").fetchone()[0] == 0
+        assert get_db().execute("SELECT count(*) FROM sample").fetchone()[0] == 1   # nothing lost

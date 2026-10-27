@@ -88,7 +88,9 @@ code does it: `git pull`, `.venv/bin/pip install -r requirements.txt`, then set
 and run `.venv/bin/flask demo-reset` or `.venv/bin/flask run`. Without
 `LIMS_DATABASE_URL` the laptop keeps using its local SQLite file as before.
 
-Every push to `main` redeploys automatically. Pull requests get preview URLs
+Every push to `main` redeploys automatically. If a new version adds a database
+table, the app creates it on the first request after the deploy, so no reset
+is needed for that either. Pull requests get preview URLs
 that share the same database, so treat them as the same demo.
 
 ## Optional: the Supabase integration on the Vercel marketplace

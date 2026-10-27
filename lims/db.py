@@ -17,7 +17,7 @@ import os
 import re
 import sqlite3
 import click
-from flask import current_app, g
+from flask import current_app, g, request
 
 from . import seed as seed_module, seed_attributes
 
@@ -348,7 +348,31 @@ def set_password_command(username, password):
     click.echo(f"Password updated for {username}")
 
 
+def ensure_schema():
+    """Before the first request of each process: if the database is initialised but lacks a table that a newer
+    version of the code added, create it (init_db only adds what is missing and never drops data). This makes a
+    plain redeploy enough on Vercel. A completely empty database is left alone; the login page explains it."""
+    app = current_app._get_current_object()
+    if app.extensions.get("igi_schema_ok") or request.endpoint == "static":
+        return
+    conn = get_db()
+    try:
+        if is_postgres(conn):
+            existing = {r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'")}
+        else:
+            existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        missing = [t for t in ALL_TABLES if t != "approval_request" and t not in existing]
+        if missing and "account" in existing:
+            app.logger.warning("Creating missing tables: %s", ", ".join(missing))
+            init_db(conn)
+        app.extensions["igi_schema_ok"] = True
+    except Exception as e:      # e.g. two cold starts racing on CREATE TABLE; the next request tries again
+        conn.rollback()
+        app.logger.error("Schema check failed: %s", e)
+
+
 def init_app(app):
+    app.before_request(ensure_schema)
     app.teardown_appcontext(close_db)
     app.cli.add_command(init_db_command)
     app.cli.add_command(create_user_command)
