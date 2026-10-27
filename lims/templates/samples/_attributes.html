@@ -6,7 +6,7 @@
   const VALUES = {{ (p.attributes or {})|tojson }};
   const box = document.getElementById("attr-fields");
   const fr = document.querySelector("select[name=fraction]"), mat = document.querySelector("select[name=material]");
-  const collDate = document.querySelector("input[name=collection_date]");
+  const collDate = document.querySelector("input[name=received_date]");
   const esc = v => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
   function field(d) {
     const name = "attr_" + d.key, cur = VALUES[d.key] != null ? VALUES[d.key] : "";

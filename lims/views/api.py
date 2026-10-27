@@ -45,7 +45,7 @@ def validate(sample_id):
 def list_samples():
     conn = get_db()
     where, params = ["deleted_at IS NULL"], []
-    for key, col in (("participant", "participant_id"), ("root", "root_id"), ("material", "material_code"),
+    for key, col in (("participant", "participant_id"), ("root", "root_id"), ("collection", "collection_id"), ("material", "material_code"),
                      ("fraction", "fraction_code"), ("specimen", "specimen_code"), ("status", "status"),
                      ("cohort", "cohort_code")):
         if request.args.get(key):
@@ -66,8 +66,9 @@ def sample(sample_id):
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL", (sample_id,)).fetchall()
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
-    return jsonify({"sample": _row(s), "files": [_row(f) for f in files], "custody": [_row(c) for c in custody],
-                    "corrections": [_row(c) for c in corrections], "corrected_values": svc.effective_values(s, corrections)})
+    return jsonify({"sample": _row(s), "collection": _row(svc.get_collection(conn, s["collection_id"])),
+                    "files": [_row(f) for f in files], "custody": [_row(c) for c in custody],
+                    "corrections": [_row(c) for c in corrections], "corrected_values": svc.effective_values(corrections)})
 
 
 @bp.route("/samples/<sample_id>/lineage")
@@ -87,10 +88,23 @@ def lineage(sample_id):
 @bp.route("/tree/<root_id>")
 @api_auth
 def tree(root_id):
+    """Tree of the collection this tube belongs to."""
     conn = get_db()
-    if svc.get_sample(conn, root_id) is None:
+    s = svc.get_sample(conn, root_id)
+    if s is None:
         abort(404)
-    return jsonify(svc.tree(conn, root_id))
+    return jsonify(svc.collection_tree(conn, s["collection_id"]))
+
+
+@bp.route("/collections/<int:collection_id>")
+@api_auth
+def collection(collection_id):
+    conn = get_db()
+    c = svc.get_collection(conn, collection_id)
+    if c is None:
+        abort(404)
+    return jsonify({"collection": _row(c), "tree": svc.collection_tree(conn, collection_id),
+                    "corrections": [_row(x) for x in svc.corrections_for_collection(conn, collection_id)]})
 
 
 @bp.route("/files")
@@ -102,6 +116,6 @@ def files():
         where.append("f.assay_code=?"); params.append(request.args["assay"])
     if request.args.get("participant"):
         where.append("s.participant_id=?"); params.append(request.args["participant"])
-    rows = conn.execute("SELECT f.*, s.participant_id, s.root_id FROM data_file f JOIN sample s USING(sample_id) WHERE "
+    rows = conn.execute("SELECT f.*, s.participant_id, s.collection_id, s.root_id FROM data_file f JOIN sample s USING(sample_id) WHERE "
                         + " AND ".join(where) + " ORDER BY f.uri", params)
     return jsonify([_row(r) for r in rows])

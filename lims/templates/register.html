@@ -3,17 +3,17 @@
 <div class="cols3">
 <div class="card">
   <h2>1. Participant</h2>
-  <p>Create the participant first. The LIMS assigns the IGI participant code that appears in every sample ID; the collection site's own ID is stored but never printed on a label.</p>
+  <p>Create the participant first. The LIMS issues the next IGI patient ID (P + 3 digits); enter the participant's 3-digit UNC number. Both are printed in every sample ID and on every label.</p>
   {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('participants.new') }}">Register a participant</a></p>{% endif %}
 </div>
 <div class="card">
-  <h2>2. Base specimen</h2>
-  <p>Register a tube as it arrived from the clinic or biobank (pleural fluid, blood, tissue). It becomes the root of a provenance tree.</p>
-  {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('samples.new_root') }}">Register a base specimen</a></p>{% endif %}
+  <h2>2. Collection</h2>
+  <p>Register a specimen as it arrived (pleural fluid, blood, tissue): received date, specimen type, volume. The specimen itself is not labelled. Then create the tubes made straight from it, for example 4 × PFS-FRZ and 10 × PFM-CPU.</p>
+  {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('collections.new') }}">Register a collection</a></p>{% endif %}
 </div>
 <div class="card">
   <h2>3. Derived specimen</h2>
-  <p>Register tubes made from an existing tube: cryo vials, enriched fractions, pellets, DNA or RNA, libraries, peptide eluates. Pick the parent tube, and the new IDs inherit everything to the left of the fraction. If the base specimen was never registered because it was processed straight away, the same page can register both at once.</p>
+  <p>Register tubes made from an existing tube: enriched fractions, pellets, cultures, DNA or RNA, peptide eluates. They keep the first six ID segments of their parent and take their own operator and processing date.</p>
   {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('samples.derive_pick') }}">Register a derived specimen</a></p>{% endif %}
 </div>
 </div>

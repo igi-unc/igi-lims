@@ -2,46 +2,58 @@
 
 ## Open questions (for Steven)
 
-1. **Vocabulary oddities in the specimen list.** `NTC` (Normal T cell) and
-   `NRM` (Normal tissue) sit in the *specimen* list but read like fractions or
-   sources. Are these healthy-donor sources, patient-matched normals, or both?
-   Should NTC be `PB` specimen + `TTC` fraction instead? Also: `IMM` says
-   "e.g. CD45+ enriched, buffy coat" but buffy coat already has its own fraction
-   code `BFC`. Which one wins for a buffy coat tube? Note that `NTC` and `NRM`
-   are three characters while the ID format reserves two for specimen
-   (`[A-Z]{2}`), so they currently cannot appear in an ID. Either shorten them
-   or widen the segment in `config.py`.
-2. **ID format is still in flight.** The build uses the 35-character validated
-   pattern from the spec (`IGI-CC-PPPPPPP-YYMMDD-SS-FFF-MMM-AA`). The later
-   field table hints at `P101-UNC316`, `26SEP29` dates, operator initials and a
-   processing date inside the ID. Those are a `config.py` edit (plus a column
-   if a new segment is added). Operator and processing date are stored in the
-   database per the spec's own rule ("processing dates go in the database").
+1. **Nomenclature v2.1 applied (2026-10-27), document still under review.**
+   The ID, code lists and rules follow the 2026-10-19 v2.1 text, read the
+   "sane" way where the pasted copy disagreed with itself: PF is a specimen and
+   PFS a fraction. NTC and NRM are retired (normal T cells are specimen +
+   TTC; normal tissue is NM). BLK, NA (fraction), NAT, CPL, CPC and LIB are
+   gone. v2 is preserved at tag `v2-final` / branch `nomenclature-v2`.
+   Choices the document left open, made here and easy to change:
+   * Assay list keeps bulk `TCR` beside the new single-cell `VDJ`; platform
+     list adds `MS` so immunopeptidomics files can be linked. File-name labels
+     for those two (`bulkTCR`, `immunopeptidome`, `MS`) are placeholders in
+     `config.py`. The 10XGEX/10XVDJ question is still open.
+   * Source in file names: `tumor` for PF, TU, LN, BM; `normal` otherwise;
+     `_Tcell` added for TTC, CD4, CD8 (`TUMOR_SPECIMENS`, `TCELL_FRACTIONS`).
+   * First-generation tubes may be FRZ, CPU, SNF, SCS, CFD, DNA, RNA, HMD,
+     HMR, OCT or FFP. FRZ requires PFS, PLA, SER or BFC. SNF follows the v2.1
+     meaning (cell pellet); there is no code for snap-frozen tissue pieces.
+   * A processing date earlier than the received date, or than the parent's,
+     is a rule violation (overridable with a reason).
+   * Biobank source codes are unchanged (C, H, IH, NA); the document mentions
+     C and H only.
+2. **Same-day collections.** Two collections of one specimen type received the
+   same day (two taps) share segments 1-6. Aliquots stay unique, and the
+   collection record keeps them apart in the LIMS, but the ID alone cannot.
 3. **Approval queue removed (2026-10-14).** After the demo Steven asked to
    drop two-person approval and rely on the audit log. Edits, deletes and rule
    overrides are now direct, carry an optional (override: required) reason,
    and are flagged in the audit log, on the tube page and in a changes-only
    audit view. Old databases keep their `approval_request` table unused.
-4. **Participant code generation.** Generated codes use A–Z minus I and O
-   (7 letters). Confirm this against the IRB/HIPAA review of label contents,
-   and whether codes should instead be issued by a central IGI registry.
+4. **Participant numbers.** IGI patient IDs are issued in sequence (P001...)
+   and never reused; admins can enter an existing number. Three digits cap
+   both the P number and the UNC number at 999. Only UNC participants are
+   supported. The label now carries the patient ID, the UNC ID and two dates:
+   the document asks for an IRB/HIPAA check of that.
 5. **Rule seed is a first guess.** The allowed transitions in `lims/seed.py`
-   were inferred from the worked example; review them on the *Rules* page.
-   Notably: `PEP` restricted to `TUM`/`BLK`/`IMM`; `CFD` only from `PLA`;
-   root tubes may arrive as NAT, CPU, SNF, OCT, FFP.
+   reproduce the v2.1 worked example; review them on the *Rules* page.
+   Notably: `PEP` only in `TUM`/`IMM`/`NAP` and only from SNF; `CFD` only
+   from `PLA`; CUL may go to SNF, SCS or CPU.
 6. **Pooling.** Single parent only, per decision. If hashtagged 10x pools or
    pooled libraries appear, a `sample_parent` link table is the change.
-7. **HIPAA.** Collection dates are in every ID and label. The database also
+7. **HIPAA.** Received and processing dates are in every ID and label. The database also
    stores the site's external participant ID. Confirm who may be a `viewer`
    and whether the API token should be scoped.
-8. **Barcodes.** The jump box on every page accepts a scanned ID. Label
-   printing is not implemented; the 3-row layout is shown on each tube page.
+8. **Barcodes.** The jump box on every page accepts a scanned ID or a UNC ID.
+   Label printing is not implemented; each tube page shows the 3-row layout
+   with a Data Matrix of the full ID.
 
-9. **Required metadata.** Only two fields are required so far: library assay
-   (LIB) and HLA class (PEP). Everything else is optional. Make more required
+9. **Required metadata.** Only one field is required so far: HLA class (PEP).
+   (Library assay went with LIB; assay and platform are now required on data
+   files.) Everything else is optional. Make more required
    on the *Fields* page once the lab agrees what must never be blank.
 10. **QC import matching.** Rows auto-match only when the instrument sample
-    name contains the full 35-character tube ID. Tell operators to name samples
+    name contains the full 51-52 character tube ID. Tell operators to name samples
     with the tube ID (or scan it) on the Qubit, NanoDrop, TapeStation and
     Countess. The Countess reader is built from the vendor column spec, not a
     real export; check it against the first real file.
@@ -51,8 +63,7 @@
 
 12. **Remaining free text.** Only Notes fields are free text, plus three
     machine identifiers that cannot be dropdowns: data-file URI, run ID and
-    md5 (copied from pipeline output; could move to API-only registration),
-    and the participant's external site ID. Everything else is a number, a
+    md5 (copied from pipeline output; could move to API-only registration). Everything else is a number, a
     date/time, a fixed choice, or an entry from an admin-extendable list under
     Codes (kits, lots, buffers, freezers, racks, boxes, parties, SOPs, ...).
     Most lists start with just NA; fill them in before the first real tubes.

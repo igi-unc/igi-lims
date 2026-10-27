@@ -9,18 +9,18 @@
   <label><span class="lbl">Fraction</span><select name="fraction"><option value="">any</option>{% for c in fractions %}<option value="{{ c.code }}" {% if f.fraction == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Material</span><select name="material"><option value="">any</option>{% for c in materials %}<option value="{{ c.code }}" {% if f.material == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
   <label><span class="lbl">Status</span><select name="status"><option value="">any</option>{% for c in statuses %}<option value="{{ c.code }}" {% if f.status == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
-  {% if f.root %}<input type="hidden" name="root" value="{{ f.root }}">{% endif %}
+  {% if f.collection %}<input type="hidden" name="collection" value="{{ f.collection }}">{% endif %}
   <label><input type="checkbox" name="deleted" value="1" {% if show_deleted %}checked{% endif %}> include deleted</label>
   <button type="submit">Filter</button> <a class="btn secondary" href="{{ url_for('samples.list_samples') }}">Clear</a>
 </form>
-{% if f.root %}<p>Showing collection rooted at <a href="{{ url_for('samples.tree', root_id=f.root) }}"><code>{{ f.root }}</code></a> (<a href="{{ url_for('samples.tree', root_id=f.root) }}">tree view</a>)</p>{% endif %}
+{% if coll %}<p>Showing collection <a href="{{ url_for('collections.detail', collection_id=coll.collection_id) }}">{{ coll.received_date|yymmmdd }} {{ coll.specimen_code }} (#{{ coll.collection_id }})</a> of {{ coll.participant_id }} (<a href="{{ url_for('collections.tree', collection_id=coll.collection_id) }}">tree view</a>)</p>{% endif %}
 <table>
 <thead><tr><th>Sample ID</th><th>Parent</th><th>Status / location</th><th>Qty</th><th>Processed</th><th>By</th></tr></thead>
 <tbody>
 {% for s in rows %}
 <tr class="{% if s.deleted_at %}del{% endif %}">
   <td><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a>{% if s.deleted_at %} <span class="muted">(deleted)</span>{% endif %}</td>
-  <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id.split('-')[-3:]|join('-') }}</code></a>{% else %}<span class="muted">root</span>{% endif %}</td>
+  <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id|short_id }}</code></a>{% else %}<a class="muted" href="{{ url_for('collections.detail', collection_id=s.collection_id) }}">collection #{{ s.collection_id }}</a>{% endif %}</td>
   <td>{{ status_loc(s) }}</td>
   <td class="num">{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% endif %}</td>
   <td>{{ s.created_datetime or '' }}</td><td>{{ s.created_by or '' }}</td>

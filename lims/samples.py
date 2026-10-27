@@ -7,7 +7,7 @@ validation errors (unknown participant, bad code) raise ValueError and cannot
 be overridden.
 """
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 from flask import current_app, g
 
@@ -18,7 +18,14 @@ EDITABLE_FIELDS = [
     "quantity", "unit", "freezer", "rack", "box", "position", "status", "notes",
 ]
 LOCATION_FIELDS = ["freezer", "rack", "box", "position"]
-FIELD_NAMES = {"collection_date": "Collection date", "created_by": "Operator", "created_datetime": "Processing date"}
+FIELD_NAMES = {"received_date": "Received date", "created_by": "Operator", "created_datetime": "Processing date/time"}
+
+# ID segment -> sample column
+SEGMENT_COLUMNS = {"project": "project_code", "cohort": "cohort_code", "participant": "participant_id", "unc_id": "unc_id",
+                   "received_date": "received_date", "specimen": "specimen_code", "fraction": "fraction_code",
+                   "material": "material_code", "aliquot": "aliquot", "operator": "created_by",
+                   "processing_date": "processing_date"}
+INHERITED_SEGMENTS = ["project", "cohort", "participant", "unc_id", "received_date", "specimen"]   # segments 1-6
 
 
 def label_fields():
@@ -65,36 +72,54 @@ def _clean(payload):
     return p
 
 
+def get_collection(conn, collection_id):
+    try:
+        cid = int(collection_id)
+    except (TypeError, ValueError):
+        return None
+    return conn.execute("SELECT * FROM collection WHERE collection_id=?", (cid,)).fetchone()
+
+
+def _processing_date(p):
+    dt = (p.get("created_datetime") or "").strip()
+    if not dt:
+        raise ValueError("Processing date/time is required (it is part of the sample ID)")
+    try:
+        return datetime.fromisoformat(dt).date().isoformat()
+    except ValueError:
+        raise ValueError("Processing date/time must be a date and time")
+
+
 def _components_for(conn, p):
-    """Return (parsed components without aliquot, parent_row_or_None)."""
+    """Return (components with aliquot 1, parent row or None, collection row).
+    Segments 1-6 come from the parent tube, or for a first-generation tube from its collection and participant;
+    fraction, material, operator and processing date come from this tube."""
     parent = None
     if p.get("parent_id"):
         parent = get_sample(conn, p["parent_id"])
         if parent is None:
             raise ValueError(f"Parent {p['parent_id']} does not exist")
-        comp = {
-            "cohort": parent["cohort_code"],
-            "participant": parent["participant_id"],
-            "collection_date": parent["collection_date"],
-            "specimen": parent["specimen_code"],
-        }
+        coll = get_collection(conn, parent["collection_id"])
+        comp = {seg: parent[SEGMENT_COLUMNS[seg]] for seg in INHERITED_SEGMENTS}
     else:
+        coll = get_collection(conn, p.get("collection_id"))
+        if coll is None or coll["deleted_at"]:
+            raise ValueError("A first-generation tube needs an existing collection")
         part = conn.execute("SELECT * FROM participant WHERE participant_id=? AND deleted_at IS NULL",
-                            (p.get("participant"),)).fetchone()
+                            (coll["participant_id"],)).fetchone()
         if part is None:
-            raise ValueError("Participant is required and must exist")
-        if not p.get("collection_date"):
-            raise ValueError("Collection date is required")
-        comp = {
-            "cohort": part["cohort_code"],
-            "participant": part["participant_id"],
-            "collection_date": p["collection_date"],
-            "specimen": p.get("specimen"),
-        }
+            raise ValueError("The collection's participant does not exist")
+        if not part["unc_number"]:
+            raise ValueError(f"Participant {part['participant_id']} has no UNC number; add it on the participant record")
+        comp = {"project": "IGI", "cohort": part["cohort_code"], "participant": part["participant_id"],
+                "unc_id": ids.unc_id(part["unc_number"]), "received_date": coll["received_date"],
+                "specimen": coll["specimen_code"]}
     comp["fraction"] = p.get("fraction")
     comp["material"] = p.get("material")
     comp["aliquot"] = 1
-    for k in ("specimen", "fraction", "material"):
+    comp["operator"] = p.get("created_by")
+    comp["processing_date"] = _processing_date(p)
+    for k in ("fraction", "material", "operator"):
         if not comp[k]:
             raise ValueError(f"{k} is required")
     try:
@@ -105,23 +130,31 @@ def _components_for(conn, p):
     problems = ids.check_codes(conn, comp)
     if problems:
         raise ValueError("; ".join(problems))
-    return comp, parent
+    return comp, parent, coll
+
+
+def _violations(conn, parent, coll, comp):
+    v = rules.check_derivation(conn, parent, comp) if parent else rules.check_root(conn, comp)
+    if comp["processing_date"] < comp["received_date"]:
+        v.append(f"Processing date {comp['processing_date']} is before the received date {comp['received_date']}")
+    if parent and parent["processing_date"] and comp["processing_date"] < parent["processing_date"]:
+        v.append(f"Processing date {comp['processing_date']} is before the parent's ({parent['processing_date']})")
+    return v
 
 
 def preview(conn, payload):
     """Validate and return (prefix, violations) without writing anything."""
     p = _clean(payload)
-    comp, parent = _components_for(conn, p)
-    violations = rules.check_derivation(conn, parent, comp) if parent else rules.check_root(conn, comp)
-    return ids.prefix_without_aliquot(comp), violations
+    comp, parent, coll = _components_for(conn, p)
+    return ids.prefix_without_aliquot(comp), _violations(conn, parent, coll, comp)
 
 
 def create_samples(conn, payload, force=False, reason=None):
     """Create `count` aliquots. Returns (created_ids, violations).
     If violations exist and force is False, nothing is written."""
     p = _clean(payload)
-    comp, parent = _components_for(conn, p)
-    violations = rules.check_derivation(conn, parent, comp) if parent else rules.check_root(conn, comp)
+    comp, parent, coll = _components_for(conn, p)
+    violations = _violations(conn, parent, coll, comp)
     if violations and not force:
         return [], violations
     if violations:
@@ -130,33 +163,32 @@ def create_samples(conn, payload, force=False, reason=None):
     status = p.get("status") or "Available"
     if not conn.execute("SELECT 1 FROM code_list WHERE category='status' AND code=? AND active=1", (status,)).fetchone():
         raise ValueError(f"Unknown status {status}")
+    attrs = attributes.validate_dict(conn, p.get("attributes") or {}, comp["fraction"], comp["material"])
+    attrs = {k: v for k, v in attrs.items() if v is not None}
     created = []
     for _ in range(p["count"]):
         comp["aliquot"] = ids.next_aliquot(conn, comp)
         sid = ids.compose(comp)
-        root_id = parent["root_id"] if parent else sid
-        row = {
-            "sample_id": sid,
-            "project_code": comp["project"], "cohort_code": comp["cohort"],
-            "participant_id": comp["participant"], "collection_date": comp["collection_date"],
-            "specimen_code": comp["specimen"], "fraction_code": comp["fraction"],
-            "material_code": comp["material"], "aliquot": comp["aliquot"],
-            "parent_id": parent["sample_id"] if parent else None, "root_id": root_id,
-            "created_datetime": p.get("created_datetime"), "created_by": p.get("created_by"),
-            "sop_code": p.get("sop_code"), "biobank_source": p.get("biobank_source"),
-            "quantity": p.get("quantity"), "unit": p.get("unit"),
+        row = {"sample_id": sid}
+        for seg, col in SEGMENT_COLUMNS.items():
+            row[col] = comp[seg]
+        row.update({
+            "collection_id": coll["collection_id"],
+            "parent_id": parent["sample_id"] if parent else None,
+            "root_id": parent["root_id"] if parent else sid,
+            "created_datetime": p.get("created_datetime"), "sop_code": p.get("sop_code"),
+            "biobank_source": p.get("biobank_source"), "quantity": p.get("quantity"), "unit": p.get("unit"),
             "freezer": p.get("freezer"), "rack": p.get("rack"), "box": p.get("box"), "position": p.get("position"),
-            "status": status, "notes": p.get("notes"),
-            "record_created_by": _username(),
-        }
+            "status": status, "notes": p.get("notes"), "record_created_by": _username(),
+        })
         cols = ", ".join(row)
         qs = ", ".join("?" for _ in row)
         conn.execute(f"INSERT INTO sample({cols}) VALUES ({qs})", list(row.values()))
-        audit.log(conn, "sample", sid, "insert", after=row, reason=reason)
+        if attrs:
+            attributes.set_values(conn, sid, attrs, log=False)
+        # one audit row per tube, metadata included
+        audit.log(conn, "sample", sid, "insert", after={**row, **{"attr:" + k: v for k, v in attrs.items()}}, reason=reason)
         created.append(sid)
-        if p.get("attributes"):
-            attributes.set_values(conn, sid, attributes.validate_dict(conn, p["attributes"], comp["fraction"], comp["material"]),
-                                  reason=reason, action="insert")
 
     if parent and p.get("parent_consumed") and parent["status"] != "Depleted":
         before = dict(parent)
@@ -165,6 +197,76 @@ def create_samples(conn, payload, force=False, reason=None):
         audit.log(conn, "sample", parent["sample_id"], "update",
                   before={"status": before["status"]}, after={"status": "Depleted"}, reason=reason)
     return created, violations
+
+
+# ------------------------------------------------------------------ collections
+
+COLLECTION_FIELDS_EDITABLE = ["site_code", "biobank_source", "received_from", "received_by", "time_collected", "time_received",
+                              "container_type", "transport_temp", "appearance", "quantity", "unit", "notes"]
+
+
+def create_collection(conn, data):
+    """Register a received specimen (not a tube). Returns the new collection_id."""
+    part = conn.execute("SELECT * FROM participant WHERE participant_id=? AND deleted_at IS NULL",
+                        (data.get("participant_id"),)).fetchone()
+    if part is None:
+        raise ValueError("Participant is required and must exist")
+    if not part["unc_number"]:
+        raise ValueError(f"Participant {part['participant_id']} has no UNC number; add it on the participant record first")
+    if not conn.execute("SELECT 1 FROM code_list WHERE category='specimen' AND code=? AND active=1", (data.get("specimen_code"),)).fetchone():
+        raise ValueError("Specimen must be an active specimen code")
+    try:
+        received = date.fromisoformat((data.get("received_date") or "")[:10]).isoformat()
+    except ValueError:
+        raise ValueError("Received date is required (YYYY-MM-DD)")
+    row = {"participant_id": part["participant_id"], "specimen_code": data["specimen_code"], "received_date": received}
+    for f in COLLECTION_FIELDS_EDITABLE:
+        v = data.get(f)
+        row[f] = v.strip() if isinstance(v, str) else v
+        if row[f] == "":
+            row[f] = None
+    if row.get("quantity") is not None:
+        try:
+            row["quantity"] = float(row["quantity"])
+        except (TypeError, ValueError):
+            raise ValueError("Quantity must be a number")
+    row["site_code"] = row.get("site_code") or part["site_code"]
+    row["created_by"] = _username()
+    cols = ", ".join(row)
+    cur = conn.execute(f"INSERT INTO collection({cols}) VALUES ({', '.join('?' for _ in row)})", list(row.values()))
+    cid = cur.lastrowid
+    audit.log(conn, "collection", cid, "insert", after=row)
+    return cid
+
+
+def update_collection(conn, collection_id, changes, reason=None):
+    cur = get_collection(conn, collection_id)
+    if cur is None:
+        raise ValueError("Collection not found")
+    d = {}
+    for f in COLLECTION_FIELDS_EDITABLE:
+        if f not in changes:
+            continue
+        new = changes[f].strip() if isinstance(changes[f], str) else changes[f]
+        new = None if new == "" else new
+        if f == "quantity" and new is not None:
+            try:
+                new = float(new)
+            except ValueError:
+                raise ValueError("Quantity must be a number")
+        if cur[f] != new:
+            d[f] = (cur[f], new)
+    if d:
+        conn.execute("UPDATE collection SET " + ", ".join(f"{k}=?" for k in d) + " WHERE collection_id=?",
+                     [n for _, n in d.values()] + [cur["collection_id"]])
+        audit.log(conn, "collection", cur["collection_id"], "update", before={k: o for k, (o, _) in d.items()},
+                  after={k: n for k, (_, n) in d.items()}, reason=reason)
+    return d
+
+
+def collection_label(coll):
+    """Short display name: 26SEP29 PF (#12)."""
+    return f"{ids.format_yymmmdd(coll['received_date'])} {coll['specimen_code']} (#{coll['collection_id']})"
 
 
 OCCUPYING_STATUSES = ("Available", "In use")
@@ -232,9 +334,9 @@ def _validate_new_parent(conn, cur, new_parent_id):
     np = get_sample(conn, new_parent_id)
     if np is None:
         raise ValueError("New parent does not exist")
-    for col in ("participant_id", "collection_date", "specimen_code"):
+    for col in ("collection_id", "participant_id", "received_date", "specimen_code"):
         if np[col] != cur[col]:
-            raise ValueError(f"New parent must share {col} with this sample")
+            raise ValueError(f"New parent must come from the same collection ({col} differs)")
     # cycle check: the new parent must not be a descendant of this sample
     for d in descendants(conn, cur["sample_id"]):
         if d["sample_id"] == new_parent_id:
@@ -317,10 +419,7 @@ def descendants(conn, sample_id):
     return out
 
 
-def tree(conn, root_id, include_deleted=False):
-    """Nested dict {sample: row-dict, children: [...]} for the whole tree under root_id."""
-    q = "SELECT * FROM sample WHERE root_id=?" + ("" if include_deleted else " AND deleted_at IS NULL") + " ORDER BY sample_id"
-    rows = [dict(r) for r in conn.execute(q, (root_id,))]
+def _nest(rows):
     nodes = {r["sample_id"]: {"sample": r, "children": []} for r in rows}
     roots = []
     for r in rows:
@@ -329,53 +428,73 @@ def tree(conn, root_id, include_deleted=False):
             nodes[pid]["children"].append(nodes[r["sample_id"]])
         else:
             roots.append(nodes[r["sample_id"]])
-    return roots[0] if len(roots) == 1 else {"sample": None, "children": roots}
+    return roots
+
+
+def _collection_node(c, rows):
+    info = {k: c[k] for k in ("collection_id", "participant_id", "specimen_code", "received_date", "quantity", "unit",
+                              "biobank_source", "received_by", "time_collected", "time_received", "notes")}
+    info["label"] = collection_label(c)
+    return {"sample": None, "collection": info, "children": _nest(rows)}
+
+
+def collection_tree(conn, collection_id, include_deleted=False):
+    """{collection node -> first-generation tubes -> descendants}."""
+    c = get_collection(conn, collection_id)
+    q = "SELECT * FROM sample WHERE collection_id=?" + ("" if include_deleted else " AND deleted_at IS NULL") + " ORDER BY sample_id"
+    return _collection_node(c, [dict(r) for r in conn.execute(q, (c["collection_id"],))])
 
 
 def participant_forest(conn, participant_id, include_deleted=False):
-    """One virtual root per participant; children are the collections' root tubes, then their trees."""
+    """Participant -> collections (oldest first) -> first-generation tubes -> descendants."""
+    colls = conn.execute("SELECT * FROM collection WHERE participant_id=?" + ("" if include_deleted else " AND deleted_at IS NULL")
+                         + " ORDER BY received_date, collection_id", (participant_id,)).fetchall()
     q = "SELECT * FROM sample WHERE participant_id=?" + ("" if include_deleted else " AND deleted_at IS NULL") + " ORDER BY sample_id"
-    rows = [dict(r) for r in conn.execute(q, (participant_id,))]
-    nodes = {r["sample_id"]: {"sample": r, "children": []} for r in rows}
-    roots = []
-    for r in rows:
-        pid = r["parent_id"]
-        if pid and pid in nodes:
-            nodes[pid]["children"].append(nodes[r["sample_id"]])
-        else:
-            roots.append(nodes[r["sample_id"]])
-    return {"sample": None, "participant": participant_id, "children": roots}
+    by_coll = {}
+    for r in conn.execute(q, (participant_id,)):
+        by_coll.setdefault(r["collection_id"], []).append(dict(r))
+    return {"sample": None, "participant": participant_id,
+            "children": [_collection_node(c, by_coll.get(c["collection_id"], [])) for c in colls]}
 
 
 def label_rows(sample):
-    """Suggested 3-row label layout (spec section 4); breaks always fall at a hyphen."""
+    """Label rows from config LABEL_ROWS (lists of segment names); breaks always fall at a hyphen."""
     sep = current_app.config["ID_SEPARATOR"]
-    parts = sample["sample_id"].split(sep)
-    n = len(parts)
-    # project, cohort, participant | date, specimen, fraction | material, aliquot
-    return [sep.join(parts[:3]), sep.join(parts[3:n - 2]), sep.join(parts[n - 2:])]
+    parts = dict(zip(ids.segment_names(), sample["sample_id"].split(sep)))
+    return [sep.join(parts[n] for n in row if n in parts) for row in current_app.config["LABEL_ROWS"]]
+
+
+def suggested_file_stem(sample, assay_code, platform_code):
+    """<sample ID>_<source>_<assay label>_<platform label> (nomenclature v2.1, section 3)."""
+    cfg = current_app.config
+    source = "tumor" if sample["specimen_code"] in cfg["TUMOR_SPECIMENS"] else "normal"
+    if sample["fraction_code"] in cfg["TCELL_FRACTIONS"]:
+        source += "_Tcell"
+    parts = [sample["sample_id"], source]
+    if assay_code:
+        parts.append(cfg["ASSAY_LABELS"].get(assay_code, assay_code))
+    if platform_code:
+        parts.append(cfg["PLATFORM_LABELS"].get(platform_code, platform_code))
+    return "_".join(parts)
 
 
 # ------------------------------------------------------------------ corrections to label fields
 
-def _correction_target(sample, field):
-    """Collection-level fields are corrected once, on the collection's root tube."""
-    return sample["root_id"] if field in current_app.config.get("COLLECTION_FIELDS", []) else sample["sample_id"]
+def _is_collection_field(field):
+    return field in current_app.config.get("COLLECTION_FIELDS", [])
 
 
 def corrections_for(conn, sample):
-    """Corrections that apply to this tube, oldest first: its own, plus collection-level ones on its root."""
-    coll = list(current_app.config.get("COLLECTION_FIELDS", []))
-    q = "SELECT * FROM sample_correction WHERE sample_id=?"
-    params = [sample["sample_id"]]
-    if coll and sample["root_id"] != sample["sample_id"]:
-        q = ("SELECT * FROM sample_correction WHERE (sample_id=? AND field NOT IN (%s)) OR (sample_id=? AND field IN (%s))"
-             % (",".join("?" for _ in coll), ",".join("?" for _ in coll)))
-        params = [sample["sample_id"], *coll, sample["root_id"], *coll]
-    return conn.execute(q + " ORDER BY id", params).fetchall()
+    """Corrections that apply to this tube, oldest first: its own, plus those on its collection."""
+    return conn.execute("SELECT * FROM sample_correction WHERE sample_id=? OR collection_id=? ORDER BY id",
+                        (sample["sample_id"], sample["collection_id"])).fetchall()
 
 
-def effective_values(sample, corrections):
+def corrections_for_collection(conn, collection_id):
+    return conn.execute("SELECT * FROM sample_correction WHERE collection_id=? ORDER BY id", (collection_id,)).fetchall()
+
+
+def effective_values(corrections):
     """{field: value now believed correct} for the label fields (latest correction wins)."""
     out = {}
     for c in corrections:
@@ -384,11 +503,11 @@ def effective_values(sample, corrections):
 
 
 def _check_correction_value(conn, field, value):
-    if field == "collection_date":
+    if field == "received_date":
         try:
-            return datetime.strptime(value, "%Y-%m-%d").date().isoformat()
+            return date.fromisoformat(value).isoformat()
         except ValueError:
-            raise ValueError("The corrected collection date must be a date (YYYY-MM-DD)")
+            raise ValueError("The corrected received date must be a date (YYYY-MM-DD)")
     if field == "created_datetime":
         try:
             return datetime.fromisoformat(value).strftime("%Y-%m-%dT%H:%M")
@@ -401,23 +520,37 @@ def _check_correction_value(conn, field, value):
     return value
 
 
-def add_correction(conn, sample_id, field, value, reason):
-    """Record the right value for a label field without changing the stored value or the ID. Returns the target tube ID."""
-    s = get_sample(conn, sample_id)
-    if s is None:
-        raise ValueError("Sample not found")
+def add_correction(conn, field, value, reason, sample_id=None, collection_id=None):
+    """Record the right value for a label field without changing the stored value or any ID.
+    Collection-level fields go on the collection (pass either a tube of it or the collection).
+    Returns ("collection", id) or ("sample", id)."""
     if field not in label_fields():
         raise ValueError(f"{field} is not a label field; change it with Edit")
     reason = (reason or "").strip()
     if not reason:
         raise ValueError("A reason is required for a correction")
     value = _check_correction_value(conn, field, (value or "").strip())
-    target = get_sample(conn, _correction_target(s, field))
-    current = effective_values(target, corrections_for(conn, target)).get(field, target[field])
+    s = get_sample(conn, sample_id) if sample_id else None
+    if sample_id and s is None:
+        raise ValueError("Sample not found")
+    if _is_collection_field(field):
+        coll = get_collection(conn, collection_id if collection_id is not None else (s["collection_id"] if s else None))
+        if coll is None:
+            raise ValueError("Collection not found")
+        current = effective_values(corrections_for_collection(conn, coll["collection_id"])).get(field, coll[field])
+        target = ("collection", coll["collection_id"])
+    else:
+        if s is None:
+            raise ValueError(f"{FIELD_NAMES.get(field, field)} belongs to a tube; correct it on the tube page")
+        current = effective_values(conn.execute("SELECT * FROM sample_correction WHERE sample_id=? ORDER BY id",
+                                                (s["sample_id"],)).fetchall()).get(field, s[field])
+        target = ("sample", s["sample_id"])
     if value == current:
         raise ValueError(f"{FIELD_NAMES.get(field, field)} is already {value}")
-    cur = conn.execute("INSERT INTO sample_correction(sample_id, field, original_value, corrected_value, reason, recorded_by) "
-                       "VALUES (?,?,?,?,?,?)", (target["sample_id"], field, current, value, reason, _username()))
-    audit.log(conn, "sample", target["sample_id"], "correct", before={field: current},
+    cur = conn.execute("INSERT INTO sample_correction(sample_id, collection_id, field, original_value, corrected_value, reason, recorded_by) "
+                       "VALUES (?,?,?,?,?,?,?)",
+                       (target[1] if target[0] == "sample" else None, target[1] if target[0] == "collection" else None,
+                        field, current, value, reason, _username()))
+    audit.log(conn, target[0], target[1], "correct", before={field: current},
               after={field: value, "correction_id": cur.lastrowid, "note": "label value unchanged"}, reason=reason)
-    return target["sample_id"]
+    return target

@@ -14,9 +14,8 @@ FORM_FIELDS = ["fraction", "material", "count", "created_datetime", "created_by"
 
 # Every field must be filled in when a tube is created (use NA where it does not apply).
 REQUIRED_CREATE_FIELDS = [f for f in FORM_FIELDS]
-REQUIRED_ROOT_FIELDS = ["participant", "collection_date", "specimen"]
 FIELD_LABELS = {"created_datetime": "Processed on", "created_by": "Operator initials", "sop_code": "SOP / protocol",
-                "biobank_source": "Biobank source", "collection_date": "Collection date"}
+                "biobank_source": "Biobank source"}
 
 
 def _form_payload(extra=()):
@@ -36,7 +35,7 @@ def _missing(payload, required):
 def list_samples():
     conn = get_db()
     f = {k: (request.args.get(k) or "").strip() for k in
-         ("q", "participant", "cohort", "specimen", "fraction", "material", "status", "root")}
+         ("q", "participant", "cohort", "specimen", "fraction", "material", "status", "collection")}
     show_deleted = request.args.get("deleted") == "1"
     where, params = [], []
     if not show_deleted:
@@ -46,7 +45,7 @@ def list_samples():
         params.append(f"%{f['q'].upper()}%")
     for key, col in (("participant", "participant_id"), ("cohort", "cohort_code"), ("specimen", "specimen_code"),
                      ("fraction", "fraction_code"), ("material", "material_code"), ("status", "status"),
-                     ("root", "root_id")):
+                     ("collection", "collection_id")):
         if f[key]:
             where.append(f"{col}=?")
             params.append(f[key])
@@ -55,7 +54,8 @@ def list_samples():
     per = 100
     rows = conn.execute(sql + f" LIMIT {per + 1} OFFSET {(page - 1) * per}", params).fetchall()
     has_more = len(rows) > per
-    return render_template("samples/list.html", rows=rows[:per], f=f, page=page, has_more=has_more,
+    coll = svc.get_collection(conn, f["collection"]) if f["collection"] else None
+    return render_template("samples/list.html", rows=rows[:per], f=f, page=page, has_more=has_more, coll=coll,
                            show_deleted=show_deleted, cohorts=codes("cohort"), specimens=codes("specimen"),
                            fractions=codes("fraction"), materials=codes("material"), statuses=codes("status"))
 
@@ -72,6 +72,7 @@ def detail(sample_id):
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL ORDER BY uri", (sample_id,)).fetchall()
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
+    coll = svc.get_collection(conn, s["collection_id"])
     flags = {"edits": sum(1 for h in history if h["action"] in ("update", "delete", "restore")),
              "corrections": len(corrections),
              "overrides": sum(1 for h in history if h["action"] == "insert" and (h["reason"] or "").startswith("Rule override"))}
@@ -80,10 +81,12 @@ def detail(sample_id):
                            custody=custody, files=files, history=history, flags=flags, participant=participant,
                            attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
                            users=_users(), parties=codes("party"), purposes=codes("custody_purpose"),
-                           label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"),
-                           corrections=corrections, effective=svc.effective_values(s, corrections),
-                           label_fields=svc.label_fields(), field_names=svc.FIELD_NAMES,
-                           collection_size=conn.execute("SELECT count(*) FROM sample WHERE root_id=?", (s["root_id"],)).fetchone()[0],
+                           label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"), platforms=codes("platform"),
+                           corrections=corrections, effective=svc.effective_values(corrections), coll=coll,
+                           coll_label=svc.collection_label(coll), label_fields=svc.label_fields(), field_names=svc.FIELD_NAMES,
+                           collection_size=conn.execute("SELECT count(*) FROM sample WHERE collection_id=?", (s["collection_id"],)).fetchone()[0],
+                           file_stem=svc.suggested_file_stem(s, None, None), assay_labels=current_app.config["ASSAY_LABELS"],
+                           platform_labels=current_app.config["PLATFORM_LABELS"],
                            json=json)
 
 
@@ -94,9 +97,7 @@ def tree(root_id):
     root = svc.get_sample(conn, root_id)
     if root is None:
         abort(404)
-    t = svc.tree(conn, root["root_id"], include_deleted=request.args.get("deleted") == "1")
-    return render_template("samples/tree.html", root=root, tree_json=json.dumps(t, default=str),
-                           highlight=request.args.get("highlight", ""), meanings=code_meaning_map())
+    return redirect(url_for("collections.tree", collection_id=root["collection_id"], highlight=request.args.get("highlight", "")))
 
 
 # ------------------------------------------------------------------ create
@@ -157,10 +158,10 @@ def _location_warning(conn, payload, exclude=None):
 
 
 def _handle_create(payload, template, **ctx):
-    """Shared POST logic for root and derived creation."""
+    """Shared POST logic for first-generation (from a collection) and derived tubes."""
     conn = get_db()
     action = request.form.get("action", "create")
-    required = REQUIRED_CREATE_FIELDS + (REQUIRED_ROOT_FIELDS if "participant" in payload else [])
+    required = REQUIRED_CREATE_FIELDS
     missing = _missing(payload, required)
     if missing:
         flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
@@ -184,6 +185,8 @@ def _handle_create(payload, template, **ctx):
         conn.commit()
         flash(f"Created {len(created)} tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else "")
               + (" (rule override recorded in the audit log)" if violations else ""), "ok")
+        if request.form.get("then") == "more" and payload.get("collection_id"):
+            return redirect(url_for("collections.add_tubes", collection_id=payload["collection_id"]))
         return redirect(url_for("samples.detail", sample_id=created[0]))
     except ValueError as e:
         conn.rollback()
@@ -191,17 +194,11 @@ def _handle_create(payload, template, **ctx):
         return _render_form(template, payload, **ctx)
 
 
-@bp.route("/new", methods=("GET", "POST"))
+@bp.route("/new")
 @writer_required
 def new_root():
-    conn = get_db()
-    participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
-    if request.method == "POST":
-        payload = _form_payload(extra=("participant", "collection_date", "specimen"))
-        return _handle_create(payload, "samples/new_root.html", participants=participants)
-    payload = {"fraction": "BLK", "material": "NAT", "count": 1, "status": "Available",
-               "created_by": g.user["initials"], "participant": request.args.get("participant", "")}
-    return _render_form("samples/new_root.html", payload, participants=participants)
+    """Nomenclature v2.1: the received specimen is a collection, not a tube."""
+    return redirect(url_for("collections.new", participant=request.args.get("participant", "")))
 
 
 @bp.route("/derive", methods=("GET", "POST"))
@@ -211,6 +208,9 @@ def derive_pick():
     conn = get_db()
     if request.method == "POST":
         pid = (request.form.get("parent_id") or "").strip().upper()
+        if pid.startswith("C:"):
+            return redirect(url_for("collections.add_tubes", collection_id=pid[2:], fraction=request.form.get("fraction", ""),
+                                    material=request.form.get("material", "")))
         if not pid:
             flash("Choose or scan the parent tube", "error")
         elif svc.get_sample(conn, pid) is None:
@@ -222,19 +222,22 @@ def derive_pick():
     fraction = (request.values.get("fraction") or "").strip().upper()
     material = (request.values.get("material") or "").strip().upper()
     participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
-    eligible, ineligible = [], []
+    eligible, ineligible, colls = [], [], []
     if participant and fraction and material:
+        for c in conn.execute("SELECT * FROM collection WHERE participant_id=? AND deleted_at IS NULL ORDER BY received_date, collection_id",
+                              (participant,)).fetchall():
+            comp = {"specimen": c["specimen_code"], "fraction": fraction, "material": material}
+            colls.append((c, svc.collection_label(c), rules.check_root(conn, comp)))
         tubes = conn.execute("SELECT * FROM sample WHERE participant_id=? AND deleted_at IS NULL ORDER BY sample_id",
                              (participant,)).fetchall()
         for t in tubes:
-            comp = {"project": t["project_code"], "cohort": t["cohort_code"], "participant": t["participant_id"],
-                    "collection_date": t["collection_date"], "specimen": t["specimen_code"],
-                    "fraction": fraction, "material": material}
+            comp = {seg: t[svc.SEGMENT_COLUMNS[seg]] for seg in svc.INHERITED_SEGMENTS}
+            comp.update(fraction=fraction, material=material)
             v = rules.check_derivation(conn, t, comp)
             (eligible if not v else ineligible).append((t, v))
     return render_template("samples/derive_pick.html", participants=participants, participant=participant,
                            fraction=fraction, material=material, fractions=codes("fraction"), materials=codes("material"),
-                           eligible=eligible, ineligible=ineligible, parent_id=request.form.get("parent_id", ""))
+                           eligible=eligible, ineligible=ineligible, colls=colls, parent_id=request.form.get("parent_id", ""))
 
 
 @bp.route("/<sample_id>/derive", methods=("GET", "POST"))
@@ -257,68 +260,6 @@ def derive(sample_id):
                "material": request.args.get("material") or "", "count": 1, "status": "Available",
                "created_by": g.user["initials"], "biobank_source": parent["biobank_source"]}
     return _render_form("samples/derive.html", payload, parent=parent, allowed_fr=allowed_fr, allowed_mat=allowed_mat)
-
-
-@bp.route("/derive/with-base", methods=("GET", "POST"))
-@writer_required
-def derive_with_base():
-    """Issue #1: register a short-lived base specimen and the tubes derived from it in one go.
-    The base tube is filled from this form (participant, collection date, specimen, as-collected quantity) plus
-    the operator, time, SOP and biobank entered for the derived tubes, and is marked Depleted when consumed."""
-    conn = get_db()
-    participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
-    ctx = {"participants": participants, "with_base": True}
-    if request.method == "POST":
-        payload = _form_payload(extra=("participant", "collection_date", "specimen",
-                                       "base_fraction", "base_material", "base_quantity", "base_unit"))
-        payload["parent_consumed"] = bool(request.form.get("parent_consumed"))
-        required = REQUIRED_CREATE_FIELDS + REQUIRED_ROOT_FIELDS + ["base_fraction", "base_material", "base_quantity", "base_unit"]
-        missing = _missing(payload, required)
-        if missing:
-            flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
-            return _render_form("samples/derive_with_base.html", payload, **ctx)
-        root = {"participant": payload["participant"], "collection_date": payload["collection_date"],
-                "specimen": payload["specimen"], "fraction": payload["base_fraction"], "material": payload["base_material"],
-                "count": 1, "created_datetime": payload["created_datetime"], "created_by": payload["created_by"],
-                "sop_code": payload["sop_code"], "biobank_source": payload["biobank_source"],
-                "quantity": payload["base_quantity"], "unit": payload["base_unit"],
-                "freezer": "NA", "rack": "NA", "box": "NA", "position": "NA", "status": "Available",
-                "notes": "Base specimen registered automatically from the derived-specimen form; the processing time, "
-                         "operator, SOP and biobank source were copied from the derived tube(s). Verify and edit as needed.",
-                "attributes": {}}
-        try:
-            _validate_create(conn, root)
-            derived = {k: v for k, v in payload.items() if not k.startswith("base_")}
-            _validate_create(conn, derived)
-            warn = _location_warning(conn, derived)
-            if warn:
-                flash(warn, "warn")
-                return _render_form("samples/derive_with_base.html", payload, confirm_location=True, **ctx)
-            root_ids, violations = svc.create_samples(conn, root, reason="Base specimen registered automatically from the derived-specimen form")
-            if violations:
-                conn.rollback()
-                return _render_form("samples/derive_with_base.html", payload,
-                                    ["Base specimen: " + v for v in violations], None, **ctx)
-            derived["parent_id"] = root_ids[0]
-            created, violations = svc.create_samples(conn, derived)
-            if violations:
-                conn.rollback()
-                prefix, _ = svc.preview(conn, {**derived, "parent_id": None, "participant": root["participant"],
-                                                "collection_date": root["collection_date"], "specimen": root["specimen"]})
-                return _render_form("samples/derive_with_base.html", payload,
-                                    ["Derived tube: " + v for v in violations], prefix, **ctx)
-            conn.commit()
-            flash(f"Registered base specimen {root_ids[0]}" + (" (marked Depleted)" if derived.get("parent_consumed") else "")
-                  + f" and {len(created)} derived tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else ""), "ok")
-            return redirect(url_for("samples.detail", sample_id=created[0]))
-        except ValueError as e:
-            conn.rollback()
-            flash(str(e), "error")
-            return _render_form("samples/derive_with_base.html", payload, **ctx)
-    payload = {"participant": request.args.get("participant", ""), "base_fraction": "BLK", "base_material": "NAT",
-               "base_unit": "mL", "fraction": request.args.get("fraction", ""), "material": request.args.get("material", ""),
-               "count": 1, "status": "Available", "created_by": g.user["initials"], "parent_consumed": True}
-    return _render_form("samples/derive_with_base.html", payload, **ctx)
 
 
 # ------------------------------------------------------------------ edit / delete
@@ -381,10 +322,11 @@ def correct(sample_id):
         abort(404)
     field = request.form.get("field", "")
     try:
-        target = svc.add_correction(conn, sample_id, field, request.form.get("value_" + field, ""), request.form.get("reason", ""))
+        kind, _ = svc.add_correction(conn, field, request.form.get("value_" + field, ""), request.form.get("reason", ""),
+                                     sample_id=sample_id)
         conn.commit()
         flash(f"Correction recorded for {svc.FIELD_NAMES.get(field, field).lower()}"
-              + (" on the whole collection" if target != sample_id else "") + "; the label and ID are unchanged.", "ok")
+              + (" on the whole collection" if kind == "collection" else "") + "; the label and ID are unchanged.", "ok")
     except ValueError as e:
         conn.rollback()
         flash(str(e), "error")
@@ -455,19 +397,23 @@ def add_file(sample_id):
     if svc.get_sample(conn, sample_id) is None:
         abort(404)
     f = {k: request.form.get(k, "").strip() or None for k in
-         ("uri", "assay_code", "run_id", "checksum_md5", "pipeline", "pipeline_version", "notes")}
-    if not f["uri"]:
-        flash("A file URI is required", "error")
+         ("uri", "assay_code", "platform_code", "run_id", "checksum_md5", "pipeline", "pipeline_version", "notes")}
+    if not (f["uri"] and f["assay_code"] and f["platform_code"]):
+        flash("File URI, assay and platform are required", "error")
         return redirect(url_for("samples.detail", sample_id=sample_id))
+    for cat, key in (("assay", "assay_code"), ("platform", "platform_code")):
+        if not conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1", (cat, f[key])).fetchone():
+            flash(f"{cat.capitalize()} must be an entry in the {cat} list", "error")
+            return redirect(url_for("samples.detail", sample_id=sample_id))
     base = f["uri"].rsplit("/", 1)[-1]
-    if not base.startswith(sample_id):
-        flash(f"Warning: file name does not start with the sample ID ({base})", "error")
+    if not base.startswith(sample_id + "_"):
+        flash(f"Warning: the file name should start with the sample ID and an underscore ({base})", "warn")
     try:
         cur = conn.execute(
-            "INSERT INTO data_file(sample_id, uri, assay_code, run_id, checksum_md5, pipeline, pipeline_version, notes, recorded_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (sample_id, f["uri"], f["assay_code"], f["run_id"], f["checksum_md5"], f["pipeline"], f["pipeline_version"],
-             f["notes"], g.user["username"]))
+            "INSERT INTO data_file(sample_id, uri, assay_code, platform_code, run_id, checksum_md5, pipeline, pipeline_version, notes, recorded_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (sample_id, f["uri"], f["assay_code"], f["platform_code"], f["run_id"], f["checksum_md5"], f["pipeline"],
+             f["pipeline_version"], f["notes"], g.user["username"]))
     except Exception as e:  # unique uri
         conn.rollback()
         flash("Could not add file: " + str(e), "error")

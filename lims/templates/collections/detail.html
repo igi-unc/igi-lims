@@ -1,0 +1,55 @@
+{% extends "base.html" %}{% from "_macros.html" import status_loc %}{% block title %}Collection {{ label }} · IGI LIMS{% endblock %}{% block content %}
+<h1>Collection {{ label }}{% if c.deleted_at %} <span class="status">DELETED {{ c.deleted_at }}</span>{% endif %}
+{% if corrections %} <a class="tag warn" href="#corrections">corrected</a>{% endif %}</h1>
+<p><a href="{{ url_for('main.browse', participant=c.participant_id) }}">Participant tree</a> · <a href="{{ url_for('collections.tree', collection_id=c.collection_id) }}">this collection's tree</a> · <a href="{{ url_for('samples.list_samples', collection=c.collection_id) }}">all tubes from this collection</a>
+{% if g.user.role != 'viewer' and not c.deleted_at %} · <a class="btn" href="{{ url_for('collections.add_tubes', collection_id=c.collection_id) }}">Add tubes made from this specimen</a>{% endif %}</p>
+<div class="cols">
+<div class="card">
+<h2>As received</h2>
+<table class="compact"><tbody>
+<tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=c.participant_id) }}">{{ c.participant_id }}</a>{% if participant %} · UNC{{ participant.unc_number }} · cohort {{ participant.cohort_code }}{% endif %}</td></tr>
+<tr><th>Specimen</th><td>{{ c.specimen_code }} – {{ meanings.specimen.get(c.specimen_code, '') }}</td></tr>
+<tr><th>Received</th><td>{{ c.received_date }} <span class="muted">({{ c.received_date|yymmmdd }} in tube IDs)</span>{% if 'received_date' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.received_date }}</a>{% endif %}</td></tr>
+<tr><th>Collected / received at</th><td>{{ c.time_collected or '—' }} / {{ c.time_received or '—' }}</td></tr>
+<tr><th>From / by</th><td>{{ c.received_from or '—' }} → {{ c.received_by or '—' }}</td></tr>
+<tr><th>Site · biobank</th><td>{{ c.site_code or '—' }} · {{ c.biobank_source or '—' }} {{ meanings.biobank_source.get(c.biobank_source, '') }}</td></tr>
+<tr><th>Quantity received</th><td>{% if c.quantity is not none %}{{ c.quantity }} {{ c.unit or '' }}{% else %}—{% endif %}</td></tr>
+<tr><th>Container · transport · appearance</th><td>{{ c.container_type or '—' }} · {{ c.transport_temp or '—' }} · {{ c.appearance or '—' }}</td></tr>
+<tr><th>Notes</th><td>{{ c.notes or '' }}</td></tr>
+<tr><th>Record</th><td class="muted">created {{ c.created_at }} by {{ c.created_by }}</td></tr>
+</tbody></table>
+{% if g.user.role != 'viewer' %}
+<p><a class="btn secondary" href="{{ url_for('collections.edit', collection_id=c.collection_id) }}">Edit</a></p>
+<details id="add-correction"><summary>Correct the received date</summary>
+<form method="post" action="{{ url_for('collections.correct', collection_id=c.collection_id) }}">
+  <p class="muted">The received date is printed in the ID of all {{ tubes|length }} tube(s) from this collection, so it cannot be edited. A correction records the right date and the reason; labels and IDs stay as printed.</p>
+  <div class="grid"><label><span class="lbl">Correct received date</span><input type="date" name="value_received_date" required></label>
+  <label class="wide"><span class="lbl">Reason (required; kept in the audit log)</span><textarea name="reason" required></textarea></label></div>
+  <button type="submit" class="secondary">Record correction</button>
+</form></details>
+{% if not tubes %}<details><summary>{% if c.deleted_at %}Restore{% else %}Delete{% endif %} this collection</summary>
+<form method="post" action="{{ url_for('collections.delete', collection_id=c.collection_id) }}">
+  <label><span class="lbl">Reason (optional; kept in the audit log)</span><textarea name="justification"></textarea></label>
+  <button type="submit" class="danger">{% if c.deleted_at %}Restore{% else %}Delete{% endif %}</button></form></details>{% endif %}
+{% endif %}
+{% if corrections %}<h2 id="corrections">Corrections</h2>
+<table class="compact"><thead><tr><th>Field</th><th>As printed</th><th>Corrected to</th><th>Reason</th><th>By</th></tr></thead><tbody>
+{% for x in corrections %}<tr class="flag"><td>Received date</td><td>{{ x.original_value }}</td><td><strong>{{ x.corrected_value }}</strong></td><td>{{ x.reason }}</td><td class="muted">{{ x.recorded_by }}, {{ x.recorded_at }}</td></tr>{% endfor %}
+</tbody></table>{% endif %}
+</div>
+<div class="card">
+<h2>Tubes ({{ tubes|length }})</h2>
+{% if tubes %}<table class="compact"><thead><tr><th>Tube</th><th>Parent</th><th>Status / location</th></tr></thead><tbody>
+{% for t in tubes %}<tr class="{% if t.deleted_at %}del{% endif %}"><td><a href="{{ url_for('samples.detail', sample_id=t.sample_id) }}" title="{{ t.sample_id }}"><code>{{ t.sample_id|short_id }}</code></a> <span class="muted">{{ t.created_by }} {{ t.processing_date|yymmmdd }}</span></td>
+<td>{% if t.parent_id %}<code>{{ t.parent_id|short_id }}</code>{% else %}<span class="muted">first generation</span>{% endif %}</td><td>{{ status_loc(t) }}</td></tr>{% endfor %}
+</tbody></table>{% else %}<p class="muted">No tubes yet.{% if g.user.role != 'viewer' %} <a href="{{ url_for('collections.add_tubes', collection_id=c.collection_id) }}">Add the tubes made from this specimen.</a>{% endif %}</p>{% endif %}
+</div>
+</div>
+<div class="card">
+<h2>Record history</h2>
+<table class="compact"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Change</th><th>Reason</th></tr></thead><tbody>
+{% for h in history %}<tr class="{% if h.action != 'insert' or h.reason %}flag{% endif %}"><td>{{ h.ts }}</td><td>{{ h.username }}</td><td>{{ h.action }}</td>
+<td>{% if h.action in ('update', 'correct') %}<div class="cols"><div><span class="muted">before</span>{{ h.before_json|kv }}</div><div><span class="muted">after</span>{{ h.after_json|kv }}</div></div>{% elif h.action == 'insert' %}<span class="muted">created</span>{% else %}{{ h.action }}{% endif %}</td><td>{{ h.reason or '' }}</td></tr>{% endfor %}
+</tbody></table>
+</div>
+{% endblock %}

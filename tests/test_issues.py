@@ -1,6 +1,10 @@
-"""GitHub issues #1-#3: combined base+derived registration, duplicate-location warning, time-only inputs."""
+"""GitHub issues #1-#3 under nomenclature v2.1.
+
+#1 (register the short-lived base specimen with its derived tubes) is now the collection flow: the specimen is a
+collection record, never a tube, and the first tubes are created straight from it.
+#2 occupied-slot warning. #3 time collected / received follow the received date (now on the collection form)."""
 from lims.db import get_db
-from conftest import make_root, derive, login, ALL_FIELDS
+from conftest import sid, make_root, new_collection, add_tubes, derive, ALL_FIELDS
 
 
 def _slot_codes(app):
@@ -19,106 +23,63 @@ def _count(app):
         return get_db().execute("SELECT count(*) FROM sample").fetchone()[0]
 
 
+def test_collection_then_first_tubes_replaces_base_specimen(app, alice):
+    r = alice.get("/register")
+    assert b"Register a collection" in r.data and b"base specimen" not in r.data.lower()
+    assert alice.get("/samples/new").headers["Location"].startswith("/collections/new")
+    cid = new_collection(alice, specimen_code="PB", container_type="EDTA", quantity="10")
+    page = alice.get(f"/collections/{cid}/tubes").data
+    assert b"first-generation tubes" in page
+    r = add_tubes(alice, cid, fraction="PBM", material="CPU", count="3", then="more")
+    assert b"Created 3 tube" in r.data and b"Tubes made from collection" in r.data      # back on the form for the next group
+    r = add_tubes(alice, cid, fraction="PLA", material="FRZ", count="2")
+    with app.app_context():
+        rows = get_db().execute("SELECT sample_id, parent_id, root_id, collection_id FROM sample ORDER BY sample_id").fetchall()
+    assert len(rows) == 5 and all(r["parent_id"] is None and r["root_id"] == r["sample_id"] and r["collection_id"] == cid for r in rows)
+    # the collection itself is recorded with its quantity and appears in the audit log once
+    with app.app_context():
+        c = get_db().execute("SELECT * FROM collection WHERE collection_id=?", (cid,)).fetchone()
+        assert c["quantity"] == 10 and c["specimen_code"] == "PB"
+        assert get_db().execute("SELECT count(*) FROM audit_log WHERE table_name='collection' AND record_id=?", (str(cid),)).fetchone()[0] == 1
+
+
 def test_location_warning_on_create_then_confirm(app, alice):
     _slot_codes(app)
-    r = make_root(alice, **LOC)
+    cid = new_collection(alice)
+    r = add_tubes(alice, cid, **LOC)
     assert b"Created 1 tube" in r.data and _count(app) == 1
-    # same slot again: warned, nothing created, form re-shown with the confirm field
-    r = make_root(alice, **LOC, collection_date="2026-09-30")
+    r = add_tubes(alice, cid, **LOC)
     assert b"already occupied" in r.data and b'name="confirm_location"' in r.data and _count(app) == 1
-    # NA anywhere in the slot is never a conflict
-    r = make_root(alice, **{**LOC, "box": "NA"}, collection_date="2026-10-01")
+    r = add_tubes(alice, cid, **{**LOC, "box": "NA"})
     assert b"Created 1 tube" in r.data and _count(app) == 2
-    # confirmed: created
-    r = make_root(alice, **LOC, collection_date="2026-09-30", confirm_location="1")
+    r = add_tubes(alice, cid, **LOC, confirm_location="1")
     assert b"Created 1 tube" in r.data and _count(app) == 3
 
 
 def test_location_warning_ignores_depleted_and_applies_to_edit(app, alice):
     _slot_codes(app)
-    make_root(alice, **LOC)
-    with app.app_context():
-        conn = get_db()
-        first = conn.execute("SELECT sample_id FROM sample").fetchone()[0]
-    # a derived tube elsewhere, then edit it into the occupied slot: warned, then confirmed
-    r = derive(alice, first, fraction="PFS", material="NAT")
-    with app.app_context():
-        child = get_db().execute("SELECT sample_id FROM sample WHERE parent_id=?", (first,)).fetchone()[0]
-    form = {"parent_id": first, "created_datetime": "2026-09-29T10:00", "created_by": "AA", "sop_code": "NA", "biobank_source": "IH",
-            "quantity": "1", "unit": "NA", "status": "Available", "notes": "NA", **LOC}
+    cid = new_collection(alice)
+    add_tubes(alice, cid, **LOC)
+    first = sid("PF", "PFM", "CPU")
+    derive(alice, first, fraction="TUM", material="CPU")
+    child = sid("PF", "TUM", "CPU")
+    form = {"parent_id": first, "sop_code": "NA", "biobank_source": "IH", "quantity": "1", "unit": "NA", "status": "Available",
+            "notes": "NA", **LOC}
     r = alice.post(f"/samples/{child}/edit", data=form, follow_redirects=True)
     assert b"already occupied" in r.data and first.encode() in r.data
-    with app.app_context():
-        assert get_db().execute("SELECT freezer FROM sample WHERE sample_id=?", (child,)).fetchone()[0] == "NA"
     r = alice.post(f"/samples/{child}/edit", data={**form, "confirm_location": "1"}, follow_redirects=True)
     assert b"Sample updated" in r.data
-    # once the first tube is Depleted the slot is free: no warning for a third tube
     alice.post(f"/samples/{first}/edit", data={**form, "parent_id": "", "status": "Depleted", **{k: "NA" for k in LOC}}, follow_redirects=True)
     alice.post(f"/samples/{child}/edit", data={**form, "status": "Depleted"}, follow_redirects=True)
-    r = make_root(alice, **LOC, collection_date="2026-10-02")
+    r = add_tubes(alice, cid, **LOC)
     assert b"Created 1 tube" in r.data and b"already occupied" not in r.data
 
 
-def _with_base(client, **over):
-    data = {"participant": "KXRTQVA", "collection_date": "2026-10-20", "specimen": "PB",
-            "base_fraction": "BLK", "base_material": "NAT", "base_quantity": "10", "base_unit": "mL", "parent_consumed": "1",
-            "fraction": "PBM", "material": "CPU", "count": "3", "quantity": "1", "unit": "mL", "created_by": "AA", **ALL_FIELDS}
-    data.update(over)
-    return client.post("/samples/derive/with-base", data=data, follow_redirects=True)
-
-
-def test_register_base_and_derived_together(app, alice):
-    r = alice.get("/samples/derive/with-base?participant=KXRTQVA&fraction=PBM&material=CPU")
-    assert r.status_code == 200 and b"Base specimen (as collected)" in r.data
-    r = _with_base(alice)
-    assert b"Registered base specimen" in r.data and b"3 derived tube(s)" in r.data, r.data[:600]
+def test_time_fields_follow_received_date(app, alice):
+    page = alice.get("/collections/new").data
+    assert b'data-time-for="time_collected"' in page and b"on the received date" in page and b"other date" in page
+    # the composed value (date + time) is stored on the collection
+    cid = new_collection(alice, time_collected="2026-09-29T08:15", time_received="2026-09-29T09:40")
     with app.app_context():
-        conn = get_db()
-        root = conn.execute("SELECT * FROM sample WHERE parent_id IS NULL").fetchone()
-        kids = conn.execute("SELECT * FROM sample WHERE parent_id=? ORDER BY sample_id", (root["sample_id"],)).fetchall()
-        assert root["sample_id"].endswith("-PB-BLK-NAT-01") and root["status"] == "Depleted"
-        assert root["quantity"] == 10 and root["unit"] == "mL" and root["freezer"] == "NA"
-        assert root["created_datetime"] == ALL_FIELDS["created_datetime"] and root["created_by"] == "AA"
-        assert "registered automatically" in root["notes"]
-        assert len(kids) == 3 and all(k["fraction_code"] == "PBM" and k["material_code"] == "CPU" and k["root_id"] == root["sample_id"] for k in kids)
-        # the automatic base tube is flagged in the audit log so it stands out in the changes-only view
-        reason = conn.execute("SELECT reason FROM audit_log WHERE table_name='sample' AND record_id=? AND action='insert'",
-                              (root["sample_id"],)).fetchone()[0]
-        assert "automatically" in reason
-    # the picker links to the combined form
-    r = alice.get("/samples/derive?participant=KXRTQVA&fraction=PBM&material=CPU")
-    assert b"/samples/derive/with-base?" in r.data
-
-
-def test_base_and_derived_together_is_all_or_nothing(app, alice):
-    # a derived tube the rules forbid: neither the base nor the derived tube is written
-    r = _with_base(alice, fraction="TUM", material="CPU")
-    assert b"Not created" in r.data and b"Derived tube:" in r.data and _count(app) == 0
-    # a base specimen the rules forbid
-    r = _with_base(alice, base_material="DNA")   # DNA is not an as-collected material
-    assert b"Base specimen:" in r.data and _count(app) == 0
-    # missing fields
-    r = _with_base(alice, base_quantity="")
-    assert b"Missing" in r.data and _count(app) == 0
-    # the base specimen may be kept (not consumed)
-    r = _with_base(alice, parent_consumed="")
-    assert b"Registered base specimen" in r.data and b"marked Depleted" not in r.data
-    with app.app_context():
-        assert get_db().execute("SELECT status FROM sample WHERE parent_id IS NULL").fetchone()[0] == "Available"
-
-
-def test_time_fields_follow_collection_date(app, alice):
-    # the base-specimen form carries the time-only inputs; the derive form (no collection date) does not
-    r = alice.get("/samples/new")
-    assert b"data-time-for" in r.data and b"on the collection date" in r.data
-    make_root(alice)
-    with app.app_context():
-        first = get_db().execute("SELECT sample_id FROM sample").fetchone()[0]
-    r = alice.get(f"/samples/{first}/derive")
-    assert b'input[name=collection_date]' in r.data   # script is shared; the branch is only taken when the input exists
-    # the composed value (date + time) round-trips through the normal attribute path
-    r = make_root(alice, collection_date="2026-10-20", attr_time_collected="2026-10-20T08:15", attr_time_received="2026-10-20T09:40")
-    assert b"Created 1 tube" in r.data
-    with app.app_context():
-        v = {k: val for k, val in get_db().execute("SELECT key, value FROM sample_attribute WHERE key IN ('time_collected','time_received')")}
-        assert v == {"time_collected": "2026-10-20T08:15", "time_received": "2026-10-20T09:40"}
+        c = get_db().execute("SELECT time_collected, time_received FROM collection WHERE collection_id=?", (cid,)).fetchone()
+    assert tuple(c) == ("2026-09-29T08:15", "2026-09-29T09:40")

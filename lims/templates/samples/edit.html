@@ -4,7 +4,7 @@
 <div class="card">
 <form method="post">
 <div class="grid">
-  <label><span class="lbl">Parent tube ID</span><input type="text" name="parent_id" value="{{ p.parent_id or '' }}" {% if not s.parent_id %}placeholder="root specimen (no parent)"{% endif %}></label>
+  <label><span class="lbl">Parent tube ID</span><input type="text" name="parent_id" value="{{ p.parent_id or '' }}" {% if not s.parent_id %}placeholder="first-generation tube (no parent)"{% endif %}></label>
   {% if 'created_datetime' in config.LABEL_FIELDS %}<label><span class="lbl">Processed on (on the label)</span><input type="datetime-local" value="{{ s.created_datetime or '' }}" disabled title="Printed on the label; use Correct on the tube page"></label>
   {% else %}<label><span class="lbl">Processed on</span><input type="datetime-local" name="created_datetime" value="{{ p.created_datetime or '' }}"></label>{% endif %}
   {% if 'created_by' in config.LABEL_FIELDS %}<label><span class="lbl">Operator (on the label)</span><input type="text" value="{{ s.created_by or '' }}" disabled title="Printed on the label; use Correct on the tube page"></label>

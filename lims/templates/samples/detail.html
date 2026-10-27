@@ -7,11 +7,12 @@
 <div class="card">
 <h2>Provenance</h2>
 <div class="chain">
-  {% for a in ancestors %}<a href="{{ url_for('samples.detail', sample_id=a.sample_id) }}" title="{{ a.sample_id }}"><code>{{ a.sample_id.split('-')[-3:]|join('-') }}</code></a> <span class="sep">→</span> {% endfor %}
-  <code class="here">{{ s.sample_id.split('-')[-3:]|join('-') }}</code>
+  <a href="{{ url_for('collections.detail', collection_id=coll.collection_id) }}" title="the specimen as received">collection {{ coll_label }}</a> <span class="sep">→</span>
+  {% for a in ancestors %}<a href="{{ url_for('samples.detail', sample_id=a.sample_id) }}" title="{{ a.sample_id }}"><code>{{ a.sample_id|short_id }}</code></a> <span class="sep">→</span> {% endfor %}
+  <code class="here">{{ s.sample_id|short_id }}</code>
   {% if children %}<span class="sep">→</span> <span class="muted">{{ children|length }} child tube(s)</span>{% endif %}
 </div>
-<p><a href="{{ url_for('main.browse', participant=s.participant_id, highlight=s.sample_id) }}">Participant tree</a> · <a href="{{ url_for('samples.tree', root_id=s.root_id, highlight=s.sample_id) }}">this collection only</a> · <a href="{{ url_for('samples.list_samples', root=s.root_id) }}">all tubes from this collection</a>
+<p><a href="{{ url_for('main.browse', participant=s.participant_id, highlight=s.sample_id) }}">Participant tree</a> · <a href="{{ url_for('collections.tree', collection_id=s.collection_id, highlight=s.sample_id) }}">this collection only</a> · <a href="{{ url_for('samples.list_samples', collection=s.collection_id) }}">all tubes from this collection</a>
 {% if g.user.role != 'viewer' and not s.deleted_at %} · <a class="btn" href="{{ url_for('samples.derive', sample_id=s.sample_id) }}">Derive new tube(s) from this</a>{% endif %}</p>
 {% if children %}<h3>Children</h3><ul class="plain">{% for c in children %}<li><a href="{{ url_for('samples.detail', sample_id=c.sample_id) }}"><code>{{ c.sample_id }}</code></a> <span class="status {{ c.status }}">{{ c.status }}</span>{% if c.deleted_at %} <span class="muted">deleted</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
 </div>
@@ -20,14 +21,14 @@
 <div class="card">
 <h2>Tube</h2>
 <table class="compact"><tbody>
-<tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=s.participant_id) }}">{{ s.participant_id }}</a> · cohort {{ s.cohort_code }} ({{ meanings.cohort.get(s.cohort_code,'') }}){% if participant and participant.external_participant_id %} · site ID {{ participant.external_participant_id }} ({{ participant.site_code or '?' }}){% endif %}</td></tr>
-<tr><th>Collected</th><td>{{ s.collection_date }}{% if 'collection_date' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.collection_date }}</a>{% endif %}</td></tr>
+<tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=s.participant_id) }}">{{ s.participant_id }}</a> · {{ s.unc_id }} · cohort {{ s.cohort_code }} ({{ meanings.cohort.get(s.cohort_code,'') }})</td></tr>
+<tr><th>Received</th><td>{{ s.received_date }} <span class="muted">({{ s.received_date|yymmmdd }}, collection <a href="{{ url_for('collections.detail', collection_id=s.collection_id) }}">#{{ s.collection_id }}</a>)</span>{% if 'received_date' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.received_date }}</a>{% endif %}</td></tr>
 <tr><th>Specimen</th><td>{{ s.specimen_code }} – {{ meanings.specimen.get(s.specimen_code,'') }}</td></tr>
 <tr><th>Fraction</th><td>{{ s.fraction_code }} – {{ meanings.fraction.get(s.fraction_code,'') }}</td></tr>
 <tr><th>Material</th><td>{{ s.material_code }} – {{ meanings.material.get(s.material_code,'') }}</td></tr>
 <tr><th>Aliquot</th><td>{{ '%02d'|format(s.aliquot) }}</td></tr>
-<tr><th>Parent</th><td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id }}</code></a>{% else %}<span class="muted">none (root specimen)</span>{% endif %}</td></tr>
-<tr><th>Processed</th><td>{{ s.created_datetime or '—' }}{% if 'created_datetime' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.created_datetime }}</a>{% endif %}
+<tr><th>Parent</th><td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id }}</code></a>{% else %}<span class="muted">none: first-generation tube from collection {{ coll_label }}</span>{% endif %}</td></tr>
+<tr><th>Processed</th><td>{{ s.created_datetime or '—' }} <span class="muted">({{ s.processing_date|yymmmdd }})</span>{% if 'created_datetime' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.created_datetime }}</a>{% endif %}
   by {{ s.created_by or '—' }}{% if 'created_by' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.created_by }}</a>{% endif %}{% if s.sop_code %} under {{ s.sop_code }}{% endif %}</td></tr>
 <tr><th>Biobank source</th><td>{{ s.biobank_source or '—' }} {{ meanings.biobank_source.get(s.biobank_source, '') }}</td></tr>
 <tr><th>Quantity</th><td>{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% else %}—{% endif %}</td></tr>
@@ -39,12 +40,12 @@
 <p><a class="btn secondary" href="{{ url_for('samples.edit', sample_id=s.sample_id) }}">Edit</a></p>
 <details id="add-correction"><summary>Correct a value printed on the label</summary>
 <form method="post" action="{{ url_for('samples.correct', sample_id=s.sample_id) }}">
-  <p class="muted">{% for f in label_fields %}{{ field_names.get(f, f) }}{% if not loop.last %}, {% endif %}{% endfor %} are on the label, so they cannot be edited. A correction records the right value and the reason beside the original; the label, the ID and the stored value stay as printed. A collection date correction applies to all {{ collection_size }} tube(s) from this collection.</p>
+  <p class="muted">{% for f in label_fields %}{{ field_names.get(f, f) }}{% if not loop.last %}, {% endif %}{% endfor %} are on the label, so they cannot be edited. A correction records the right value and the reason beside the original; the label, the ID and the stored value stay as printed. A received date correction applies to all {{ collection_size }} tube(s) from this collection.</p>
   <div class="grid">
   <label><span class="lbl">Field</span><select name="field" required>{% for f in label_fields %}<option value="{{ f }}">{{ field_names.get(f, f) }}</option>{% endfor %}</select></label>
   {% for f in label_fields %}
   <label data-corr="{{ f }}"><span class="lbl">Correct {{ field_names.get(f, f)|lower }}</span>
-    {% if f == 'collection_date' %}<input type="date" name="value_{{ f }}">
+    {% if f == 'received_date' %}<input type="date" name="value_{{ f }}">
     {% elif f == 'created_datetime' %}<input type="datetime-local" name="value_{{ f }}">
     {% elif f == 'created_by' %}<select name="value_{{ f }}"><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}">{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select>
     {% else %}<input type="text" name="value_{{ f }}">{% endif %}</label>
@@ -69,7 +70,7 @@
 {% endif %}
 {% if corrections %}<h2 id="corrections">Corrections</h2>
 <table class="compact"><thead><tr><th>Field</th><th>As printed</th><th>Corrected to</th><th>Reason</th><th>By</th></tr></thead><tbody>
-{% for c in corrections %}<tr class="flag"><td>{{ field_names.get(c.field, c.field) }}{% if c.sample_id != s.sample_id %} <span class="muted">(whole collection)</span>{% endif %}</td><td>{{ c.original_value or '—' }}</td><td><strong>{{ c.corrected_value }}</strong></td><td>{{ c.reason }}</td><td class="muted">{{ c.recorded_by }}, {{ c.recorded_at }}</td></tr>{% endfor %}
+{% for c in corrections %}<tr class="flag"><td>{{ field_names.get(c.field, c.field) }}{% if c.collection_id %} <span class="muted">(whole collection)</span>{% endif %}</td><td>{{ c.original_value or '—' }}</td><td><strong>{{ c.corrected_value }}</strong></td><td>{{ c.reason }}</td><td class="muted">{{ c.recorded_by }}, {{ c.recorded_at }}</td></tr>{% endfor %}
 </tbody></table>{% endif %}
 <h2>Metadata</h2>
 <table class="compact"><tbody>
@@ -78,7 +79,7 @@
 {% else %}<tr><td class="muted">No metadata recorded.{% if g.user.role != 'viewer' %} Add it with Edit, or via Import QC.{% endif %}</td></tr>{% endfor %}
 </tbody></table>
 <h3>Label</h3>
-<img class="label-img" src="{{ url_for('samples.label_svg', sample_id=s.sample_id) }}" alt="{% for row in label %}{{ row }} {% endfor %}{{ s.created_by or '' }}">
+<img class="label-img" src="{{ url_for('samples.label_svg', sample_id=s.sample_id) }}" alt="{% for row in label %}{{ row }} {% endfor %}">
 <p class="muted small">Preview of the printed label. The 2D code (Data Matrix) holds the full sample ID.</p>
 </div>
 
@@ -120,22 +121,35 @@
 {% endif %}
 
 <h2>Data files</h2>
-<table class="compact"><thead><tr><th>URI</th><th>Assay</th><th>Run</th><th>Pipeline</th><th></th></tr></thead><tbody>
-{% for f in files %}<tr><td><code class="wrap">{{ f.uri }}</code>{% if f.checksum_md5 %}<br><span class="muted">md5 {{ f.checksum_md5 }}</span>{% endif %}</td><td>{{ f.assay_code or '' }}</td><td>{{ f.run_id or '' }}</td><td>{{ f.pipeline or '' }} {{ f.pipeline_version or '' }}</td>
+<table class="compact"><thead><tr><th>URI</th><th>Assay · platform</th><th>Run</th><th>Pipeline</th><th></th></tr></thead><tbody>
+{% for f in files %}<tr><td><code class="wrap">{{ f.uri }}</code>{% if f.checksum_md5 %}<br><span class="muted">md5 {{ f.checksum_md5 }}</span>{% endif %}</td><td>{{ f.assay_code or '' }}{% if f.platform_code %} · {{ f.platform_code }}{% endif %}</td><td>{{ f.run_id or '' }}</td><td>{{ f.pipeline or '' }} {{ f.pipeline_version or '' }}</td>
 <td>{% if g.user.role != 'viewer' %}<form class="inline" method="post" action="{{ url_for('samples.delete_file', sample_id=s.sample_id, file_id=f.id) }}" onsubmit="return confirm('Remove this file record?')"><button class="small secondary">remove</button></form>{% endif %}</td></tr>
 {% else %}<tr><td colspan="5" class="muted">No files linked.</td></tr>{% endfor %}
 </tbody></table>
 {% if g.user.role != 'viewer' %}
 <details><summary>Link a data file</summary>
 <form method="post" action="{{ url_for('samples.add_file', sample_id=s.sample_id) }}"><div class="grid">
-  <label class="wide"><span class="lbl">URI (file name should start with <code>{{ s.sample_id }}_</code>)</span><input type="text" name="uri" required placeholder="gs://bucket/path/{{ s.sample_id }}_ONT-R001.bam"></label>
-  <label><span class="lbl">Assay</span><select name="assay_code"><option value="">—</option>{% for a in assays %}<option value="{{ a.code }}">{{ a.code }} – {{ a.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Assay</span><select name="assay_code" required><option value="">—</option>{% for a in assays %}<option value="{{ a.code }}" data-label="{{ assay_labels.get(a.code, a.code) }}">{{ a.code }} – {{ a.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Platform</span><select name="platform_code" required><option value="">—</option>{% for a in platforms %}<option value="{{ a.code }}" data-label="{{ platform_labels.get(a.code, a.code) }}">{{ a.code }} – {{ a.meaning }}</option>{% endfor %}</select></label>
+  <p class="wide muted">Suggested file name: <code id="file-stem" data-stem="{{ file_stem }}">{{ file_stem }}_…</code></p>
+  <label class="wide"><span class="lbl">URI (the file name must start with <code>{{ s.sample_id }}_</code>)</span><input type="text" name="uri" required placeholder="gs://bucket/path/{{ file_stem }}_….bam"></label>
   <label><span class="lbl">Run ID</span><input type="text" name="run_id"></label>
   <label><span class="lbl">MD5</span><input type="text" name="checksum_md5"></label>
   <label><span class="lbl">Pipeline</span><input type="text" name="pipeline"></label>
   <label><span class="lbl">Version</span><input type="text" name="pipeline_version"></label>
   <label class="wide"><span class="lbl">Notes</span><input type="text" name="notes"></label>
-</div><button type="submit">Link file</button></form></details>
+</div><button type="submit">Link file</button></form>
+<script>
+(function () {
+  const out = document.getElementById("file-stem"), a = document.querySelector("select[name=assay_code]"), p = document.querySelector("select[name=platform_code]");
+  function upd() {
+    const parts = [out.dataset.stem];
+    [a, p].forEach(s => { const o = s.selectedOptions[0]; if (o && o.value) parts.push(o.dataset.label); });
+    out.textContent = parts.join("_") + (a.value && p.value ? "" : "_…");
+  }
+  a.addEventListener("change", upd); p.addEventListener("change", upd);
+})();
+</script></details>
 {% endif %}
 </div>
 </div>

@@ -9,46 +9,64 @@ ID_SEGMENTS, nothing else.
 import os
 
 # ---------------------------------------------------------------------------
-# Sample ID format
+# Sample ID format: IGI Sample Nomenclature v2.1 (2026-10-19)
 #
 # Each segment: (name, regex, kind). `kind` controls validation:
-#   "const"     -> regex is a literal
-#   "code:<cat>"-> value must be an active code in code_list for that category
-#   "date:<fmt>"-> parsed with datetime.strptime(fmt); stored as ISO date
-#   "int"       -> integer (the aliquot counter issued by the database)
-#   None        -> regex only
+#   "const"         -> regex is a literal
+#   "code:<cat>"    -> value must be an active code in code_list for that category
+#   "date:yymmmdd"  -> 2-digit year, 3-letter uppercase month, 2-digit day (26SEP29); stored as ISO date
+#   "int"           -> integer (the aliquot counter issued by the database)
+#   "operator"      -> initials of an active user (2 or 3 uppercase letters)
+#   None            -> regex only
 #
-# Current spec (35 characters):
-#   IGI-CC-PPPPPPP-YYMMDD-SS-FFF-MMM-AA
+#   IGI-CC-PNNN-UNCNNN-YYMMMDD-SS-FFF-MMM-AA-OO(O)-YYMMMDD   (51 or 52 characters)
+#   IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-MF-26SEP29
+#
+# The v2 format (35 characters, 7-letter participant code) is preserved at git tag v2-final.
 # ---------------------------------------------------------------------------
+_MONTH = r"(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)"
+_DAY = r"(?:0[1-9]|[12]\d|3[01])"
 ID_SEGMENTS = [
-    ("project",         r"IGI",                                            "const"),
-    ("cohort",          r"[A-Z]{2}",                                       "code:cohort"),
-    ("participant",     r"[A-Z]{7}",                                       None),
-    ("collection_date", r"\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])",  "date:%y%m%d"),
-    ("specimen",        r"[A-Z]{2}",                                       "code:specimen"),
-    ("fraction",        r"[A-Z0-9]{3}",                                    "code:fraction"),
-    ("material",        r"[A-Z0-9]{3}",                                    "code:material"),
-    ("aliquot",         r"(?:0[1-9]|[1-9]\d)",                             "int"),
+    ("project",         r"IGI",                       "const"),
+    ("cohort",          r"[A-Z]{2}",                  "code:cohort"),
+    ("participant",     r"P\d{3}",                    None),
+    ("unc_id",          r"UNC\d{3}",                  None),
+    ("received_date",   r"\d{2}" + _MONTH + _DAY,     "date:yymmmdd"),
+    ("specimen",        r"[A-Z]{2}",                  "code:specimen"),
+    ("fraction",        r"[A-Z0-9]{3}",               "code:fraction"),
+    ("material",        r"[A-Z0-9]{3}",               "code:material"),
+    ("aliquot",         r"(?:0[1-9]|[1-9]\d)",        "int"),
+    ("operator",        r"[A-Z]{2,3}",                "operator"),
+    ("processing_date", r"\d{2}" + _MONTH + _DAY,     "date:yymmmdd"),
 ]
 ID_SEPARATOR = "-"
+ID_LENGTH = None        # 51 or 52: the operator is 2 or 3 letters. The pattern, not the length, catches errors.
+ALIQUOT_WIDTH = 2
+ALIQUOT_MAX = 99
+# Label: three rows of at most 18 characters, broken at hyphens, beside a Data Matrix of the full ID.
+LABEL_ROWS = [["project", "cohort", "participant", "unc_id"],
+              ["received_date", "specimen", "fraction", "material"],
+              ["aliquot", "operator", "processing_date"]]
+
+# IGI patient numbers are issued in sequence (P001, P002, ...) and never reused; admins may enter one.
+PARTICIPANT_PREFIX = "P"
+PARTICIPANT_DIGITS = 3
+UNC_DIGITS = 3
 
 # Fields printed on the tube label. Once a tube exists they cannot be edited, because the
 # printed label (and any file named after the ID) would then disagree with the record.
 # A mistake is fixed by adding a correction: an audited note with the right value and a
-# reason, shown beside the original. Collection-level fields (the collection date) are
-# corrected once for the whole collection. When nomenclature v2.1 puts the processing date
-# in the ID, add "created_datetime" here.
-LABEL_FIELDS = ["collection_date", "created_by"]
-COLLECTION_FIELDS = ["collection_date"]   # shared by every tube of a collection; corrected on the root
-ID_LENGTH = 35          # set to None to skip the fixed-length check
-ALIQUOT_WIDTH = 2
-ALIQUOT_MAX = 99
+# reason, shown beside the original. The received date belongs to the collection and is
+# corrected once for all of its tubes.
+LABEL_FIELDS = ["received_date", "created_by", "created_datetime"]
+COLLECTION_FIELDS = ["received_date"]
 
-# Characters used when the LIMS generates a participant code. I and O are
-# excluded to avoid confusion with 1 and 0 on labels.
-PARTICIPANT_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-PARTICIPANT_LENGTH = 7
+# Data file names: <sample ID>_<source>_<assay label>_<platform label> (nomenclature section 3).
+ASSAY_LABELS = {"WES": "DNA_WES", "WGS": "DNA_WGS", "RSQ": "bulkRNA", "SCR": "scRNA", "VDJ": "scVDJ",
+                "TCR": "bulkTCR", "IPX": "immunopeptidome"}
+PLATFORM_LABELS = {"ILM": "Illumina", "ONT": "ONT", "10X": "10XGEX", "MS": "MS"}
+TUMOR_SPECIMENS = ["PF", "TU", "LN", "BM"]       # source "tumor"; anything else is "normal"
+TCELL_FRACTIONS = ["TTC", "CD4", "CD8"]          # adds "_Tcell" to the source
 
 # ---------------------------------------------------------------------------
 # Flask / runtime

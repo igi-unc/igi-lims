@@ -1,19 +1,20 @@
 {% extends "base.html" %}{% block title %}{{ p.participant_id }} · IGI LIMS{% endblock %}{% block content %}
-<h1>Participant <code>{{ p.participant_id }}</code> <a class="btn secondary" href="{{ url_for('main.browse', participant=p.participant_id) }}">Tree view</a></h1>
+<h1>Participant <code>{{ p.participant_id }}</code> <span class="muted">UNC{{ p.unc_number }}</span> <a class="btn secondary" href="{{ url_for('main.browse', participant=p.participant_id) }}">Tree view</a></h1>
 <div class="card">
 <table class="compact"><tbody>
+<tr><th>IGI patient ID</th><td>{{ p.participant_id }}</td></tr>
+<tr><th>UNC ID</th><td>UNC{{ p.unc_number }} ({{ p.site_code or 'UNC' }})</td></tr>
 <tr><th>Cohort</th><td>{{ p.cohort_code }} – {{ meanings.cohort.get(p.cohort_code,'') }}</td></tr>
-<tr><th>Site ID</th><td>{{ p.external_participant_id or '—' }} ({{ p.site_code or '—' }})</td></tr>
 <tr><th>Notes</th><td>{{ p.notes or '' }}</td></tr>
 <tr><th>Record</th><td class="muted">created {{ p.created_at }} by {{ p.created_by }}</td></tr>
 </tbody></table>
-{% if g.user.role != 'viewer' %}<p><a class="btn secondary" href="{{ url_for('participants.edit', participant_id=p.participant_id) }}">Edit</a> <a class="btn" href="{{ url_for('samples.new_root', participant=p.participant_id) }}">Register a collected specimen</a></p>{% endif %}
+{% if g.user.role != 'viewer' %}<p><a class="btn secondary" href="{{ url_for('participants.edit', participant_id=p.participant_id) }}">Edit</a> <a class="btn" href="{{ url_for('collections.new', participant=p.participant_id) }}">Register a collection</a></p>{% endif %}
 </div>
 <div class="card">
 <h2>Collections</h2>
-<table class="compact"><thead><tr><th>Collected</th><th>Specimen</th><th>Root tube</th><th class="num">Tubes</th><th class="num">Available</th><th></th></tr></thead><tbody>
-{% for c in collections %}<tr><td>{{ c.collection_date }}</td><td>{{ c.specimen_code }} <span class="muted">{{ meanings.specimen.get(c.specimen_code,'') }}</span></td><td><a href="{{ url_for('samples.detail', sample_id=c.root_id) }}"><code>{{ c.root_id }}</code></a></td><td class="num">{{ c.n }}</td><td class="num">{{ c.n_avail }}</td><td><a href="{{ url_for('samples.tree', root_id=c.root_id) }}">tree</a> · <a href="{{ url_for('samples.list_samples', root=c.root_id) }}">table</a></td></tr>
-{% else %}<tr><td colspan="6" class="muted">No specimens registered.</td></tr>{% endfor %}
+<table class="compact"><thead><tr><th>Collection</th><th>Received</th><th>Specimen</th><th class="num">Tubes</th><th class="num">Available</th><th></th></tr></thead><tbody>
+{% for c in collections %}<tr><td><a href="{{ url_for('collections.detail', collection_id=c.collection_id) }}">{{ labels[c.collection_id] }}</a></td><td>{{ c.received_date }}</td><td>{{ c.specimen_code }} <span class="muted">{{ meanings.specimen.get(c.specimen_code,'') }}</span></td><td class="num">{{ c.n }}</td><td class="num">{{ c.n_avail }}</td><td><a href="{{ url_for('collections.tree', collection_id=c.collection_id) }}">tree</a> · <a href="{{ url_for('samples.list_samples', collection=c.collection_id) }}">table</a></td></tr>
+{% else %}<tr><td colspan="6" class="muted">No collections registered.</td></tr>{% endfor %}
 </tbody></table>
 </div>
 {% endblock %}

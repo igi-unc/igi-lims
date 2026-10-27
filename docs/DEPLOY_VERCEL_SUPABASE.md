@@ -71,7 +71,7 @@ terminal, using the `CRON_SECRET` you chose:
 curl -H "Authorization: Bearer <CRON_SECRET>" https://<your-project>.vercel.app/cron/demo-reset
 ```
 
-It answers `{"reset": true, "participant": "...", "tubes": 43}` after a few
+It answers `{"reset": true, "participant": "P101", "tubes": 40}` after a few
 seconds (that count is the main participant; three smaller ones are created too). Open the site: the login page names the three demo accounts (the
 password is not shown), and `demo` / `reviewer` / `viewer` all work with
 `LIMS_DEMO_PASSWORD`. Send testers the URL and the password separately.
@@ -90,7 +90,9 @@ and run `.venv/bin/flask demo-reset` or `.venv/bin/flask run`. Without
 
 Every push to `main` redeploys automatically. If a new version adds a database
 table, the app creates it on the first request after the deploy, so no reset
-is needed for that either. Pull requests get preview URLs
+is needed for that either. A demo database still on nomenclature v2 is rebuilt
+for v2.1 automatically on the first request; to roll back to v2, see *Falling
+back to nomenclature v2* in the README. Pull requests get preview URLs
 that share the same database, so treat them as the same demo.
 
 ## Optional: the Supabase integration on the Vercel marketplace

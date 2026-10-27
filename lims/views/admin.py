@@ -3,7 +3,8 @@ from ..auth import hash_password
 
 from ..auth import admin_required, login_required, create_user
 from ..db import get_db
-from .. import audit, rules
+import re
+from .. import audit, rules, ids
 from .helpers import codes
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -35,8 +36,12 @@ def user_new():
         elif conn.execute("SELECT 1 FROM account WHERE username=?", (f["username"].strip(),)).fetchone():
             flash("Username already exists", "error")
         else:
-            create_user(conn, f["username"].strip(), f["display_name"].strip(), f["initials"].strip().upper(),
-                        f["password"], f["role"])
+            try:
+                create_user(conn, f["username"].strip(), f["display_name"].strip(), f["initials"].strip().upper(),
+                            f["password"], f["role"])
+            except ValueError as e:
+                flash(str(e), "error")
+                return render_template("admin/user_form.html", u=request.form)
             audit.log(conn, "user", f["username"].strip(), "insert", after={"role": f["role"]})
             conn.commit()
             flash("User created", "ok")
@@ -90,8 +95,12 @@ def code_lists():
             return redirect(url_for("admin.code_lists", category=cat))
         if action == "add":
             cat, code, meaning = f["category"], f["code"].strip().upper(), f["meaning"].strip()
+            width_re = ids.code_segment_regex(cat)
             if not code or not meaning:
                 flash("Code and meaning are required", "error")
+            elif width_re and not re.fullmatch(width_re, code):
+                flash(f"{cat.capitalize()} codes are part of the sample ID and must match {width_re} "
+                      f"(for example a specimen is exactly 2 letters); '{code}' does not", "error")
             elif conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=?", (cat, code)).fetchone():
                 flash("Code already exists (codes are never repurposed; retire it instead)", "error")
             else:

@@ -1,9 +1,10 @@
 """Compose, parse and validate sample IDs according to config.ID_SEGMENTS."""
 import re
-import secrets
 from datetime import datetime, date
 
 from flask import current_app
+
+MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 
 class IdError(ValueError):
@@ -18,6 +19,10 @@ def _sep():
     return current_app.config["ID_SEPARATOR"]
 
 
+def segment_names():
+    return [name for name, _, _ in _segments()]
+
+
 def full_pattern():
     """Anchored regex for the whole ID, e.g. for pipeline scripts."""
     parts = [f"({regex})" for _, regex, _ in _segments()]
@@ -25,6 +30,41 @@ def full_pattern():
     sep_re = sep if sep == "-" else re.escape(sep)   # keep the published pattern readable
     return "^" + sep_re.join(parts) + "$"
 
+
+# ------------------------------------------------------------------ dates
+
+def format_yymmmdd(value):
+    """date or ISO string -> 26SEP29 (locale independent, always uppercase)."""
+    if isinstance(value, str):
+        value = date.fromisoformat(value[:10])
+    return f"{value.year % 100:02d}{MONTHS[value.month - 1]}{value.day:02d}"
+
+
+def parse_yymmmdd(text):
+    """26SEP29 -> ISO date string. Raises ValueError for impossible dates (26FEB31)."""
+    m = re.fullmatch(r"(\d{2})([A-Z]{3})(\d{2})", text)
+    if not m or m.group(2) not in MONTHS:
+        raise ValueError(f"'{text}' is not a YYMMMDD date")
+    return date(2000 + int(m.group(1)), MONTHS.index(m.group(2)) + 1, int(m.group(3))).isoformat()
+
+
+def _format_date(kind, value):
+    fmt = kind.split(":", 1)[1]
+    if fmt == "yymmmdd":
+        return format_yymmmdd(value)
+    if isinstance(value, str):
+        value = date.fromisoformat(value[:10])
+    return value.strftime(fmt)
+
+
+def _parse_date(kind, text):
+    fmt = kind.split(":", 1)[1]
+    if fmt == "yymmmdd":
+        return parse_yymmmdd(text)
+    return datetime.strptime(text, fmt).date().isoformat()
+
+
+# ------------------------------------------------------------------ parse / compose
 
 def parse(sample_id):
     """Return dict of components (dates as ISO strings, aliquot as int). Raises IdError."""
@@ -39,9 +79,8 @@ def parse(sample_id):
     out = {}
     for (name, _, kind), value in zip(_segments(), m.groups()):
         if kind and kind.startswith("date:"):
-            fmt = kind.split(":", 1)[1]
             try:
-                out[name] = datetime.strptime(value, fmt).date().isoformat()
+                out[name] = _parse_date(kind, value)
             except ValueError:
                 raise IdError(f"{name} '{value}' is not a valid date")
         elif kind == "int":
@@ -51,8 +90,28 @@ def parse(sample_id):
     return out
 
 
+def _format_segment(name, regex, kind, components):
+    if kind == "const":
+        return regex
+    value = components[name]
+    if value is None or value == "":
+        raise IdError(f"{name} is required")
+    if kind and kind.startswith("date:"):
+        return _format_date(kind, value)
+    if kind == "int":
+        return str(int(value)).zfill(current_app.config["ALIQUOT_WIDTH"])
+    return str(value)
+
+
+def compose(components):
+    """Build an ID string from a components dict (dates may be ISO strings or date objects)."""
+    sid = _sep().join(_format_segment(n, r, k, components) for n, r, k in _segments())
+    parse(sid)  # round-trip validation
+    return sid
+
+
 def check_codes(conn, components):
-    """Verify code-list segments against active codes. Returns list of problems."""
+    """Verify code-list and operator segments. Returns list of problems."""
     problems = []
     for name, _, kind in _segments():
         if kind and kind.startswith("code:"):
@@ -64,36 +123,20 @@ def check_codes(conn, components):
                 problems.append(f"{name} code '{components[name]}' is not in the {category} code list")
             elif not row["active"]:
                 problems.append(f"{name} code '{components[name]}' is retired")
+        elif kind == "operator":
+            if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (components[name],)).fetchone():
+                problems.append(f"Operator '{components[name]}' is not an active user")
     return problems
 
 
-def compose(components):
-    """Build an ID string from a components dict (dates may be ISO strings or date objects)."""
+def prefix_without_aliquot(components):
+    """Every segment to the left of the aliquot, plus the separator: aliquots are unique within this prefix."""
     parts = []
     for name, regex, kind in _segments():
-        if kind == "const":
-            parts.append(regex)
-            continue
-        value = components[name]
-        if kind and kind.startswith("date:"):
-            fmt = kind.split(":", 1)[1]
-            if isinstance(value, str):
-                value = date.fromisoformat(value)
-            value = value.strftime(fmt)
-        elif kind == "int":
-            value = str(int(value)).zfill(current_app.config["ALIQUOT_WIDTH"])
-        parts.append(str(value))
-    sid = _sep().join(parts)
-    parse(sid)  # round-trip validation
-    return sid
-
-
-def prefix_without_aliquot(components):
-    """Everything to the left of the aliquot, used to issue the next aliquot number."""
-    c = dict(components)
-    c["aliquot"] = 1
-    sid = compose(c)
-    return sid.rsplit(_sep(), 1)[0] + _sep()
+        if kind == "int":
+            break
+        parts.append(_format_segment(name, regex, kind, components))
+    return _sep().join(parts) + _sep()
 
 
 def next_aliquot(conn, components):
@@ -108,18 +151,40 @@ def next_aliquot(conn, components):
     return n
 
 
-def new_participant_code(conn):
-    alphabet = current_app.config["PARTICIPANT_ALPHABET"]
-    length = current_app.config["PARTICIPANT_LENGTH"]
-    for _ in range(100):
-        code = "".join(secrets.choice(alphabet) for _ in range(length))
-        if not conn.execute("SELECT 1 FROM participant WHERE participant_id=?", (code,)).fetchone():
-            return code
-    raise IdError("Could not generate a unique participant code")
+def segment_regex(name):
+    for n, regex, _ in _segments():
+        if n == name:
+            return regex
+    return None
 
+
+def code_segment_regex(category):
+    """Regex an ID code of this category must match (cohort, specimen, fraction, material), or None."""
+    for _, regex, kind in _segments():
+        if kind == f"code:{category}":
+            return regex
+    return None
+
+
+# ------------------------------------------------------------------ participants
 
 def participant_pattern():
-    for name, regex, _ in _segments():
-        if name == "participant":
-            return "^" + regex + "$"
-    return None
+    r = segment_regex("participant")
+    return "^" + r + "$" if r else None
+
+
+def new_participant_code(conn):
+    """Next IGI patient number (P001, P002, ...), above every number ever issued, so none is reused."""
+    prefix, digits = current_app.config["PARTICIPANT_PREFIX"], current_app.config["PARTICIPANT_DIGITS"]
+    n = 0
+    for (pid,) in conn.execute("SELECT participant_id FROM participant"):
+        m = re.fullmatch(re.escape(prefix) + r"(\d+)", pid or "")
+        if m:
+            n = max(n, int(m.group(1)))
+    if n + 1 >= 10 ** digits:
+        raise IdError("IGI patient numbers are exhausted")
+    return f"{prefix}{n + 1:0{digits}d}"
+
+
+def unc_id(unc_number):
+    return "UNC" + str(unc_number)

@@ -20,10 +20,10 @@ def index():
     totals = conn.execute(
         "SELECT (SELECT COUNT(*) FROM sample WHERE deleted_at IS NULL) samples, "
         "(SELECT COUNT(*) FROM participant WHERE deleted_at IS NULL) participants, "
-        "(SELECT COUNT(DISTINCT root_id) FROM sample WHERE deleted_at IS NULL) collections, "
+        "(SELECT COUNT(*) FROM collection WHERE deleted_at IS NULL) collections, "
         "(SELECT COUNT(*) FROM data_file WHERE deleted_at IS NULL) files").fetchone()
     recent = conn.execute(
-        "SELECT * FROM audit_log WHERE table_name IN ('sample','custody_event','data_file','participant') "
+        "SELECT * FROM audit_log WHERE table_name IN ('sample','collection','custody_event','data_file','participant') "
         "ORDER BY id DESC LIMIT 15").fetchall()
     recent_samples = conn.execute(
         "SELECT * FROM sample WHERE deleted_at IS NULL ORDER BY record_created_at DESC LIMIT 10").fetchall()
@@ -41,6 +41,9 @@ def go():
         return redirect(url_for("samples.detail", sample_id=q))
     if conn.execute("SELECT 1 FROM participant WHERE participant_id=?", (q,)).fetchone():
         return redirect(url_for("participants.detail", participant_id=q))
+    row = conn.execute("SELECT participant_id FROM participant WHERE 'UNC' || unc_number=?", (q,)).fetchone()
+    if row:
+        return redirect(url_for("participants.detail", participant_id=row["participant_id"]))
     return redirect(url_for("samples.list_samples", q=q))
 
 
@@ -53,7 +56,7 @@ def browse():
     cohort = request.args.get("cohort") or ""
     where, params = ["p.deleted_at IS NULL"], []
     if q:
-        where.append("(p.participant_id LIKE ? OR p.external_participant_id LIKE ?)")
+        where.append("(p.participant_id LIKE ? OR 'UNC' || p.unc_number LIKE ?)")
         params += [f"%{q}%", f"%{q}%"]
     if cohort:
         where.append("p.cohort_code=?")

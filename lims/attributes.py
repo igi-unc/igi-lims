@@ -164,7 +164,7 @@ def labels(conn):
     return out
 
 
-def set_values(conn, sample_id, values, source_attachment_id=None, reason=None, action="update"):
+def set_values(conn, sample_id, values, source_attachment_id=None, reason=None, action="update", log=True):
     """Upsert values. None deletes. Returns {key: (old, new)} of actual changes and writes one audit row.
     Pass action="insert" for values recorded while the tube is being created, so they are not flagged as edits."""
     cur = {k: r["value"] for k, r in get(conn, sample_id).items()}
@@ -183,7 +183,7 @@ def set_values(conn, sample_id, values, source_attachment_id=None, reason=None, 
                 "ON CONFLICT(sample_id, key) DO UPDATE SET value=excluded.value, source_attachment_id=excluded.source_attachment_id, "
                 "updated_by=excluded.updated_by, updated_at=excluded.updated_at",
                 (sample_id, k, v, source_attachment_id, _username()))
-    if changes:
+    if changes and log:
         audit.log(conn, "sample", sample_id, action,
                   before={"attr:" + k: o for k, (o, _) in changes.items()} if action != "insert" else None,
                   after={"attr:" + k: n for k, (_, n) in changes.items()}

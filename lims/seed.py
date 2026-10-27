@@ -3,6 +3,7 @@
 CODES = {
     "cohort": [
         ("MP", "Malignant pleural effusion study"),
+        ("DG", "Canine comparative oncology"),
         ("AM", "Acute myeloid leukemia"),
         ("TN", "Triple-negative breast cancer"),
         ("NC", "NUT carcinoma"),
@@ -13,39 +14,35 @@ CODES = {
         ("BM", "Bone marrow aspirate"),
         ("TU", "Tumor tissue (biopsy or resection)"),
         ("LN", "Lymph node"),
-        ("NTC", "Normal T cell"),
-        ("NRM", "Normal tissue"),
+        ("NM", "Normal tissue"),
     ],
     "fraction": [
-        ("BLK", "Unfractionated (whole fluid, whole blood, bulk cells)"),
         ("PLA", "Plasma"),
         ("SER", "Serum"),
         ("BFC", "Buffy coat"),
-        ("PFS", "Pleural fluid supernatant"),
+        ("PFS", "Pleural fluid supernatant (cell-free)"),
         ("PBM", "PBMC"),
         ("PFM", "PFMC (pleural fluid mononuclear cells)"),
-        ("TUM", "Tumor cells, immune fraction depleted"),
-        ("IMM", "Immune fraction (e.g. CD45+ enriched, buffy coat)"),
+        ("TUM", "Tumor cells"),
+        ("IMM", "Immune fraction (e.g. CD45+ enriched)"),
+        ("NAC", "Non-adherent cells after plastic adherence"),
         ("TTC", "Total T cells"),
         ("CD8", "CD8+ T cells"),
         ("CD4", "CD4+ T cells"),
-        ("NA",  "Not applicable"),
+        ("NAP", "Not applicable"),
     ],
     "material": [
-        ("NAT", "Native: as collected or as separated, no further processing"),
-        ("CPU", "Cryopreserved"),
+        ("CPU", "Cryopreserved viable cells"),
+        ("FRZ", "Frozen fluid: supernatant, plasma or serum (not viable cells)"),
         ("SCS", "Single-cell suspension prepared for single-cell sequencing"),
-        ("CPL", "Cell pellet"),
         ("CUL", "Expanded or cultured cells, viable"),
-        ("CPC", "Cell pellet from cultured cells"),
         ("HMD", "High molecular weight DNA (long-read / ONT)"),
         ("HMR", "High molecular weight RNA (long-read / ONT)"),
         ("DNA", "Genomic DNA, standard extraction"),
         ("RNA", "Total RNA"),
         ("CFD", "Cell-free DNA (from plasma)"),
-        ("LIB", "Sequencing library"),
         ("PEP", "Peptide eluate for immunopeptidomics"),
-        ("SNF", "Snap-frozen tissue"),
+        ("SNF", "Snap-frozen cell pellet (a pellet from culture has a CUL parent)"),
         ("OCT", "OCT-embedded tissue"),
         ("FFP", "FFPE block or section"),
     ],
@@ -57,13 +54,19 @@ CODES = {
         ("Destroyed", "Discarded"),
     ],
     "assay": [
-        ("WGS", "Whole-genome sequencing"),
         ("WES", "Whole-exome sequencing"),
+        ("WGS", "Whole-genome sequencing"),
         ("RSQ", "Bulk RNA-seq"),
-        ("ONT", "Oxford Nanopore long-read"),
         ("SCR", "Single-cell RNA-seq"),
-        ("TCR", "TCR sequencing"),
-        ("IPX", "Immunopeptidomics MS"),
+        ("VDJ", "Single-cell V(D)J / TCR repertoire"),
+        ("TCR", "Bulk TCR sequencing"),
+        ("IPX", "Immunopeptidomics (mass spectrometry)"),
+    ],
+    "platform": [
+        ("ILM", "Illumina short-read"),
+        ("ONT", "Oxford Nanopore long-read"),
+        ("10X", "10x Genomics library, sequenced short-read"),
+        ("MS", "Mass spectrometry"),
     ],
     "biobank_source": [
         ("C", "UNC CCPD biobank"),
@@ -96,7 +99,8 @@ LISTS = {
     "position": [("NA", "Not applicable")] + [(f"{r}{c}", f"Row {r}, column {c}") for r in "ABCDEFGHIJ" for c in range(1, 11)],
     "party": [("PIRL", "PIRL lab"), ("HTSF", "UNC High-Throughput Sequencing Facility"), ("CCPD", "UNC CCPD biobank"), ("LN2", "LN2 storage"), ("-80", "-80 °C freezer")],
     "custody_purpose": [("EXTRACT", "DNA/RNA extraction"), ("SEQ", "Sequencing submission"), ("STORE", "Storage"), ("IP", "Immunopeptidomics"),
-                        ("CULTURE", "Culture / expansion"), ("SORT", "Sorting / enrichment"), ("RETURN", "Returned"), ("SHIP", "Shipped externally")],
+                        ("CULTURE", "Culture / expansion"), ("SORT", "Sorting / enrichment"), ("RETURN", "Returned"), ("SHIP", "Shipped externally"),
+                        ("RECEIVE", "Received from collection site")],
     "container_type": [("EDTA", "EDTA tube"), ("HEP", "Heparin tube"), ("STRECK", "Streck cfDNA tube"), ("ACD", "ACD tube"), ("PLAIN", "Plain / serum tube"), ("BAG", "Drainage bag"), ("NA", "Not applicable")],
     "spin_protocol": [("NA", "Not recorded")],
     "filter": [("NONE", "Not filtered"), ("0.22", "0.22 µm"), ("0.45", "0.45 µm"), ("70", "70 µm"), ("100", "100 µm")],
@@ -138,45 +142,45 @@ def _add(rule_type, frm, tos):
     for t in tos:
         RULES.append((rule_type, frm, t))
 
-# Which fractions can exist for each specimen type.
-_add("specimen_fraction", "PF",  ["BLK", "PFS", "PFM", "TUM", "IMM", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "PB",  ["BLK", "PLA", "SER", "BFC", "PBM", "IMM", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "BM",  ["BLK", "PLA", "TUM", "IMM", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "TU",  ["BLK", "TUM", "IMM", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "LN",  ["BLK", "TUM", "IMM", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "NTC", ["BLK", "TTC", "CD8", "CD4"])
-_add("specimen_fraction", "NRM", ["BLK", "NA"])
+# Which fractions a tube may have for each specimen type (first-generation and derived alike).
+_add("specimen_fraction", "PF", ["PFS", "PFM", "TUM", "IMM", "NAC", "TTC", "CD8", "CD4", "NAP"])
+_add("specimen_fraction", "PB", ["PLA", "SER", "BFC", "PBM", "IMM", "NAC", "TTC", "CD8", "CD4", "NAP"])
+_add("specimen_fraction", "BM", ["PLA", "TUM", "IMM", "NAC", "TTC", "CD8", "CD4", "NAP"])
+_add("specimen_fraction", "TU", ["TUM", "IMM", "NAC", "TTC", "CD8", "CD4", "NAP"])
+_add("specimen_fraction", "LN", ["TUM", "IMM", "NAC", "TTC", "CD8", "CD4", "NAP"])
+_add("specimen_fraction", "NM", ["IMM", "TTC", "CD8", "CD4", "NAP"])
 
 # Fraction refinement (same -> same is always allowed and not listed).
-_add("fraction_transition", "BLK", ["PLA", "SER", "BFC", "PFS", "PBM", "PFM", "TUM", "IMM", "TTC", "CD8", "CD4", "NA"])
-_add("fraction_transition", "PBM", ["IMM", "TTC", "CD8", "CD4"])
-_add("fraction_transition", "PFM", ["TUM", "IMM", "TTC", "CD8", "CD4"])
+_add("fraction_transition", "PBM", ["IMM", "NAC", "TTC", "CD8", "CD4"])
+_add("fraction_transition", "PFM", ["TUM", "IMM", "NAC", "TTC", "CD8", "CD4"])
 _add("fraction_transition", "BFC", ["IMM", "TTC", "CD8", "CD4"])
-_add("fraction_transition", "IMM", ["TTC", "CD8", "CD4"])
+_add("fraction_transition", "IMM", ["NAC", "TTC", "CD8", "CD4"])
+_add("fraction_transition", "NAC", ["TTC", "CD8", "CD4"])
 _add("fraction_transition", "TTC", ["CD8", "CD4"])
+_add("fraction_transition", "NAP", ["TUM", "IMM", "TTC", "CD8", "CD4"])
 
-# Material processing steps (same -> same listed explicitly where re-aliquoting makes sense).
-_add("material_transition", "NAT", ["NAT", "CPU", "SCS", "CPL", "CUL", "DNA", "RNA", "HMD", "HMR", "CFD", "SNF", "OCT", "FFP"])
-_add("material_transition", "CPU", ["CPU", "SCS", "CPL", "CUL", "DNA", "RNA", "HMD", "HMR"])
-_add("material_transition", "SCS", ["SCS", "CPL", "LIB"])
-_add("material_transition", "CPL", ["CPL", "DNA", "RNA", "HMD", "HMR", "PEP"])
-_add("material_transition", "CUL", ["CUL", "CPC", "SCS"])
-_add("material_transition", "CPC", ["CPC", "PEP", "DNA", "RNA", "HMD", "HMR"])
-_add("material_transition", "DNA", ["DNA", "LIB"])
-_add("material_transition", "HMD", ["HMD", "LIB"])
-_add("material_transition", "RNA", ["RNA", "LIB"])
-_add("material_transition", "HMR", ["HMR", "LIB"])
-_add("material_transition", "CFD", ["CFD", "LIB"])
-_add("material_transition", "SNF", ["DNA", "RNA", "HMD", "HMR", "CPL"])
-_add("material_transition", "OCT", ["DNA", "RNA"])
+# Material processing steps (same -> same listed where re-aliquoting makes sense).
+_add("material_transition", "CPU", ["CPU", "SCS", "SNF", "CUL", "DNA", "RNA", "HMD", "HMR"])
+_add("material_transition", "FRZ", ["FRZ", "CFD", "DNA", "RNA"])
+_add("material_transition", "SCS", ["SCS", "SNF"])
+_add("material_transition", "CUL", ["CUL", "SNF", "SCS", "CPU"])
+_add("material_transition", "SNF", ["DNA", "RNA", "HMD", "HMR", "PEP"])
+_add("material_transition", "DNA", ["DNA"])
+_add("material_transition", "HMD", ["HMD"])
+_add("material_transition", "RNA", ["RNA"])
+_add("material_transition", "HMR", ["HMR"])
+_add("material_transition", "CFD", ["CFD"])
+_add("material_transition", "PEP", ["PEP"])
+_add("material_transition", "OCT", ["OCT", "DNA", "RNA", "HMD", "HMR"])
 _add("material_transition", "FFP", ["FFP", "DNA", "RNA"])
 
 # Materials that only make sense in particular fractions.
+_add("material_fraction", "FRZ", ["PFS", "PLA", "SER", "BFC"])
 _add("material_fraction", "CFD", ["PLA"])
-_add("material_fraction", "PEP", ["TUM", "BLK", "IMM"])
+_add("material_fraction", "PEP", ["TUM", "IMM", "NAP"])
 
-# What a root (as-collected) specimen may arrive as.
-_add("root_material", "*", ["NAT", "CPU", "SNF", "OCT", "FFP"])
+# What a first-generation tube (made straight from the received specimen) may be.
+_add("root_material", "*", ["FRZ", "CPU", "SNF", "SCS", "CFD", "DNA", "RNA", "HMD", "HMR", "OCT", "FFP"])
 
 
 def seed(conn):

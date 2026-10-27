@@ -16,7 +16,19 @@ from . import audit
 bp = Blueprint("auth", __name__)
 
 
+def check_initials(conn, initials, own_username=None):
+    """Operator codes go into sample IDs: 2 or 3 uppercase letters, unique across accounts."""
+    import re
+    if not re.fullmatch(r"[A-Z]{2,3}", initials or ""):
+        raise ValueError("Initials must be 2 or 3 uppercase letters (they are printed in sample IDs)")
+    row = conn.execute("SELECT username FROM account WHERE initials=?", (initials,)).fetchone()
+    if row and row["username"] != own_username:
+        raise ValueError(f"Initials {initials} already belong to {row['username']}; operator codes must be unique")
+
+
 def create_user(conn, username, display_name, initials, password, role="user"):
+    initials = (initials or "").strip().upper()
+    check_initials(conn, initials)
     conn.execute(
         "INSERT INTO account(username, display_name, initials, password_hash, role) VALUES (?,?,?,?,?)",
         (username, display_name, initials, hash_password(password), role),

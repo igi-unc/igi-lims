@@ -1,5 +1,6 @@
-// Provenance tree as SVG. Input: window.TREE (nested {sample, children}; a top node with sample=null is a
-// virtual root, e.g. a participant), window.HIGHLIGHT, optional window.MEANINGS and window.ROLE.
+// Provenance tree as SVG. Input: window.TREE (nested {sample, children}; a node with sample=null is either a
+// participant (virtual root) or a collection {collection: {...}}, the specimen as received, which is not a tube),
+// window.HIGHLIGHT, optional window.MEANINGS and window.ROLE.
 // Hover shows a tooltip; click pins a detail panel (if #tree-tip / #tree-panel exist).
 // window.ORIENT = "vertical" (root at top, children below) or "horizontal" (root at left).
 (function () {
@@ -12,7 +13,8 @@
   const nodes = [], links = [];
   let leafCounter = 0;
   function layout(node, depth, parent) {
-    const n = { s: node.sample, label: node.sample ? null : (node.participant || "root"), depth, children: [], parent };
+    const n = { s: node.sample, c: node.collection || null, depth, children: [], parent,
+                label: node.sample ? null : (node.collection ? node.collection.label : (node.participant || "root")) };
     if (!node.children.length) n.y = leafCounter++;
     else {
       node.children.forEach(c => n.children.push(layout(c, depth + 1, n)));
@@ -48,17 +50,15 @@
   nodes.forEach((n, i) => {
     const s = n.s;
     let fill, stroke = "#9ca3af", sw = 1, text, sub = "";
-    if (!s) { fill = "#1f5fbf"; text = n.label; }
+    if (!s) { fill = n.c ? "#0f5257" : "#1f5fbf"; text = n.label; }
     else {
-      const parts = s.sample_id.split("-");
-      // root tubes show date+specimen so collections are distinguishable; derived tubes show fraction-material-aliquot
-      text = s.parent_id ? parts.slice(-3).join("-") : parts.slice(3, 5).join("-") + " " + parts.slice(-3).join("-");
+      text = `${s.fraction_code}-${s.material_code}-${String(s.aliquot).padStart(2, "0")}`;
       fill = s.deleted_at ? "#f3f4f6" : (colors[s.status] || "#fff");
       if (s.sample_id === highlight) { stroke = "#1f5fbf"; sw = 2.5; }
     }
-    out += `<g class="node" data-i="${i}" transform="translate(${x(n)},${y(n)})" style="cursor:${s ? "pointer" : "default"}">` +
+    out += `<g class="node" data-i="${i}" transform="translate(${x(n)},${y(n)})" style="cursor:${s || n.c ? "pointer" : "default"}">` +
       `<rect width="${NODE_W}" height="${NODE_H}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
-      `<text x="6" y="17" font-size="${s && !s.parent_id ? 10 : 11.5}" font-family="ui-monospace,Menlo,monospace" font-weight="600" fill="${s ? "#1d2330" : "#fff"}">${esc(text)}</text></g>`;
+      `<text x="6" y="17" font-size="${s ? 11.5 : 10}" font-family="ui-monospace,Menlo,monospace" font-weight="600" fill="${s ? "#1d2330" : "#fff"}">${esc(text)}</text></g>`;
   });
   svg.innerHTML = out;
 
@@ -76,7 +76,7 @@
   }
   function detail(s) {
     const rows = [["Specimen", meaning("specimen", s.specimen_code)], ["Fraction", meaning("fraction", s.fraction_code)],
-      ["Material", meaning("material", s.material_code)], ["Collected", s.collection_date], ["Parent", s.parent_id || "none (root)"],
+      ["Material", meaning("material", s.material_code)], ["Received", s.received_date], ["Parent", s.parent_id || "none (first generation)"],
       ["Status", s.status], ["Quantity", s.quantity != null ? s.quantity + " " + (s.unit || "") : ""], ["Location", loc(s)],
       ["Processed", (s.created_datetime || "") + " " + (s.created_by || "") + (s.sop_code ? " · " + s.sop_code : "")],
       ["Biobank", meaning("biobank_source", s.biobank_source)], ["Notes", s.notes || ""]];
@@ -86,9 +86,25 @@
       `<p><a class="btn secondary" href="/samples/${s.sample_id}">Open tube page</a> ` +
       `<button type="button" class="small secondary" id="tree-panel-close">close</button></p>`;
   }
+  function collSummary(c) {
+    return `<div class="t">Collection ${esc(c.label)}</div><div>${esc(meaning("specimen", c.specimen_code))}</div>` +
+      `<div>received ${esc(c.received_date)}${c.quantity != null ? " · " + esc(c.quantity) + " " + esc(c.unit || "") : ""}</div>` +
+      `<div class="muted">the specimen as received; not a tube</div>`;
+  }
   let pinned = null;
   svg.querySelectorAll("g.node").forEach(g => {
     const n = nodes[+g.dataset.i];
+    if (n.c) {
+      g.addEventListener("mousemove", ev => {
+        if (!tip) return;
+        tip.innerHTML = collSummary(n.c); tip.hidden = false;
+        const r = (svg.closest(".card") || svg.parentElement).getBoundingClientRect();
+        tip.style.left = (ev.clientX - r.left + 14) + "px"; tip.style.top = (ev.clientY - r.top + 14) + "px";
+      });
+      g.addEventListener("mouseleave", () => { if (tip) tip.hidden = true; });
+      g.addEventListener("click", () => { window.location = "/collections/" + n.c.collection_id; });
+      return;
+    }
     if (!n.s) return;
     g.addEventListener("mousemove", ev => {
       if (!tip) return;

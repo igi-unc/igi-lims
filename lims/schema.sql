@@ -10,12 +10,12 @@ CREATE TABLE IF NOT EXISTS code_list (
     PRIMARY KEY (category, code)
 );
 
--- Allowed derivations. Checked when a sample is created; violations need a second user to approve.
+-- Allowed derivations. Checked when a sample is created; a violation needs a justified, audited override.
 --   specimen_fraction   : from=specimen,  to=fraction   (fraction allowed for this specimen)
 --   fraction_transition : from=fraction,  to=fraction   (child fraction reachable from parent fraction; same->same always ok)
 --   material_transition : from=material,  to=material   (child material reachable from parent material)
 --   material_fraction   : from=material,  to=fraction   (if any rows exist for a material, child fraction must be listed)
---   root_material       : from='*',       to=material   (materials a root specimen may arrive as)
+--   root_material       : from='*',       to=material   (materials a first-generation tube, made straight from a collection, may be)
 CREATE TABLE IF NOT EXISTS derivation_rule (
     rule_type   TEXT NOT NULL,
     from_code   TEXT NOT NULL,
@@ -35,9 +35,10 @@ CREATE TABLE IF NOT EXISTS account (   -- "user" is reserved in PostgreSQL
 );
 
 CREATE TABLE IF NOT EXISTS participant (
-    participant_id          TEXT PRIMARY KEY,     -- IGI-assigned code used in the sample ID
+    participant_id          TEXT PRIMARY KEY,     -- IGI patient ID (P + 3 digits), segment 3 of the sample ID
     cohort_code             TEXT NOT NULL,
-    external_participant_id TEXT,                 -- the collection site's own ID; never on a label
+    unc_number              TEXT UNIQUE,          -- 3 digits; "UNC" + this is segment 4 of the sample ID
+    external_participant_id TEXT,                 -- any other site reference (not printed)
     site_code               TEXT,
     notes                   TEXT,
     created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -45,23 +46,51 @@ CREATE TABLE IF NOT EXISTS participant (
     deleted_at              TEXT
 );
 
+-- A collection is the set of tubes made from one specimen received on one day (the specimen itself is not
+-- labelled or stored as a tube). Every tube carries its collection_id; first-generation tubes have no parent.
+CREATE TABLE IF NOT EXISTS collection (
+    collection_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id      TEXT NOT NULL REFERENCES participant(participant_id),
+    specimen_code       TEXT NOT NULL,
+    received_date       TEXT NOT NULL,            -- ISO yyyy-mm-dd; segment 5 of every tube ID from this collection
+    site_code           TEXT,
+    biobank_source      TEXT,
+    received_from       TEXT,                     -- party (clinic, biobank)
+    received_by         TEXT,                     -- staff initials
+    time_collected      TEXT,                     -- ISO date-time
+    time_received       TEXT,                     -- ISO date-time
+    container_type      TEXT,
+    transport_temp      TEXT,
+    appearance          TEXT,
+    quantity            REAL,                     -- as received (e.g. 400 mL of fluid)
+    unit                TEXT,
+    notes               TEXT,
+    created_by          TEXT,                     -- username
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    deleted_at          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_collection_participant ON collection(participant_id, received_date);
+
 CREATE TABLE IF NOT EXISTS sample (
     sample_id           TEXT PRIMARY KEY,         -- full ID, validated against the pattern in config.py
     -- parsed components (kept in sync with sample_id)
     project_code        TEXT NOT NULL,
     cohort_code         TEXT NOT NULL,
     participant_id      TEXT NOT NULL REFERENCES participant(participant_id),
-    collection_date     TEXT NOT NULL,            -- ISO yyyy-mm-dd
+    unc_id              TEXT NOT NULL,            -- UNC + 3 digits
+    received_date       TEXT NOT NULL,            -- ISO yyyy-mm-dd, from the collection
     specimen_code       TEXT NOT NULL,
     fraction_code       TEXT NOT NULL,
     material_code       TEXT NOT NULL,
     aliquot             INTEGER NOT NULL,
+    processing_date     TEXT NOT NULL,            -- ISO yyyy-mm-dd, the date part of created_datetime at creation
     -- provenance
-    parent_id           TEXT REFERENCES sample(sample_id),
-    root_id             TEXT NOT NULL REFERENCES sample(sample_id),
+    collection_id       INTEGER NOT NULL REFERENCES collection(collection_id),
+    parent_id           TEXT REFERENCES sample(sample_id),   -- blank for first-generation tubes
+    root_id             TEXT NOT NULL REFERENCES sample(sample_id),   -- the first-generation tube of this line
     -- processing
     created_datetime    TEXT,                     -- when the tube was made
-    created_by          TEXT,                     -- operator initials
+    created_by          TEXT,                     -- operator initials (segment 10)
     sop_code            TEXT,
     biobank_source      TEXT,
     quantity            REAL,
@@ -80,13 +109,15 @@ CREATE TABLE IF NOT EXISTS sample (
 );
 CREATE INDEX IF NOT EXISTS idx_sample_parent ON sample(parent_id);
 CREATE INDEX IF NOT EXISTS idx_sample_root ON sample(root_id);
-CREATE INDEX IF NOT EXISTS idx_sample_participant ON sample(participant_id, collection_date);
+CREATE INDEX IF NOT EXISTS idx_sample_participant ON sample(participant_id, received_date);
+CREATE INDEX IF NOT EXISTS idx_sample_collection ON sample(collection_id);
 CREATE INDEX IF NOT EXISTS idx_sample_status ON sample(status);
 
 -- Append-only: one row per hand-off.
 CREATE TABLE IF NOT EXISTS sample_correction (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    sample_id        TEXT NOT NULL REFERENCES sample(sample_id),   -- the root tube for collection-level fields
+    sample_id        TEXT REFERENCES sample(sample_id),            -- set for tube-level fields
+    collection_id    INTEGER REFERENCES collection(collection_id),  -- set for collection-level fields (received date)
     field            TEXT NOT NULL,                                 -- a field from config.LABEL_FIELDS
     original_value   TEXT,                                          -- value in effect before this correction
     corrected_value  TEXT NOT NULL,
@@ -95,6 +126,7 @@ CREATE TABLE IF NOT EXISTS sample_correction (
     recorded_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_correction_sample ON sample_correction(sample_id);
+CREATE INDEX IF NOT EXISTS idx_correction_collection ON sample_correction(collection_id);
 
 CREATE TABLE IF NOT EXISTS custody_event (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +148,7 @@ CREATE TABLE IF NOT EXISTS data_file (
     sample_id        TEXT NOT NULL REFERENCES sample(sample_id),
     uri              TEXT NOT NULL,                -- gs://bucket/path
     assay_code       TEXT,
+    platform_code    TEXT,
     run_id           TEXT,
     checksum_md5     TEXT,
     pipeline         TEXT,

@@ -34,7 +34,7 @@ def _modules_path(matrix, x0, y0, size):
 
 def label_svg(sample):
     """SVG of the whole label: barcode on the left, text rows on the right."""
-    rows = svc.label_rows(sample) + ([sample["created_by"]] if sample["created_by"] else [])
+    rows = svc.label_rows(sample)
     matrix = barcode_matrix(sample["sample_id"])
     module = 3                                  # px per module in the preview
     quiet = 2 * module                          # quiet zone around the symbol

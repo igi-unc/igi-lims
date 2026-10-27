@@ -33,16 +33,13 @@ PURITY = [("purity_pct", "Purity estimate", "number", "%"), ("purity_method", "P
 _a("all", "*", "qc_result", "QC result", "choice", None, "pass|fail|borderline|not assessed")
 
 # ---- fractions
-_many("fraction", ["BLK"], [("container_type", "Container / tube type", "list", None, "container_type"),
-                            ("time_collected", "Time collected", "datetime"), ("time_received", "Time received", "datetime"),
-                            ("transport_temp", "Transport temperature", "choice", None, "ambient|4C|ice|NA"),
-                            ("appearance", "Appearance", "choice", None, "clear|bloody|turbid|NA"), HEMO])
 _many("fraction", ["PLA"], SPIN + [("time_to_spin_min", "Time from draw to spin", "number", "min"), HEMO])
 _many("fraction", ["SER"], [("clot_time_min", "Clot time", "number", "min")] + SPIN + [HEMO])
 _many("fraction", ["BFC"], SPIN + [("rbc_lysis", "RBC lysis done", "choice", None, YN)])
 _many("fraction", ["PFS"], SPIN + [("filtered", "Filter", "list", None, "filter"), ("appearance", "Appearance", "choice", None, "clear|bloody|turbid|NA")])
 _many("fraction", ["PBM", "PFM"], [("isolation_method", "Isolation method", "list", None, "isolation_method"), ("rbc_lysis", "RBC lysis done", "choice", None, YN)] + CELLS)
 _many("fraction", ["TUM"], [("enrichment_method", "Enrichment method", "list", None, "enrichment_method")] + KIT + [("markers", "Marker panel", "list", None, "marker_panel")] + PURITY + CELLS)
+_many("fraction", ["NAC"], [("adherence_time_h", "Adherence time", "number", "h")] + CELLS)
 _many("fraction", ["IMM"], [("enrichment_method", "Enrichment method", "list", None, "enrichment_method")] + KIT + PURITY + CELLS)
 _many("fraction", ["TTC"], [("selection_method", "Selection method", "list", None, "selection_method")] + KIT + [("purity_pct", "Purity (% CD3+)", "number", "%")] + CELLS)
 _many("fraction", ["CD8", "CD4"], [("selection_mode", "Selection mode", "choice", None, "positive|negative|FACS")] + KIT + [("purity_pct", "Purity by flow", "number", "%")] + CELLS)
@@ -56,15 +53,12 @@ _many("material", ["SCS"], [("dissociation_method", "Dissociation method", "list
                             ("concentration_cells_ul", "Concentration", "number", "cells/µL"), ("dead_cell_removal", "Dead-cell removal", "choice", None, YN),
                             ("hashtag", "Hashtag / multiplex antibody", "list", None, "hashtag"), ("buffer", "Buffer", "list", None, "buffer"),
                             ("target_cells", "Target cells to load", "number", "cells")])
-_many("material", ["CPL"], [("cell_count", "Cell count", "number", "cells"), ("wash_buffer", "Wash buffer", "list", None, "buffer"),
-                            ("pellet_state", "Pellet state", "choice", None, "dry|in buffer"), ("intended_use", "Intended use", "choice", None, "DNA|RNA|DNA+RNA|IP|NA")])
+_many("material", ["FRZ"], [("volume_ml", "Volume per tube", "number", "mL"), ("freeze_temp", "Stored at", "choice", None, "-80C|-20C|LN2")])
 _many("material", ["CUL"], [("medium", "Culture medium", "list", None, "culture_medium"), ("supplements", "Supplements", "list", None, "supplement"),
                             ("stimulation", "Stimulation", "list", None, "stimulation"), ("passage", "Passage number", "number"),
                             ("days_in_culture", "Days in culture", "number", "d"), ("seeding_density", "Seeding density", "number", "cells/mL"),
                             ("cell_count", "Cell count", "number", "cells"), ("viability_pct", "Viability", "number", "%"),
                             ("expansion_fold", "Expansion fold", "number", "x"), ("mycoplasma", "Mycoplasma test", "choice", None, "negative|positive|not tested")])
-_many("material", ["CPC"], [("cell_count", "Cell count", "number", "cells"), ("passage", "Passage number", "number"), ("harvest_date", "Harvest date", "date"),
-                            ("viability_pct", "Viability at harvest", "number", "%"), ("wash_buffer", "Wash buffer", "list", None, "buffer")])
 NA_COMMON = [("extraction_kit", "Extraction kit / method", "list", None, "extraction_kit"), ("kit_lot", "Kit lot", "list", None, "kit_lot"),
              ("input_cells", "Input cells", "number", "cells"), ("input_mass_mg", "Input tissue", "number", "mg"),
              ("concentration_ng_ul", "Concentration", "number", "ng/µL"), ("concentration_method", "Concentration method", "choice", None, "Qubit|NanoDrop|TapeStation|NA"),
@@ -78,19 +72,14 @@ _many("material", ["CFD"], [("plasma_input_ml", "Plasma input", "number", "mL"),
                             ("total_yield_ng", "Total yield", "number", "ng"), ("cfdna_peak_bp", "cfDNA peak", "number", "bp"),
                             ("hmw_contamination_pct", "High-MW contamination", "number", "%"), ("volume_ul", "Volume", "number", "µL"),
                             ("elution_buffer", "Elution buffer", "list", None, "buffer")])
-_many("material", ["LIB"], [("assay", "Assay", "list", None, "assay", 1), ("prep_kit", "Library prep kit", "list", None, "library_prep_kit"), ("kit_lot", "Kit lot", "list", None, "kit_lot"),
-                            ("capture_kit", "Capture kit / panel", "list", None, "capture_kit"), ("input_ng", "Input", "number", "ng"), ("input_cells", "Input cells", "number", "cells"),
-                            ("pcr_cycles", "PCR cycles", "number"), ("index_id", "Index / barcode", "list", None, "index"), ("umi", "UMI", "choice", None, YN),
-                            ("rna_selection", "RNA selection", "choice", None, "polyA|rRNA depletion|NA"), ("stranded", "Stranded", "choice", None, "yes|no|NA"),
-                            ("mean_fragment_bp", "Mean fragment size", "number", "bp"), ("concentration_nm", "Concentration", "number", "nM"),
-                            ("submission_id", "Submission / order", "list", None, "submission")])
 _many("material", ["PEP"], [("hla_class", "HLA class", "choice", None, "I|II|I+II", 1), ("ip_antibody", "IP antibody", "list", None, "ip_antibody"), ("antibody_lot", "Antibody lot", "list", None, "antibody_lot"),
                             ("input_cells", "Input cell number", "number", "cells"), ("bead_type", "Bead type", "list", None, "bead_type"), ("lysis_buffer", "Lysis buffer", "list", None, "buffer"),
                             ("elution", "Elution", "list", None, "elution"), ("cleanup", "Cleanup", "list", None, "cleanup"), ("offline_fractions", "Offline fraction count", "number"),
                             ("resuspension_ul", "Resuspension volume", "number", "µL"), ("target_instrument", "Target instrument", "list", None, "instrument")])
-_many("material", ["SNF"], [("tissue_mass_mg", "Tissue mass", "number", "mg"), ("ischemia_time_min", "Ischemia time", "number", "min"),
-                            ("freeze_method", "Freezing method", "list", None, "freeze_method"), ("tumor_pct", "% tumor (pathology)", "number", "%"),
-                            ("necrosis_pct", "% necrosis", "number", "%")])
+_many("material", ["SNF"], [("cell_count", "Cell count", "number", "cells"), ("wash_buffer", "Wash buffer", "list", None, "buffer"),
+                            ("pellet_state", "Pellet state", "choice", None, "dry|in buffer"),
+                            ("intended_use", "Intended use", "choice", None, "DNA|RNA|DNA+RNA|IP|NA"),
+                            ("freeze_method", "Freezing method", "list", None, "freeze_method")])
 _many("material", ["OCT"], [("tissue_mass_mg", "Tissue mass", "number", "mg"), ("block_id", "Block ID", "list", None, "block_id"), ("sections_cut", "Sections cut", "number"),
                             ("tumor_pct", "% tumor", "number", "%")])
 _many("material", ["FFP"], [("block_id", "Pathology accession / block ID", "list", None, "block_id"), ("fixation_time_h", "Fixation time", "number", "h"), ("block_age_years", "Block age", "number", "years"),

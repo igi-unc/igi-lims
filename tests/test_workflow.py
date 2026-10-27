@@ -1,9 +1,7 @@
-"""Walks the spec's section 5 worked example through the web UI."""
-import json
+"""Walks the nomenclature v2.1 worked example (section 5) through the web UI, plus the core rules."""
+import re
 from lims.db import get_db
-from conftest import make_root, derive, login
-
-P = "IGI-MP-KXRTQVA-260929-"
+from conftest import P, sid, make_root, new_collection, add_tubes, derive, login
 
 
 def ids_of(app, prefix):
@@ -12,175 +10,206 @@ def ids_of(app, prefix):
 
 
 def test_worked_example(app, alice):
-    # 1. pleural fluid received
-    r = make_root(alice)
-    assert b"Created 1 tube" in r.data
-    assert ids_of(app, P + "PF-BLK-NAT") == [P + "PF-BLK-NAT-01"]
-    # 2. 10 cryo tubes of bulk cells
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", count="10")
-    assert b"Created 10 tube" in r.data
-    cpu = ids_of(app, P + "PF-BLK-CPU")
-    assert cpu[0].endswith("-01") and cpu[-1].endswith("-10") and len(cpu) == 10
-    # 3. tumour enrichment + immune fraction from tube 03
-    assert b"Created 1" in derive(alice, P + "PF-BLK-CPU-03", fraction="TUM", material="CPU").data
-    assert b"Created 1" in derive(alice, P + "PF-BLK-CPU-03", fraction="IMM", material="CPU").data
-    # 4. CD8 from immune
-    assert b"Created 1" in derive(alice, P + "PF-IMM-CPU-01", fraction="CD8", material="CPU").data
-    # 5. two pellets
-    assert b"Created 2" in derive(alice, P + "PF-TUM-CPU-01", fraction="TUM", material="CPL", count="2").data
-    # 6. HMW DNA and RNA
-    assert b"Created 1" in derive(alice, P + "PF-TUM-CPL-01", fraction="TUM", material="HMD").data
-    assert b"Created 1" in derive(alice, P + "PF-TUM-CPL-02", fraction="TUM", material="RNA").data
-    # 7. ONT library consumes the DNA
-    assert b"Created 1" in derive(alice, P + "PF-TUM-HMD-01", fraction="TUM", material="LIB", parent_consumed="1").data
+    # the pleural fluid is registered as a collection; it is not a tube
+    pf = new_collection(alice)
+    assert isinstance(pf, int) and ids_of(app, P) == []
+    # 1-2. first-generation tubes straight from the fluid
+    r = add_tubes(alice, pf, fraction="PFS", material="FRZ", count="4", created_by="MF", created_datetime="2026-09-29T11:00")
+    assert b"Created 4 tube" in r.data
+    r = add_tubes(alice, pf, fraction="PFM", material="CPU", count="10", created_by="MF", created_datetime="2026-09-29T14:00")
+    pfm = ids_of(app, P + "PF-PFM-CPU")
+    assert len(pfm) == 10 and pfm[2] == sid("PF", "PFM", "CPU", 3, "MF")
     with app.app_context():
-        assert get_db().execute("SELECT status FROM sample WHERE sample_id=?", (P + "PF-TUM-HMD-01",)).fetchone()[0] == "Depleted"
-    # 8-10. expansion, pellet, peptides
-    assert b"Created 6" in derive(alice, P + "PF-TUM-CPU-01", fraction="TUM", material="CUL", count="6").data
-    assert b"Created 1" in derive(alice, P + "PF-TUM-CUL-01", fraction="TUM", material="CPC").data
-    assert b"Created 1" in derive(alice, P + "PF-TUM-CPC-01", fraction="TUM", material="PEP").data
-    # matched blood
-    make_root(alice, specimen="PB")
-    derive(alice, P + "PB-BLK-NAT-01", fraction="SER", material="NAT")
-    derive(alice, P + "PB-BLK-NAT-01", fraction="PLA", material="NAT")
-    derive(alice, P + "PB-PLA-NAT-01", fraction="PLA", material="CFD")
-    derive(alice, P + "PB-BLK-NAT-01", fraction="BFC", material="NAT")
-    derive(alice, P + "PB-BLK-NAT-01", fraction="BFC", material="DNA")  # germline DNA straight from buffy coat step
-    # back-tracking from the library
-    r = alice.get(f"/api/samples/{P}PF-TUM-LIB-01/lineage")
-    chain = [a["sample_id"] for a in r.get_json()["ancestors"]]
-    assert chain == [P + "PF-BLK-NAT-01", P + "PF-BLK-CPU-03", P + "PF-TUM-CPU-01", P + "PF-TUM-CPL-01", P + "PF-TUM-HMD-01"]
-    assert all(a["root_id"] == P + "PF-BLK-NAT-01" for a in r.get_json()["ancestors"])
-    # tree and detail pages render
-    assert alice.get(f"/samples/tree/{P}PF-BLK-NAT-01").status_code == 200
-    assert alice.get(f"/samples/{P}PF-TUM-LIB-01").status_code == 200
-    assert alice.get("/samples/?material=LIB").status_code == 200
-    assert alice.get("/participants/KXRTQVA").status_code == 200
-    assert alice.get("/").status_code == 200
-    # label layout breaks at hyphens
-    svg = alice.get(f"/samples/{P}PF-TUM-HMD-01/label.svg").data.decode()
-    import re
-    rows = re.findall(r"<text [^>]*>([^<]*)</text>", svg)
-    assert rows[:3] == ["IGI-MP-KXRTQVA", "260929-PF-TUM", "HMD-01"]
-
-
-def test_aliquots_never_reused(app, alice):
-    make_root(alice)
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", count="2")
+        assert get_db().execute("SELECT count(*) FROM sample WHERE parent_id IS NULL AND collection_id=?", (pf,)).fetchone()[0] == 14
+    vial3 = pfm[2]
+    # 3. tumour and immune fractions from vial 03, made on 1 Oct
+    oct1 = {"created_by": "MF", "created_datetime": "2026-10-01T10:00"}
+    assert b"Created 1" in derive(alice, vial3, fraction="TUM", material="CPU", **oct1).data
+    assert b"Created 1" in derive(alice, vial3, fraction="IMM", material="CPU", **oct1).data
+    # 4. CD8 from the immune fraction, 2 Oct
+    assert b"Created 1" in derive(alice, sid("PF", "IMM", "CPU", 1, "MF", "26OCT01"), fraction="CD8", material="CPU",
+                                  created_by="MF", created_datetime="2026-10-02T10:00").data
+    # 5. two pellets from the same run; the vial is used up
+    assert b"Created 2" in derive(alice, vial3, fraction="TUM", material="SNF", count="2", parent_consumed="1", **oct1).data
+    # 6. Ken extracts HMW DNA and RNA on 6 Oct
+    ken = {"created_by": "KEN", "created_datetime": "2026-10-06T11:00"}
+    assert b"Created 1" in derive(alice, sid("PF", "TUM", "SNF", 1, "MF", "26OCT01"), fraction="TUM", material="HMD", parent_consumed="1", **ken).data
+    assert b"Created 1" in derive(alice, sid("PF", "TUM", "SNF", 2, "MF", "26OCT01"), fraction="TUM", material="RNA", **ken).data
+    hmd = sid("PF", "TUM", "HMD", 1, "KEN", "26OCT06")
+    assert hmd == "IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06" and ids_of(app, hmd) == [hmd]
+    # 7-9. culture, a pellet on 16 Oct (aliquot 03: counted within segments 1-8), peptides on 17 Oct
+    assert b"Created 6" in derive(alice, sid("PF", "TUM", "CPU", 1, "MF", "26OCT01"), fraction="TUM", material="CUL", count="6",
+                                  created_by="MF", created_datetime="2026-10-02T15:00").data
+    assert b"Created 1" in derive(alice, sid("PF", "TUM", "CUL", 1, "MF", "26OCT02"), fraction="TUM", material="SNF",
+                                  created_by="MF", created_datetime="2026-10-16T10:00").data
+    snf3 = sid("PF", "TUM", "SNF", 3, "MF", "26OCT16")
+    assert ids_of(app, snf3) == [snf3]
+    assert b"Created 1" in derive(alice, snf3, fraction="TUM", material="PEP", created_by="MF", created_datetime="2026-10-17T17:00").data
+    # matched blood: a separate collection with the same received date
+    pb = new_collection(alice, specimen_code="PB", container_type="EDTA", quantity="20")
+    add_tubes(alice, pb, fraction="SER", material="FRZ", created_by="MF")
+    add_tubes(alice, pb, fraction="PLA", material="FRZ", created_by="MF")
+    add_tubes(alice, pb, fraction="BFC", material="FRZ", created_by="MF")
+    assert b"Created 1" in derive(alice, sid("PB", "PLA", "FRZ", 1, "MF"), fraction="PLA", material="CFD", created_by="MF",
+                                  created_datetime="2026-09-30T10:00").data
+    assert b"Created 1" in derive(alice, sid("PB", "BFC", "FRZ", 1, "MF"), fraction="BFC", material="DNA", **ken).data
+    assert ids_of(app, P + "PB-PLA-CFD") == ["IGI-MP-P101-UNC316-26SEP29-PB-PLA-CFD-01-MF-26SEP30"]
+    # back-tracking from the HMW DNA tube, as in the document
+    chain = [a["sample_id"] for a in alice.get(f"/api/samples/{hmd}/lineage").get_json()["ancestors"]]
+    assert chain == [vial3, sid("PF", "TUM", "SNF", 1, "MF", "26OCT01")]
     with app.app_context():
         conn = get_db()
-        conn.execute("UPDATE sample SET deleted_at='x' WHERE sample_id=?", (P + "PF-BLK-CPU-02",))
+        assert conn.execute("SELECT collection_id FROM sample WHERE sample_id=?", (hmd,)).fetchone()[0] == pf
+        assert conn.execute("SELECT status FROM sample WHERE sample_id=?", (vial3,)).fetchone()[0] == "Depleted"
+        # one audit row per created tube
+        assert conn.execute("SELECT max(n) FROM (SELECT count(*) n FROM audit_log WHERE table_name='sample' "
+                            "AND action='insert' GROUP BY record_id) x").fetchone()[0] == 1
+    # pages render
+    for url in (f"/collections/{pf}", f"/collections/{pf}/tree", f"/samples/{hmd}", f"/samples/?collection={pf}",
+                "/participants/P101", "/browse?participant=P101", "/", f"/samples/tree/{vial3}"):
+        r = alice.get(url, follow_redirects=True)
+        assert r.status_code == 200, url
+    # label: three rows of at most 18 characters, broken at hyphens
+    rows = re.findall(r"<text [^>]*>([^<]*)</text>", alice.get(f"/samples/{hmd}/label.svg").data.decode())
+    assert rows == ["IGI-MP-P101-UNC316", "26SEP29-PF-TUM-HMD", "01-KEN-26OCT06"] and max(map(len, rows)) <= 18
+
+
+def test_aliquots_never_reused_and_counted_within_segments_1_to_8(app, alice):
+    cid = new_collection(alice)
+    add_tubes(alice, cid, count="2")
+    with app.app_context():
+        conn = get_db()
+        conn.execute("UPDATE sample SET deleted_at='x' WHERE sample_id=?", (sid("PF", "PFM", "CPU", 2),))
         conn.commit()
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", count="1")
-    assert ids_of(app, P + "PF-BLK-CPU") == [P + "PF-BLK-CPU-01", P + "PF-BLK-CPU-02", P + "PF-BLK-CPU-03"]
+    # same tube type, another operator on another day: the next number, not 01
+    add_tubes(alice, cid, created_by="BB", created_datetime="2026-09-30T09:00")
+    assert ids_of(app, P + "PF-PFM-CPU") == [sid("PF", "PFM", "CPU", 1), sid("PF", "PFM", "CPU", 2),
+                                             sid("PF", "PFM", "CPU", 3, "BB", "26SEP30")]
 
 
 def test_rule_violation_blocks_then_override_is_flagged(app, alice, client):
     make_root(alice)
-    # RNA straight from native fluid is allowed; LIB from NAT is not
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB")
-    assert b"Blocked by derivation rules" in r.data
-    assert b"NAT cannot be processed into LIB" in r.data
-    assert ids_of(app, P + "PF-BLK-LIB") == []
-    # override without a justification is refused
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB", action="override")
-    assert b"justification is required" in r.data
-    assert ids_of(app, P + "PF-BLK-LIB") == []
-    # with one, the tube is created and the override is written to the audit log with the reason
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="LIB", action="override",
-               justification="direct library prep pilot")
+    parent = sid("PF", "PFM", "CPU")
+    # CPU cannot become PEP directly (it must be pelleted first)
+    r = derive(alice, parent, fraction="TUM", material="PEP")
+    assert b"Blocked by derivation rules" in r.data and b"CPU cannot be processed into PEP" in r.data
+    assert ids_of(app, P + "PF-TUM-PEP") == []
+    r = derive(alice, parent, fraction="TUM", material="PEP", action="override")
+    assert b"justification is required" in r.data and ids_of(app, P + "PF-TUM-PEP") == []
+    r = derive(alice, parent, fraction="TUM", material="PEP", action="override", justification="direct lysis pilot")
     assert b"rule override recorded" in r.data
-    assert ids_of(app, P + "PF-BLK-LIB") == [P + "PF-BLK-LIB-01"]
+    pep = sid("PF", "TUM", "PEP")
     with app.app_context():
         row = get_db().execute("SELECT reason FROM audit_log WHERE table_name='sample' AND record_id=? AND action='insert'",
-                               (P + "PF-BLK-LIB-01",)).fetchone()
-        assert row[0].startswith("Rule override: ") and "direct library prep pilot" in row[0]
-    r = alice.get(f"/samples/{P}PF-BLK-LIB-01")
-    assert b"rule override" in r.data and b"direct library prep pilot" in r.data
-    # the audit page's changes-only filter shows it; a viewer can read it
+                               (pep,)).fetchone()
+        assert row[0].startswith("Rule override: ") and "direct lysis pilot" in row[0]
+    r = alice.get(f"/samples/{pep}")
+    assert b"rule override" in r.data and b"direct lysis pilot" in r.data
     login(client, "vic")
     r = client.get("/admin/audit?changes=1")
-    assert r.status_code == 200 and b"direct library prep pilot" in r.data
+    assert r.status_code == 200 and b"direct lysis pilot" in r.data
 
 
-def test_root_rule_fraction_for_specimen(app, alice):
-    r = make_root(alice, specimen="PB", fraction="PFS")
+def test_first_generation_rules(app, alice):
+    r = make_root(alice, specimen="PB", fraction="PFS", material="FRZ")
     assert b"Fraction PFS is not allowed for specimen PB" in r.data
+    r = make_root(alice, specimen="PF", fraction="TUM", material="PEP", attr_hla_class="I")
+    assert b"cannot be made directly from a received specimen" in r.data
+    r = make_root(alice, specimen="PF", fraction="PFM", material="FRZ")     # FRZ is for fluids, not cells
+    assert b"requires fraction in" in r.data
+
+
+def test_processing_before_received_is_flagged(app, alice):
+    r = make_root(alice, created_datetime="2026-09-28T10:00")
+    assert b"is before the received date" in r.data and ids_of(app, P) == []
 
 
 def test_cfd_requires_plasma(app, alice):
-    make_root(alice, specimen="PB")
-    derive(alice, P + "PB-BLK-NAT-01", fraction="BFC", material="NAT")
-    r = derive(alice, P + "PB-BFC-NAT-01", fraction="BFC", material="CFD")
+    cid = new_collection(alice, specimen_code="PB")
+    add_tubes(alice, cid, fraction="BFC", material="FRZ")
+    r = derive(alice, sid("PB", "BFC", "FRZ"), fraction="BFC", material="CFD")
     assert b"requires fraction in" in r.data
 
 
 def test_depleted_parent_blocks(app, alice):
     make_root(alice)
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", parent_consumed="1")
-    r = derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU")
+    derive(alice, sid("PF", "PFM", "CPU"), fraction="PFM", material="CPU", parent_consumed="1")
+    r = derive(alice, sid("PF", "PFM", "CPU"), fraction="PFM", material="CPU")
     assert b"Parent status is Depleted" in r.data
 
 
 def test_edit_is_direct_and_flagged_in_audit(app, alice, client):
     make_root(alice)
-    sid = P + "PF-BLK-NAT-01"
-    r = alice.post(f"/samples/{sid}/edit", data={"status": "Shipped", "quantity": "500", "unit": "mL",
-                                                 "created_by": "AA", "justification": "sent to HTSF"}, follow_redirects=True)
+    s = sid("PF", "PFM", "CPU")
+    r = alice.post(f"/samples/{s}/edit", data={"status": "Shipped", "quantity": "500", "unit": "mL",
+                                               "justification": "sent to HTSF"}, follow_redirects=True)
     assert b"Sample updated" in r.data and b"edited" in r.data
     with app.app_context():
         conn = get_db()
-        assert conn.execute("SELECT status FROM sample WHERE sample_id=?", (sid,)).fetchone()[0] == "Shipped"
+        assert conn.execute("SELECT status FROM sample WHERE sample_id=?", (s,)).fetchone()[0] == "Shipped"
         row = conn.execute("SELECT before_json, after_json, reason FROM audit_log WHERE table_name='sample' AND record_id=? AND action='update'",
-                           (sid,)).fetchone()
+                           (s,)).fetchone()
         assert '"Available"' in row[0] and '"Shipped"' in row[1] and row[2] == "sent to HTSF"
-    # the merged status/location column shows the status when the tube is not Available, the location when it is
-    r = alice.get("/samples/")
-    assert b"Shipped" in r.data
-    alice.post(f"/samples/{sid}/edit", data={"status": "Available", "quantity": "500", "unit": "mL", "created_by": "AA",
-                                             "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1"}, follow_redirects=True)
-    r = alice.get("/samples/")
-    assert b"<td>A1</td>" in r.data
+    assert b"Shipped" in alice.get("/samples/").data
+    alice.post(f"/samples/{s}/edit", data={"status": "Available", "quantity": "500", "unit": "mL",
+                                           "freezer": "NA", "rack": "NA", "box": "NA", "position": "A1"}, follow_redirects=True)
+    assert b"<td>A1</td>" in alice.get("/samples/").data
 
 
 def test_delete_blocked_with_children_and_soft_delete(app, alice, client):
     make_root(alice)
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU")
-    r = alice.post(f"/samples/{P}PF-BLK-NAT-01/delete", data={"justification": "x"}, follow_redirects=True)
+    parent, child = sid("PF", "PFM", "CPU"), sid("PF", "TUM", "CPU")
+    derive(alice, parent, fraction="TUM", material="CPU")
+    r = alice.post(f"/samples/{parent}/delete", data={"justification": "x"}, follow_redirects=True)
     assert b"active children" in r.data
-    r = alice.post(f"/samples/{P}PF-BLK-CPU-01/delete", data={"justification": "mislabelled"}, follow_redirects=True)
+    r = alice.post(f"/samples/{child}/delete", data={"justification": "mislabelled"}, follow_redirects=True)
     assert b"Record deleted" in r.data
     with app.app_context():
         conn = get_db()
-        assert conn.execute("SELECT deleted_at FROM sample WHERE sample_id=?", (P + "PF-BLK-CPU-01",)).fetchone()[0]
-        assert conn.execute("SELECT reason FROM audit_log WHERE action='delete' AND record_id=?",
-                            (P + "PF-BLK-CPU-01",)).fetchone()[0] == "mislabelled"
-    # still visible with include-deleted and page renders
-    assert alice.get(f"/samples/{P}PF-BLK-CPU-01").status_code == 200
+        assert conn.execute("SELECT deleted_at FROM sample WHERE sample_id=?", (child,)).fetchone()[0]
+        assert conn.execute("SELECT reason FROM audit_log WHERE action='delete' AND record_id=?", (child,)).fetchone()[0] == "mislabelled"
+    assert alice.get(f"/samples/{child}").status_code == 200
 
 
-def test_custody_and_files(app, alice):
-    make_root(alice)
-    sid = P + "PF-BLK-NAT-01"
-    r = alice.post(f"/samples/{sid}/custody", data={"event_datetime": "2026-09-29T14:00", "from_party": "PIRL",
-                                                    "to_party": "BB", "purpose": "EXTRACT", "condition_on_receipt": "good", "set_status": "In use"},
+def test_collection_without_tubes_can_be_deleted(app, alice):
+    cid = new_collection(alice)
+    r = alice.post(f"/collections/{cid}/delete", data={"justification": "entered twice"}, follow_redirects=True)
+    assert b"Collection deleted" in r.data
+    cid2 = new_collection(alice)
+    add_tubes(alice, cid2)
+    r = alice.post(f"/collections/{cid2}/delete", data={}, follow_redirects=True)
+    assert b"cannot be deleted" in r.data
+
+
+def test_custody_and_files_with_platform_and_suggested_name(app, alice):
+    cid = new_collection(alice)
+    add_tubes(alice, cid, fraction="TUM", material="SNF", unit="cells")
+    snf = sid("PF", "TUM", "SNF")
+    derive(alice, snf, fraction="TUM", material="HMD", created_by="KEN", created_datetime="2026-10-06T11:00")
+    hmd = sid("PF", "TUM", "HMD", 1, "KEN", "26OCT06")
+    r = alice.post(f"/samples/{hmd}/custody", data={"event_datetime": "2026-10-07T09:00", "from_party": "KEN", "to_party": "HTSF",
+                                                    "purpose": "SEQ", "condition_on_receipt": "good", "set_status": "In use"},
                    follow_redirects=True)
     assert b"Custody event recorded" in r.data
-    r = alice.post(f"/samples/{sid}/files", data={"uri": f"gs://igi-bucket/{sid}_ONT-R001.bam", "assay_code": "ONT",
-                                                  "run_id": "R001", "checksum_md5": "abc"}, follow_redirects=True)
-    assert b"File recorded" in r.data
-    j = alice.get(f"/api/samples/{sid}").get_json()
-    assert j["sample"]["status"] == "In use"
-    assert j["custody"][0]["to_party"] == "BB"
-    assert j["files"][0]["assay_code"] == "ONT"
-    assert alice.get("/api/files?assay=ONT").get_json()[0]["participant_id"] == "KXRTQVA"
+    page = alice.get(f"/samples/{hmd}").data.decode()
+    assert f'data-stem="{hmd}_tumor"' in page and 'data-label="DNA_WGS"' in page and 'data-label="ONT"' in page
+    # platform is required
+    r = alice.post(f"/samples/{hmd}/files", data={"uri": f"gs://b/{hmd}_tumor_DNA_WGS_ONT.bam", "assay_code": "WGS"}, follow_redirects=True)
+    assert b"assay and platform are required" in r.data
+    r = alice.post(f"/samples/{hmd}/files", data={"uri": f"gs://b/{hmd}_tumor_DNA_WGS_ONT.bam", "assay_code": "WGS",
+                                                  "platform_code": "ONT", "run_id": "R001", "checksum_md5": "abc"}, follow_redirects=True)
+    assert b"File recorded" in r.data and b"should start with" not in r.data
+    j = alice.get(f"/api/samples/{hmd}").get_json()
+    assert j["sample"]["status"] == "In use" and j["custody"][0]["to_party"] == "HTSF"
+    assert j["files"][0]["platform_code"] == "ONT" and j["collection"]["collection_id"] == cid
+    assert alice.get("/api/files?assay=WGS").get_json()[0]["participant_id"] == "P101"
 
 
 def test_viewer_is_read_only(app, client):
     login(client, "vic")
     assert client.get("/samples/").status_code == 200
-    assert client.get("/samples/new").status_code == 403
-    assert client.post("/samples/new", data={}).status_code == 403
+    assert client.get("/collections/new").status_code == 403
+    assert client.post("/collections/new", data={}).status_code == 403
     assert client.get("/admin/users").status_code == 403
 
 
@@ -188,59 +217,97 @@ def test_api_token_and_validate(app, client, monkeypatch):
     monkeypatch.setenv("LIMS_API_TOKEN", "sekrit")
     assert client.get("/api/samples").status_code == 401
     assert client.get("/api/samples", headers={"X-Api-Token": "sekrit"}).status_code == 200
-    j = client.get("/api/validate/IGI-MP-KXRTQVA-260929-PF-TUM-HMD-01").get_json()
-    assert j["valid"] and not j["exists"] and j["components"]["collection_date"] == "2026-09-29"
-    assert client.get("/api/validate/IGI-MP-KXRTQVA-260929-PF-TUM-HMD").status_code == 400
-    assert "^" in client.get("/api/pattern").get_json()["pattern"]
+    j = client.get("/api/validate/IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06").get_json()
+    assert j["valid"] and not j["exists"] and j["components"]["received_date"] == "2026-09-29"
+    assert j["components"]["operator"] == "KEN" and j["components"]["processing_date"] == "2026-10-06"
+    assert client.get("/api/validate/IGI-MP-KXRTQVA-260929-PF-TUM-HMD-01").status_code == 400
+    assert client.get("/api/pattern").get_json()["pattern"].startswith("^(IGI)-")
 
 
-def test_admin_codes_and_rules(app, alice):
+def test_admin_codes_widths_and_rules(app, alice):
+    r = alice.post("/admin/codes", data={"action": "add", "category": "specimen", "code": "NTC", "meaning": "too long"}, follow_redirects=True)
+    assert b"must match" in r.data
     r = alice.post("/admin/codes", data={"action": "add", "category": "material", "code": "XYZ", "meaning": "test"}, follow_redirects=True)
     assert b"Added material code XYZ" in r.data
-    r = alice.post("/admin/rules", data={"rule_type": "material_transition", "from_code": "NAT", "to_code": "XYZ"}, follow_redirects=True)
+    r = alice.post("/admin/rules", data={"rule_type": "material_transition", "from_code": "CPU", "to_code": "XYZ"}, follow_redirects=True)
     assert b"Rule added" in r.data
     make_root(alice)
-    assert b"Created 1" in derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="XYZ").data
-    # retire the code: new tubes with it are rejected outright (not overridable)
+    assert b"Created 1" in derive(alice, sid("PF", "PFM", "CPU"), fraction="PFM", material="XYZ").data
     alice.post("/admin/codes", data={"action": "toggle", "category": "material", "code": "XYZ"}, follow_redirects=True)
-    assert b"is retired" in derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="XYZ").data
+    assert b"is retired" in derive(alice, sid("PF", "PFM", "CPU"), fraction="PFM", material="XYZ").data
+
+
+def test_operator_codes(app, alice):
+    from lims.auth import create_user
+    with app.app_context():
+        conn = get_db()
+        for bad in ("A", "ABCD", "a1"):
+            try:
+                create_user(conn, "x" + bad, "X", bad, "password1")
+                assert False, bad
+            except ValueError:
+                pass
+        try:
+            create_user(conn, "dup", "Dup", "MF", "password1")
+            assert False
+        except ValueError as e:
+            assert "unique" in str(e)
 
 
 def test_all_fields_required(app, alice):
     r = make_root(alice, freezer="", notes="")
     assert b"All fields are required" in r.data and b"Freezer" in r.data and b"Notes" in r.data
-    assert ids_of(app, P + "PF-BLK-NAT") == []
+    assert ids_of(app, P) == []
+    r = alice.post("/collections/new", data={"participant_id": "P101", "received_date": "2026-09-29"})
+    assert b"All fields are required" in r.data
+
+
+def test_participants(app, alice, client):
+    r = alice.get("/participants/new")
+    assert b'value="P102"' in r.data
+    r = alice.post("/participants/new", data={"participant_id": "P102", "unc_number": "316", "cohort_code": "MP"}, follow_redirects=True)
+    assert b"already participant P101" in r.data
+    r = alice.post("/participants/new", data={"participant_id": "P102", "unc_number": "12", "cohort_code": "MP"}, follow_redirects=True)
+    assert b"exactly 3 digits" in r.data
+    r = alice.post("/participants/new", data={"participant_id": "P120", "unc_number": "UNC327", "cohort_code": "AM"}, follow_redirects=True)
+    assert b"Participant P120 (UNC327) created" in r.data
+    # a non-admin cannot choose the number
+    login(client, "bob")
+    r = client.post("/participants/new", data={"participant_id": "P500", "unc_number": "400", "cohort_code": "TN"}, follow_redirects=True)
+    assert b"Participant P121 (UNC400) created" in r.data
+    # jump box finds a participant by UNC ID
+    r = alice.get("/go?q=unc327")
+    assert r.headers["Location"].endswith("/participants/P120")
+    # UNC number is locked once tubes exist
+    make_root(alice)
+    r = alice.post("/participants/P101/edit", data={"unc_number": "317", "cohort_code": "MP"}, follow_redirects=True)
+    assert b"cannot change once tubes exist" in r.data
 
 
 def test_browse_and_register_pages(app, alice):
     make_root(alice)
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", count="2")
-    make_root(alice, specimen="PB")
+    derive(alice, sid("PF", "PFM", "CPU"), fraction="TUM", material="CPU", count="2")
+    empty = new_collection(alice, specimen_code="PB")
     assert alice.get("/register").status_code == 200
-    r = alice.get("/browse?participant=KXRTQVA")
-    assert r.status_code == 200
-    html = r.data.decode()
-    assert '"participant": "KXRTQVA"' in html and P + "PB-BLK-NAT-01" in html and P + "PF-BLK-CPU-02" in html
-    assert alice.get("/browse").status_code == 200
-    # audit page renders key/value lines
+    html = alice.get("/browse?participant=P101").data.decode()
+    assert '"participant": "P101"' in html and sid("PF", "TUM", "CPU", 2) in html
+    assert '"collection": {"collection_id": %d' % empty in html          # a collection with no tubes still shows
     assert "class='kv'" in alice.get("/admin/audit").data.decode()
 
 
 def test_register_derived_picker(app, alice):
-    make_root(alice)
-    derive(alice, P + "PF-BLK-NAT-01", fraction="BLK", material="CPU", parent_consumed="1")
+    cid = new_collection(alice)
+    add_tubes(alice, cid)
+    derive(alice, sid("PF", "PFM", "CPU"), fraction="PFM", material="CPU", parent_consumed="1")
     assert alice.get("/samples/derive").status_code == 200
-    # HMD can come from CPL/CPU/NAT..., but NAT-01 is depleted -> only CPU-01 eligible
-    html = alice.get("/samples/derive?participant=KXRTQVA&fraction=TUM&material=HMD").data.decode()
-    assert f'value="{P}PF-BLK-CPU-01" required' in html
-    assert f'<code>{P}PF-BLK-NAT-01</code></td><td><span class="status Depleted">' in html
-    assert "Parent status is Depleted" in html
-    # a LIB needs a nucleic-acid parent: nothing eligible yet
-    html = alice.get("/samples/derive?participant=KXRTQVA&fraction=TUM&material=LIB").data.decode()
-    assert "No tube from KXRTQVA can be the parent" in html
-    r = alice.post("/samples/derive", data={"parent_id": P + "PF-BLK-CPU-01", "fraction": "TUM", "material": "HMD"})
-    assert r.status_code == 302 and r.headers["Location"].endswith(f"/samples/{P}PF-BLK-CPU-01/derive?fraction=TUM&material=HMD")
-    html = alice.get(r.headers["Location"]).data.decode()
-    assert 'value="HMD" selected' in html and 'value="TUM" selected' in html
+    html = alice.get("/samples/derive?participant=P101&fraction=TUM&material=SNF").data.decode()
+    assert f'value="{sid("PF", "PFM", "CPU", 2)}" required' in html            # the live vial
+    assert "Parent status is Depleted" in html                                   # the used-up one
+    assert f'value="C:{cid}" required' in html                                   # straight from the collection
+    # PEP cannot be made directly from a specimen or from CPU
+    html = alice.get("/samples/derive?participant=P101&fraction=TUM&material=PEP").data.decode()
+    assert "No tube from P101 can be the parent" in html and f'value="C:{cid}"' not in html
+    r = alice.post("/samples/derive", data={"parent_id": f"C:{cid}", "fraction": "TUM", "material": "SNF"})
+    assert r.headers["Location"].endswith(f"/collections/{cid}/tubes?fraction=TUM&material=SNF")
     r = alice.post("/samples/derive", data={"parent_id": "nope"}, follow_redirects=True)
     assert b"No tube with ID NOPE" in r.data

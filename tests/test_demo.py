@@ -3,40 +3,44 @@ from lims.db import get_db
 from lims.demo import seed_demo
 
 
-def test_seed_demo_builds_a_full_tree(app, client):
+def _drop_fixture_participant(conn):
+    conn.execute("DELETE FROM participant WHERE participant_id='P101'")   # the fixture's P101; the demo creates its own
+
+
+def test_seed_demo_builds_the_worked_example(app, client):
     with app.app_context():
         conn = get_db()
+        _drop_fixture_participant(conn)
         info = seed_demo(conn, "bob")      # bob seeds; alice (admin) makes the second edit
         conn.commit()
-        pid = info["participant"]
-        n = conn.execute("SELECT count(*) FROM sample WHERE participant_id=?", (pid,)).fetchone()[0]
-        assert n == info["tubes"] >= 30
-        assert len(info["roots"]) == 3
-        # every non-root tube points at a tube of the same participant, and roots are consistent
+        assert info["participant"] == "P101" and info["unc_id"] == "UNC316"
+        n = conn.execute("SELECT count(*) FROM sample WHERE participant_id='P101'").fetchone()[0]
+        assert n == info["tubes"] >= 35 and len(info["collections"]) == 2
+        # every tube's parent is in the same collection; first-generation tubes are their own root
         bad = conn.execute("SELECT count(*) FROM sample s JOIN sample p ON p.sample_id = s.parent_id "
-                           "WHERE s.participant_id=? AND (p.participant_id <> s.participant_id OR p.root_id <> s.root_id)", (pid,)).fetchone()[0]
+                           "WHERE p.collection_id <> s.collection_id OR p.root_id <> s.root_id").fetchone()[0]
         assert bad == 0
-        libs = conn.execute("SELECT sample_id FROM sample WHERE participant_id=? AND material_code='LIB'", (pid,)).fetchall()
-        assert len(libs) == 6
-        for (sid,) in libs:
-            assert conn.execute("SELECT 1 FROM data_file WHERE sample_id=?", (sid,)).fetchone()
-            assert conn.execute("SELECT value FROM sample_attribute WHERE sample_id=? AND key='assay'", (sid,)).fetchone()
+        assert conn.execute("SELECT count(*) FROM sample WHERE parent_id IS NULL AND root_id <> sample_id").fetchone()[0] == 0
+        # the document's back-tracking example
+        hmd = "IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06"
+        f = conn.execute("SELECT uri, assay_code, platform_code FROM data_file WHERE sample_id=?", (hmd,)).fetchone()
+        assert f[0].endswith(hmd + "_tumor_DNA_WGS_ONT.bam") and (f[1], f[2]) == ("WGS", "ONT")
         assert info["second"] == "alice" and len(info["edits"]) == 2
-        who = [r[0] for r in conn.execute("SELECT username FROM audit_log WHERE action='update' AND reason IS NOT NULL ORDER BY id")]
+        who = [r[0] for r in conn.execute("SELECT username FROM audit_log WHERE action='update' AND reason IS NOT NULL "
+                                          "AND table_name='sample' ORDER BY id")]
         assert who == ["bob", "alice"]
-        # re-running refuses rather than duplicating
+        assert conn.execute("SELECT count(*) FROM sample_correction").fetchone()[0] == 1
         try:
             seed_demo(conn, "bob")
             assert False, "second seed should fail"
         except ValueError as e:
             assert "already exists" in str(e)
-    # the tree renders for a viewer
     from conftest import login
     login(client, "vic")
-    r = client.get(f"/browse?participant={pid}")
-    assert r.status_code == 200 and info["roots"][0].encode() in r.data
-    r = client.get(f"/api/samples/{info['roots'][0]}/lineage")
-    assert r.status_code == 200 and len(r.get_json()["descendants"]) >= 15
+    r = client.get("/browse?participant=P101")
+    assert r.status_code == 200 and hmd.encode() in r.data
+    r = client.get(f"/api/samples/IGI-MP-P101-UNC316-26SEP29-PF-PFM-CPU-03-MF-26SEP29/lineage")
+    assert r.status_code == 200 and len(r.get_json()["descendants"]) >= 10
 
 
 def test_demo_reset_and_cron_endpoint(app, client):
@@ -49,10 +53,13 @@ def test_demo_reset_and_cron_endpoint(app, client):
     with app.app_context():
         conn = get_db()
         users = sorted(r[0] for r in conn.execute("SELECT username FROM account"))
-        assert users == ["demo", "reviewer", "viewer"]          # the fixture's alice/bob/vic are gone
+        assert users == ["demo", "ken", "mf", "reviewer", "viewer"]     # the fixture's accounts are gone; operators MF and KEN added
         assert conn.execute("SELECT count(*) FROM participant").fetchone()[0] == 4   # main + three smaller ones
         cohorts = sorted(r[0] for r in conn.execute("SELECT cohort_code FROM participant"))
         assert cohorts == ["AM", "MP", "NC", "TN"]
+        assert sorted(r[0] for r in conn.execute("SELECT participant_id FROM participant")) == ["P101", "P102", "P103", "P104"]
+        # a collection with no tubes yet (P104's blood)
+        assert conn.execute("SELECT count(*) FROM collection c WHERE NOT EXISTS (SELECT 1 FROM sample s WHERE s.collection_id=c.collection_id)").fetchone()[0] == 1
         statuses = {r[0] for r in conn.execute("SELECT DISTINCT status FROM sample")}
         assert {"Available", "Depleted", "In use", "Shipped", "Destroyed"} <= statuses
     # login page names the accounts but never shows the password; the demo admin can reset again from the dashboard
@@ -86,12 +93,13 @@ def test_extra_participants_follow_the_rules(app, client):
     from lims.demo import seed_extra_participants
     with app.app_context():
         conn = get_db()
+        _drop_fixture_participant(conn)
         extra = seed_extra_participants(conn, "bob")
         conn.commit()
-        assert len(extra) == 3 and all(n >= 8 for n in extra.values())
+        assert sorted(extra) == ["P102", "P103", "P104"] and all(n >= 4 for n in extra.values())
         for pid in extra:
             bad = conn.execute("SELECT count(*) FROM sample s JOIN sample p ON p.sample_id = s.parent_id "
-                               "WHERE s.participant_id=? AND p.participant_id <> s.participant_id", (pid,)).fetchone()[0]
+                               "WHERE s.participant_id=? AND p.collection_id <> s.collection_id", (pid,)).fetchone()[0]
             assert bad == 0
         try:
             seed_extra_participants(conn, "bob")
@@ -133,3 +141,19 @@ def test_missing_table_is_created_on_first_request(app, alice):
     with app.app_context():
         assert get_db().execute("SELECT count(*) FROM sample_correction").fetchone()[0] == 0
         assert get_db().execute("SELECT count(*) FROM sample").fetchone()[0] == 1   # nothing lost
+
+
+def test_v2_database_is_rebuilt_in_demo_mode(app, client):
+    """A demo database left over from nomenclature v2 (no collection_id column) is rebuilt on the first request."""
+    from lims.db import get_db, is_postgres
+    app.config.update(DEMO_MODE=True, DEMO_PASSWORD="pw-for-demo")
+    with app.app_context():
+        conn = get_db()
+        conn.execute("DROP TABLE sample_correction" + (" CASCADE" if is_postgres(conn) else ""))
+        conn.execute("DROP TABLE sample" + (" CASCADE" if is_postgres(conn) else ""))
+        conn.execute("CREATE TABLE sample (sample_id TEXT PRIMARY KEY, collection_date TEXT)")
+        conn.commit()
+    app.extensions.pop("igi_schema_ok", None)
+    assert client.get("/login").status_code == 200
+    with app.app_context():
+        assert get_db().execute("SELECT count(*) FROM participant").fetchone()[0] == 4

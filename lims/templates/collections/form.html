@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block title %}{% if editing %}Edit collection{% else %}Register collection{% endif %} · IGI LIMS{% endblock %}{% block content %}
+{% if editing %}<h1>Edit collection #{{ c.collection_id }}</h1>
+<p class="muted">Participant, specimen and received date are part of every tube ID from this collection, so they cannot be edited here. A wrong received date is fixed with a correction on the collection page.</p>
+{% else %}<h1>Register</h1>{% include "_register_tabs.html" %}
+<h2>Collection (a specimen as received)</h2>
+<p class="muted">The specimen itself (pleural fluid, blood, tissue) is not labelled or stored as a tube. Register what arrived here, then add the tubes made from it on the next page. Every tube from this collection carries its received date in its ID.</p>{% endif %}
+<div class="card"><form method="post"><div class="grid">
+  {% if editing %}
+  <label><span class="lbl">Participant</span><input type="text" value="{{ c.participant_id }}" disabled></label>
+  <label><span class="lbl">Received date (in the ID)</span><input type="date" value="{{ c.received_date }}" disabled></label>
+  <label><span class="lbl">Specimen (in the ID)</span><input type="text" value="{{ c.specimen_code }}" disabled></label>
+  {% else %}
+  <label><span class="lbl">Participant</span><select name="participant_id" required><option value="">—</option>{% for q in participants %}<option value="{{ q.participant_id }}" {% if c.participant_id == q.participant_id %}selected{% endif %}>{{ q.participant_id }} · UNC{{ q.unc_number }} ({{ q.cohort_code }})</option>{% endfor %}</select> <a class="muted" href="{{ url_for('participants.new') }}">new participant</a></label>
+  <label><span class="lbl">Received date</span><input type="date" name="received_date" value="{{ c.received_date or '' }}" required></label>
+  <label><span class="lbl">Specimen</span><select name="specimen_code" required><option value="">—</option>{% for s in specimens %}<option value="{{ s.code }}" {% if c.specimen_code == s.code %}selected{% endif %}>{{ s.code }} – {{ s.meaning }}</option>{% endfor %}</select></label>
+  {% endif %}
+  <label><span class="lbl">Site</span><select name="site_code">{% for s in sites %}<option value="{{ s.code }}" {% if c.site_code == s.code %}selected{% endif %}>{{ s.code }} – {{ s.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Biobank source</span><select name="biobank_source" required><option value="">—</option>{% for s in biobanks %}<option value="{{ s.code }}" {% if c.biobank_source == s.code %}selected{% endif %}>{{ s.code }} – {{ s.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Received from</span><select name="received_from" required><option value="">—</option>{% for s in parties %}<option value="{{ s.code }}" {% if c.received_from == s.code %}selected{% endif %}>{{ s.code }} – {{ s.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Received by</span><select name="received_by" required><option value="">—</option>{% for u in users %}<option value="{{ u.initials }}" {% if c.received_by == u.initials %}selected{% endif %}>{{ u.initials }} – {{ u.display_name }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Time collected <span class="muted">(on the received date)</span></span><input type="time" data-time-for="time_collected" value="{{ (c.time_collected or '')[11:16] }}"><input type="hidden" name="time_collected" value="{{ c.time_collected or '' }}"> <a href="#" class="muted small" data-other-date="time_collected">other date</a></label>
+  <label><span class="lbl">Time received <span class="muted">(on the received date)</span></span><input type="time" data-time-for="time_received" value="{{ (c.time_received or '')[11:16] }}"><input type="hidden" name="time_received" value="{{ c.time_received or '' }}"> <a href="#" class="muted small" data-other-date="time_received">other date</a></label>
+  <label><span class="lbl">Container</span><select name="container_type" required><option value="">—</option>{% for s in containers %}<option value="{{ s.code }}" {% if c.container_type == s.code %}selected{% endif %}>{{ s.code }} – {{ s.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Transport temperature</span><select name="transport_temp" required><option value="">—</option>{% for v in ('ambient','4C','ice','NA') %}<option {% if c.transport_temp == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Appearance</span><select name="appearance" required><option value="">—</option>{% for v in ('clear','bloody','turbid','NA') %}<option {% if c.appearance == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Quantity received</span><input type="number" step="any" name="quantity" value="{{ c.quantity if c.quantity is not none else '' }}" required placeholder="0 if not applicable"></label>
+  <label><span class="lbl">Unit</span><select name="unit" required><option value="">—</option>{% for s in units %}<option value="{{ s.code }}" {% if c.unit == s.code %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select></label>
+  <label class="wide"><span class="lbl">Notes</span><textarea name="notes" required placeholder="NA if nothing to note">{{ c.notes or '' }}</textarea></label>
+  {% if editing %}<label class="wide"><span class="lbl">Reason for the change (optional; kept in the audit log)</span><textarea name="justification"></textarea></label>{% endif %}
+</div>
+<p><button type="submit">{% if editing %}Save{% else %}Register collection, then add tubes{% endif %}</button>
+<a class="btn secondary" href="{% if editing %}{{ url_for('collections.detail', collection_id=c.collection_id) }}{% else %}{{ url_for('main.register') }}{% endif %}">Cancel</a></p>
+</form></div>
+<script>
+(function () {   // time inputs take the received date unless "other date" is used (GitHub issue #3)
+  const form = document.currentScript.previousElementSibling.querySelector("form");
+  const day = () => { const d = form.querySelector("input[name=received_date]"); return d ? d.value : {{ (c.received_date or '')|tojson }}; };
+  function compose() {
+    form.querySelectorAll("input[data-time-for]").forEach(t => {
+      const h = form.querySelector(`input[type=hidden][name="${t.dataset.timeFor}"]`);
+      if (h) h.value = (t.value && day()) ? day() + "T" + t.value : "";
+    });
+  }
+  form.addEventListener("input", compose); form.addEventListener("submit", compose);
+  form.querySelectorAll("a[data-other-date]").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault();
+    const n = a.dataset.otherDate, h = form.querySelector(`input[type=hidden][name="${n}"]`), t = form.querySelector(`input[data-time-for="${n}"]`);
+    const full = document.createElement("input"); full.type = "datetime-local"; full.name = n; full.value = h.value;
+    h.replaceWith(full); t.remove(); a.remove(); full.focus();
+  }));
+  // values stored for another day start as full date-time inputs
+  form.querySelectorAll("input[type=hidden][name^=time_]").forEach(h => {
+    if (h.value && day() && h.value.slice(0, 10) !== day()) form.querySelector(`a[data-other-date="${h.name}"]`).click();
+  });
+})();
+</script>
+{% endblock %}

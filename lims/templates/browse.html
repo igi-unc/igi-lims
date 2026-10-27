@@ -4,20 +4,20 @@
 <div class="browse">
 <div class="card side">
   <form method="get" class="filters">
-    <input type="text" name="q" value="{{ q }}" placeholder="participant or site ID">
+    <input type="text" name="q" value="{{ q }}" placeholder="P number or UNC ID">
     <select name="cohort"><option value="">all cohorts</option>{% for c in cohorts %}<option value="{{ c.code }}" {% if cohort == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select>
     <button type="submit" class="small">Find</button>
   </form>
   <ul class="plist">
   {% for p in participants %}
-    <li class="{% if selected and selected.participant_id == p.participant_id %}sel{% endif %}"><a href="{{ url_for('main.browse', participant=p.participant_id, q=q, cohort=cohort) }}"><code>{{ p.participant_id }}</code> <span class="muted">{{ p.cohort_code }}{% if p.external_participant_id %} · {{ p.external_participant_id }}{% endif %} · {{ p.n_samples }} tubes</span></a></li>
+    <li class="{% if selected and selected.participant_id == p.participant_id %}sel{% endif %}"><a href="{{ url_for('main.browse', participant=p.participant_id, q=q, cohort=cohort) }}"><code>{{ p.participant_id }}</code> <span class="muted">UNC{{ p.unc_number }} · {{ p.cohort_code }} · {{ p.n_samples }} tubes</span></a></li>
   {% else %}<li class="muted">No participants{% if q or cohort %} match{% endif %}.</li>{% endfor %}
   </ul>
 </div>
 <div class="main">
 {% if selected %}
   <div class="card">
-    <h2>{{ selected.participant_id }} <span class="muted">cohort {{ selected.cohort_code }} ({{ meanings.cohort.get(selected.cohort_code,'') }}){% if selected.external_participant_id %} · site ID {{ selected.external_participant_id }} ({{ selected.site_code or '?' }}){% endif %}</span></h2>
+    <h2>{{ selected.participant_id }} <span class="muted">cohort {{ selected.cohort_code }} ({{ meanings.cohort.get(selected.cohort_code,'') }}) · UNC{{ selected.unc_number }} ({{ selected.site_code or 'UNC' }})</span></h2>
     <p class="muted"><a href="{{ url_for('participants.detail', participant_id=selected.participant_id) }}">participant record</a>
       · {% if request.args.get('deleted') %}<a href="{{ url_for('main.browse', participant=selected.participant_id) }}">hide deleted</a>{% else %}<a href="{{ url_for('main.browse', participant=selected.participant_id, deleted=1) }}">show deleted</a>{% endif %}
       · hover a tube for details, click to pin it and see its printed label</p>

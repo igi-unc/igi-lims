@@ -13,9 +13,27 @@ def create_app(test_config=None):
     db.init_app(app)
     app.register_blueprint(auth.bp)
 
-    from .views import main, samples, participants, admin, api, qcimport, demo
-    for m in (main, samples, participants, admin, api, qcimport, demo):
+    from .views import main, samples, participants, admin, api, qcimport, demo, collections
+    for m in (main, samples, participants, admin, api, qcimport, demo, collections):
         app.register_blueprint(m.bp)
+
+    @app.template_filter("yymmmdd")
+    def yymmmdd(value):
+        """ISO date -> 26SEP29, as printed in sample IDs."""
+        from .ids import format_yymmmdd
+        try:
+            return format_yymmmdd(value) if value else ""
+        except (ValueError, TypeError):
+            return value
+
+    @app.template_filter("short_id")
+    def short_id(sample_id):
+        """Fraction-material-aliquot part of a sample ID (what distinguishes tubes within a collection)."""
+        from .ids import segment_names
+        if not sample_id:
+            return ""
+        parts = dict(zip(segment_names(), sample_id.split(app.config["ID_SEPARATOR"])))
+        return "-".join(parts.get(k, "") for k in ("fraction", "material", "aliquot"))
 
     @app.template_filter("kv")
     def kv(text):

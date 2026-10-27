@@ -16,8 +16,10 @@ export FLASK_APP=app
 .venv/bin/flask run --debug                              # http://127.0.0.1:5000
 ```
 
-Log in, add participants, register a collected specimen (root tube), then use
-**Derive** on any tube to create children (cryo tubes, pellets, DNA, libraries).
+Log in, add a participant, register a collection (the specimen as received,
+which is not itself a tube) and the tubes made straight from it, then use
+**Derive** on any tube to create children (enriched fractions, pellets, cultures,
+DNA, RNA, peptide eluates).
 
 ### Demonstration data
 
@@ -25,17 +27,17 @@ Log in, add participants, register a collected specimen (root tube), then use
 .venv/bin/flask seed-demo --user <username>     # records are attributed to this account
 ```
 
-Adds one malignant-pleural-effusion participant (site ID MPE-021) with three
-collections processed through to libraries, a peptide eluate and data files:
-43 tubes, custody events and two audited edits (one by a second account) so
-the flagged history has something to show. It also fills the empty lists (SOPs,
-freezers, racks, boxes, lots, indexes, submissions, instruments) with a few
-plausible entries. Three smaller participants follow in the other cohorts
-(AML-007: marrow and blood, with a vial shipped and one destroyed; TNBC-103:
-core biopsy as FFPE and OCT blocks plus blood; NUT-002: snap-frozen lymph node
-through to a nanopore library, blood not yet processed), 75 tubes in all.
-Re-running skips the participants that already exist. The data is built with
-the same service functions as the forms, so it obeys the rules.
+Adds participant P101 / UNC316, which is the worked example of the nomenclature
+document (section 5) tube for tube: the pleural fluid received 29 Sep 2026 and
+processed by MF into supernatant, PFMC vials, tumour, immune and CD8 fractions,
+pellets, Ken's HMW DNA and RNA, a culture and a peptide eluate, plus the matched
+blood collection. It has data files named the way section 6 asks, custody
+events, two audited edits (one by a second account) and one correction. Three
+smaller participants follow (P102 AML, P103 TNBC, P104 NUT carcinoma, one of
+whose collections has no tubes yet), 63 tubes in all. Operator accounts MF and
+KEN are created if missing. Re-running skips participants that already exist.
+The data is built with the same service functions as the forms, so it obeys the
+rules.
 
 ### Running on your own laptop
 
@@ -64,16 +66,34 @@ http://127.0.0.1:5000 on the laptop.
 
 ## What is enforced
 
-* **Sample IDs** follow `config.py` (`ID_SEGMENTS`), currently the 35-character
-  `IGI-CC-PPPPPPP-YYMMDD-SS-FFF-MMM-AA`. IDs are composed by the database, never
-  typed. The aliquot number is issued per prefix and never reused, even after a
-  tube is deleted. `GET /api/pattern` returns the anchored regex for pipelines.
+* **Sample IDs** follow IGI Sample Nomenclature v2.1 (`ID_SEGMENTS` in
+  `config.py`): `IGI-CC-PNNN-UNCNNN-YYMMMDD-SS-FFF-MMM-AA-OO(O)-YYMMMDD`, 51 or 52
+  characters, e.g. `IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06`. IDs
+  are composed by the database, never typed. Segments 1-6 come from the
+  participant and the collection (received date) and are inherited by every
+  derived tube; fraction, material, operator and processing date belong to the
+  tube. The aliquot is counted within segments 1-8 and never reused, even after
+  a tube is deleted. `GET /api/pattern` returns the anchored regex for pipelines.
+  The v2 format (35 characters) is kept at git tag `v2-final`; see *Falling
+  back to nomenclature v2* below.
+* **Participants** get the next IGI patient ID (P001, P002, ...; never reused;
+  admins may enter an existing number) and a required, unique 3-digit UNC
+  number. Cohort and UNC number lock once tubes exist.
+* **Collections.** The specimen as received (fluid, blood, tissue) is a
+  collection record, not a tube: received date, specimen, quantity, container,
+  times collected and received, who received it. Tubes made straight from it
+  are first-generation tubes with no parent; every tube carries its
+  collection_id, so "all tubes from this collection" is one query. A collection
+  with no tubes can be deleted.
+* **Operators** are account initials: 2 or 3 uppercase letters, unique.
 * **Code lists** (cohort, specimen, fraction, material, status, assay, biobank
   source, site, unit, SOP) live in one table and are edited under *Codes*.
   Codes are retired, never deleted or repurposed.
 * **Derivation rules** (*Rules* page) decide which fractions a specimen may
-  have, which fraction/material transitions are allowed, and what a root tube
-  may arrive as. A violation blocks creation and offers *Request override*.
+  have, which fraction/material transitions are allowed, and which materials
+  can be made straight from a specimen. A processing date before the received
+  date (or before the parent's) is also flagged. A violation blocks creation
+  and offers an override with a required justification.
 * **Changes are flagged, not queued.** Edits, deletes, restores and rule
   overrides apply immediately with the operator's stated reason. The audit log
   and the tube's history flag every row that is not a plain creation; a
@@ -84,33 +104,31 @@ http://127.0.0.1:5000 on the laptop.
 * **Audit log** of every write (who, when, before, after).
 * **Label preview with a 2D barcode.** Every tube page, and the panel that
   opens when you click a tube in the Samples & Participants tree, shows the
-  label as it should print: the ID broken at hyphens beside a Data Matrix code
-  that encodes exactly the sample ID. It is a preview only; printing is not
+  label as it should print: three rows of at most 18 characters broken at
+  hyphens (`LABEL_ROWS` in `config.py`) beside a Data Matrix code that encodes
+  exactly the sample ID. It is a preview only; printing is not
   wired to a label printer yet.
-* **Label values are read-only.** Fields printed on the tube label (today the
-  collection date and the operator; `LABEL_FIELDS` in `config.py`) cannot be
-  edited once the tube exists. A mistake is fixed with *Correct a value printed
-  on the label* on the tube page: the right value and a required reason are
-  recorded beside the original and flagged in the audit log, while the label,
-  the ID and the stored value stay as printed. A collection-date correction
-  applies to every tube of that collection. The API returns both values.
+* **Label values are read-only.** The received date, operator and processing
+  date are printed on the label (`LABEL_FIELDS` in `config.py`) and cannot be
+  edited once the tube exists. A mistake is fixed with a correction on the tube
+  or collection page: the right value and a required reason are recorded
+  beside the original and flagged in the audit log, while the label, the ID and
+  the stored value stay as printed. A received-date correction is made once on
+  the collection and shows on all its tubes. The API returns both values.
 * **Occupied slots are flagged.** Registering or moving a tube into a
   freezer/rack/box/position that already holds an Available or In-use tube
   shows a warning naming the occupant; submitting again confirms that the slot
   is shared. Depleted, shipped and destroyed tubes do not occupy their slot.
-* **Base and derived tubes in one step.** When a base specimen was processed
-  the moment it arrived (blood straight into PBMCs), the derived-specimen
-  picker offers a combined form: collection date, specimen and quantity for
-  the base tube, everything else for the derived tubes. The base tube takes
-  its time, operator, SOP and biobank source from the derived tubes, is marked
-  Depleted by default, and its creation is flagged in the audit log.
-* **Times follow the collection date.** On the base-specimen form the
-  "time collected" and "time received" fields take only a time; the date is
-  the collection date above. An "other date" link switches to a full
-  date-and-time input for a specimen received on a later day.
+* **Times follow the received date.** On the collection form the "time
+  collected" and "time received" fields take only a time; the date is the
+  received date above. An "other date" link switches to a full date-and-time
+  input.
 * **Custody events** are append-only. **Data files** are linked to the tube
-  that was sequenced or run (usually LIB or PEP) by URI, with assay, run ID,
-  checksum and pipeline version.
+  handed to the facility (usually DNA, HMD, RNA, HMR or PEP) by URI, with a
+  required assay and platform, run ID, checksum and pipeline version. The form
+  suggests the file name `<sample ID>_<source>_<assay>_<platform>` (for example
+  `…-HMD-01-KEN-26OCT06_tumor_DNA_WGS_ONT`); the labels are `ASSAY_LABELS` and
+  `PLATFORM_LABELS` in `config.py`.
 * **No free text** except Notes. Operator, SOP, freezer, rack, box, position,
   custody parties and purposes, and every metadata vocabulary (kits, lots,
   buffers, media, antibodies, ...) are dropdowns backed by admin-extendable
@@ -140,13 +158,34 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 
 | Endpoint | Purpose |
 |---|---|
-| `/api/pattern` | anchored regex and fixed length for IDs |
+| `/api/pattern` | anchored regex for IDs (length varies: 51 or 52) |
 | `/api/validate/<id>` | parse an ID into components; says whether it exists |
-| `/api/samples?participant=&root=&material=&status=&prefix=` | list tubes |
-| `/api/samples/<id>` | tube with custody events and files |
-| `/api/samples/<id>/lineage` | ancestors (root first) and all descendants |
-| `/api/tree/<root_id>` | nested tree for a collection |
+| `/api/samples?participant=&collection=&root=&material=&status=&prefix=` | list tubes |
+| `/api/samples/<id>` | tube with its collection, custody events, files and corrections |
+| `/api/samples/<id>/lineage` | ancestors (first generation first) and all descendants |
+| `/api/tree/<id>` | nested tree of the collection a tube belongs to |
+| `/api/collections/<collection_id>` | collection record, its tree and corrections |
 | `/api/files?assay=&participant=` | data files joined to tubes |
+
+## Falling back to nomenclature v2
+
+The v2 code (35-character IDs, 7-letter participant codes, root tubes) is tagged
+`v2-final` and kept on the branch `nomenclature-v2`. The two formats use
+different database layouts, so a fallback is a code rollback plus a database
+rebuild; data entered under v2.1 does not carry over.
+
+* **Vercel demo:** Deployments, open the deployment of commit `4d07295`
+  ("Create missing tables on the first request after a deploy"), then
+  **Instant Rollback** (or **Promote**). Then run the reset once
+  (`curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/cron/demo-reset`).
+  To make it permanent, push the branch: `git push origin nomenclature-v2:main --force`
+  after agreeing it with whoever else pushes to `main`.
+* **Workstation or laptop:** `git checkout v2-final`, then put back the v2
+  database backup (`instance/lims.db.bak-…-v2`) or build a fresh one with
+  `flask init-db`.
+
+Going forward again is `git checkout main`, then a reset (demo) or the v2.1
+database backup.
 
 ## Hosting
 
@@ -191,7 +230,8 @@ PostgreSQL.
 
 ## Documentation
 
-`docs/IGI_LIMS_feature_overview.pdf` is an illustrated walkthrough. To rebuild
+`docs/IGI_LIMS_feature_overview.pdf` is an illustrated walkthrough. It still shows nomenclature v2
+(35-character IDs, root tubes) and needs rebuilding for v2.1. To rebuild
 it after UI changes (needs `pip install -r requirements-docs.txt` and a one-time
 `playwright install chromium`):
 

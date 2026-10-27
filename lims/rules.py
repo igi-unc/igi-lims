@@ -13,12 +13,12 @@ def _has_rules(conn, rule_type, from_code):
 
 
 def check_root(conn, comp):
-    """comp: parsed components of the new root sample."""
+    """comp: parsed components of a first-generation tube (made straight from a collection)."""
     v = []
     if comp["fraction"] not in _allowed(conn, "specimen_fraction", comp["specimen"]):
         v.append(f"Fraction {comp['fraction']} is not allowed for specimen {comp['specimen']}")
     if comp["material"] not in _allowed(conn, "root_material", "*"):
-        v.append(f"Material {comp['material']} is not an accepted as-collected material for a root specimen")
+        v.append(f"Material {comp['material']} cannot be made directly from a received specimen")
     if _has_rules(conn, "material_fraction", comp["material"]) and \
             comp["fraction"] not in _allowed(conn, "material_fraction", comp["material"]):
         v.append(f"Material {comp['material']} requires fraction in {sorted(_allowed(conn, 'material_fraction', comp['material']))}")
@@ -33,7 +33,7 @@ def check_derivation(conn, parent, comp):
     if parent["status"] in ("Depleted", "Destroyed"):
         v.append(f"Parent status is {parent['status']}")
     for field, col in (("project", "project_code"), ("cohort", "cohort_code"), ("participant", "participant_id"),
-                       ("collection_date", "collection_date"), ("specimen", "specimen_code")):
+                       ("unc_id", "unc_id"), ("received_date", "received_date"), ("specimen", "specimen_code")):
         if comp[field] != parent[col]:
             v.append(f"Child {field} ({comp[field]}) differs from parent ({parent[col]})")
     if comp["fraction"] not in _allowed(conn, "specimen_fraction", comp["specimen"]):

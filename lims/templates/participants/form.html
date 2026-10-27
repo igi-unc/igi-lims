@@ -1,10 +1,12 @@
 {% extends "base.html" %}{% block content %}
 {% if editing %}<h1>Edit participant {{ p.participant_id }}</h1>{% else %}<h1>Register</h1>{% include "_register_tabs.html" %}<h2>Participant</h2>{% endif %}
+<p class="muted">The IGI patient ID and the UNC ID are printed in every sample ID and on every label (for example <code>IGI-MP-P101-UNC316-…</code>).{% if locked %} This participant has tubes, so the cohort and UNC number can no longer change.{% endif %}</p>
 <div class="card"><form method="post"><div class="grid">
-  {% if not editing %}<label><span class="lbl">IGI participant code (leave blank to generate; format set in config.py ID_SEGMENTS)</span><input type="text" name="participant_id" value="{{ p.participant_id or '' }}" placeholder="auto"></label>{% endif %}
-  <label><span class="lbl">Cohort</span><select name="cohort_code" required>{% for c in cohorts %}<option value="{{ c.code }}" {% if p.cohort_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
-  <label><span class="lbl">Collection site's own ID (never printed on labels)</span><input type="text" name="external_participant_id" value="{{ p.external_participant_id or '' }}"></label>
-  <label><span class="lbl">Site</span><select name="site_code"><option value="">—</option>{% for c in sites %}<option value="{{ c.code }}" {% if p.site_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  {% if not editing %}<label><span class="lbl">IGI patient ID{% if g.user.role != 'admin' %} (issued automatically){% endif %}</span>
+    <input type="text" name="participant_id" value="{{ p.participant_id or '' }}" {% if g.user.role != 'admin' %}readonly{% endif %} pattern="P[0-9]{3}" title="P followed by 3 digits"></label>{% endif %}
+  <label><span class="lbl">UNC number ({{ unc_digits or 3 }} digits)</span><input type="text" name="unc_number" value="{{ p.unc_number or '' }}" {% if locked %}disabled{% else %}required{% endif %} pattern="(UNC)?[0-9]{3}" placeholder="316" inputmode="numeric"></label>
+  <label><span class="lbl">Cohort</span><select name="cohort_code" {% if locked %}disabled{% else %}required{% endif %}><option value="">—</option>{% for c in cohorts %}<option value="{{ c.code }}" {% if p.cohort_code == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Site</span><select name="site_code" disabled>{% for c in sites %}<option value="{{ c.code }}" {% if (p.site_code or 'UNC') == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
   <label class="wide"><span class="lbl">Notes</span><textarea name="notes">{{ p.notes or '' }}</textarea></label>
 </div><p><button type="submit">Save</button> <a class="btn secondary" href="{{ url_for('participants.list_participants') }}">Cancel</a></p></form></div>
 {% endblock %}
