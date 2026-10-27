@@ -44,7 +44,13 @@
 {% endif %}
 
 <div class="card">
-  <h3>{% if participant and fraction and material %}Step 3 · {% endif %}Or scan the parent tube directly</h3>
+  <h3>{% if participant and fraction and material %}Step 3 · {% endif %}Base specimen not registered yet?</h3>
+  <p class="muted">For a base specimen that only existed long enough to be processed (blood spun straight into PBMCs and plasma, for example) you can register it and the derived tubes in one step. The base tube is filled from the derived tube's details, so check it afterwards.</p>
+  <p><a class="btn secondary" href="{{ url_for('samples.derive_with_base', participant=participant, fraction=fraction, material=material) }}">Register base specimen and derived tubes together</a></p>
+</div>
+
+<div class="card">
+  <h3>{% if participant and fraction and material %}Step 4 · {% endif %}Or scan the parent tube directly</h3>
   <form method="post" class="filters">
     <input type="hidden" name="fraction" value="{{ fraction }}"><input type="hidden" name="material" value="{{ material }}">
     <label><input type="text" name="parent_id" value="{{ parent_id }}" placeholder="IGI-MP-XXXXXXX-YYMMDD-SS-FFF-MMM-AA" autocomplete="off" style="min-width:360px"></label>

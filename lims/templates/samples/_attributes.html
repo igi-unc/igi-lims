@@ -6,6 +6,7 @@
   const VALUES = {{ (p.attributes or {})|tojson }};
   const box = document.getElementById("attr-fields");
   const fr = document.querySelector("select[name=fraction]"), mat = document.querySelector("select[name=material]");
+  const collDate = document.querySelector("input[name=collection_date]");
   const esc = v => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
   function field(d) {
     const name = "attr_" + d.key, cur = VALUES[d.key] != null ? VALUES[d.key] : "";
@@ -15,6 +16,15 @@
       input = `<select name="${name}"${req}><option value="">—</option>` + d.options.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`).join("") + `</select>`;
     } else if (d.type === "number") input = `<input type="number" step="any" name="${name}" value="${esc(cur)}"${req}>`;
     else if (d.type === "date") input = `<input type="date" name="${name}" value="${esc(cur)}"${req}>`;
+    else if (d.type === "datetime" && collDate) {
+      // Forms that carry a collection date (issue #3): enter only the time; the date is the collection date.
+      // Existing values from another day, or a click on "other date", fall back to a full date-time input.
+      const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(cur);
+      if (m && collDate.value && m[1] !== collDate.value) input = `<input type="datetime-local" name="${name}" value="${esc(cur)}"${req}>`;
+      else input = `<input type="time" data-time-for="${name}" value="${m ? esc(m[2]) : ""}"${req}><input type="hidden" name="${name}" value="${esc(cur)}">`
+                 + ` <a href="#" class="muted small" data-other-date="${name}">other date</a>`;
+      return `<label><span class="lbl">${lbl} <span class="muted">(on the collection date)</span></span>${input}</label>`;
+    }
     else if (d.type === "datetime") input = `<input type="datetime-local" name="${name}" value="${esc(cur)}"${req}>`;
     else input = `<select name="${name}"${req}><option value="">— (no entries yet; add some under Codes)</option></select>`;
     return `<label><span class="lbl">${lbl}</span>${input}</label>`;
@@ -27,5 +37,20 @@
   }
   if (fr) fr.addEventListener("change", render); if (mat) mat.addEventListener("change", render);
   render();
+  function compose() {   // hidden attr value = collection date + time (blank time -> blank value)
+    box.querySelectorAll("input[data-time-for]").forEach(t => {
+      const h = box.querySelector(`input[type=hidden][name="${t.dataset.timeFor}"]`);
+      if (h) h.value = (t.value && collDate && collDate.value) ? collDate.value + "T" + t.value : "";
+    });
+  }
+  box.addEventListener("input", compose); if (collDate) collDate.addEventListener("change", compose);
+  box.addEventListener("click", e => {
+    const a = e.target.closest("a[data-other-date]"); if (!a) return;
+    e.preventDefault();
+    const name = a.dataset.otherDate, h = box.querySelector(`input[type=hidden][name="${name}"]`), t = box.querySelector(`input[data-time-for="${name}"]`);
+    const full = document.createElement("input"); full.type = "datetime-local"; full.name = name; full.value = h.value;
+    h.replaceWith(full); t.remove(); a.remove(); full.focus();
+  });
+  const form = box.closest("form"); if (form) form.addEventListener("submit", compose);
 })();
 </script>

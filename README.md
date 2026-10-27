@@ -82,6 +82,20 @@ http://127.0.0.1:5000 on the laptop.
 * **Deletes are soft.** The record stays, the aliquot number stays reserved,
   and a tube with active children cannot be deleted.
 * **Audit log** of every write (who, when, before, after).
+* **Occupied slots are flagged.** Registering or moving a tube into a
+  freezer/rack/box/position that already holds an Available or In-use tube
+  shows a warning naming the occupant; submitting again confirms that the slot
+  is shared. Depleted, shipped and destroyed tubes do not occupy their slot.
+* **Base and derived tubes in one step.** When a base specimen was processed
+  the moment it arrived (blood straight into PBMCs), the derived-specimen
+  picker offers a combined form: collection date, specimen and quantity for
+  the base tube, everything else for the derived tubes. The base tube takes
+  its time, operator, SOP and biobank source from the derived tubes, is marked
+  Depleted by default, and its creation is flagged in the audit log.
+* **Times follow the collection date.** On the base-specimen form the
+  "time collected" and "time received" fields take only a time; the date is
+  the collection date above. An "other date" link switches to a full
+  date-and-time input for a specimen received on a later day.
 * **Custody events** are append-only. **Data files** are linked to the tube
   that was sequenced or run (usually LIB or PEP) by URI, with assay, run ID,
   checksum and pipeline version.

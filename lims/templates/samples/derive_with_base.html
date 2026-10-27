@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Register base + derived · IGI LIMS{% endblock %}{% block content %}
+<h1>Register</h1>
+{% include "_register_tabs.html" %}
+<h2>Base specimen and derived tubes in one step</h2>
+<p class="muted">Use this when the base specimen was processed as soon as it arrived and was never registered on its own. The base tube is created first, then the derived tubes are attached to it. Its processing time, operator, SOP and biobank source are copied from the derived tubes, and it is marked Depleted unless you untick the box below. Check the base tube afterwards and edit anything that differs.</p>
+<div class="card">
+<form method="post">
+<h3>Base specimen (as collected)</h3>
+<div class="grid">
+  <label><span class="lbl">Participant</span><select name="participant" required>
+    <option value="">—</option>{% for q in participants %}<option value="{{ q.participant_id }}" {% if p.participant == q.participant_id %}selected{% endif %}>{{ q.participant_id }} ({{ q.cohort_code }}{% if q.external_participant_id %}, {{ q.external_participant_id }}{% endif %})</option>{% endfor %}
+  </select> <a class="muted" href="{{ url_for('participants.new') }}">new participant</a></label>
+  <label><span class="lbl">Collection date</span><input type="date" name="collection_date" value="{{ p.collection_date or '' }}" required></label>
+  <label><span class="lbl">Specimen</span><select name="specimen" required><option value="">—</option>{% for c in specimens %}<option value="{{ c.code }}" {% if p.specimen == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Fraction (as received)</span><select name="base_fraction" required>{% for c in fractions %}<option value="{{ c.code }}" {% if p.base_fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Material (as received)</span><select name="base_material" required>{% for c in materials %}<option value="{{ c.code }}" {% if p.base_material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Quantity received</span><input type="number" step="any" name="base_quantity" value="{{ p.base_quantity if p.base_quantity is not none else '' }}" required placeholder="0 if not applicable"></label>
+  <label><span class="lbl">Unit</span><select name="base_unit" required><option value="">—</option>{% for c in units %}<option value="{{ c.code }}" {% if p.base_unit == c.code %}selected{% endif %}>{{ c.code }}</option>{% endfor %}</select></label>
+  <label class="wide"><input type="checkbox" name="parent_consumed" value="1" {% if p.parent_consumed %}checked{% endif %}> All base material used – mark the base specimen as Depleted</label>
+</div>
+<h3>Derived tubes</h3>
+<div class="grid">
+  <label><span class="lbl">Fraction</span><select name="fraction" required><option value="">—</option>{% for c in fractions %}<option value="{{ c.code }}" {% if p.fraction == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  <label><span class="lbl">Material</span><select name="material" required><option value="">—</option>{% for c in materials %}<option value="{{ c.code }}" {% if p.material == c.code %}selected{% endif %}>{{ c.code }} – {{ c.meaning }}</option>{% endfor %}</select></label>
+  {% include "samples/_fields.html" %}
+</div>
+{% include "samples/_attributes.html" %}
+{% if prefix %}<p class="muted">Derived IDs will be issued as <code>{{ prefix }}NN</code></p>{% endif %}
+{% if violations %}<div class="flash error"><strong>Not created.</strong><ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>
+<p>Rule overrides are not offered on this combined form. Register the base specimen on its own and derive from it if this is a legitimate exception.</p></div>{% endif %}
+{% if confirm_location %}<input type="hidden" name="confirm_location" value="1">{% endif %}
+<p><button type="submit" name="action" value="create">{% if confirm_location %}Create anyway (slot is shared){% else %}Create base specimen and derived tubes{% endif %}</button> <a class="btn secondary" href="{{ url_for('samples.derive_pick') }}">Cancel</a></p>
+</form>
+</div>
+{% endblock %}

@@ -68,6 +68,12 @@
   the derive form.
 * Status and location are one column in tables: an Available tube shows where
   it is; anything else shows its status (plus the location unless Depleted).
+* GitHub issues #1-#3 (2026-10-27): location conflicts warn and ask for a
+  second submit rather than block (a slot can legitimately hold several tubes,
+  e.g. one box position for a bag); the combined base+derived form offers no
+  rule override (use the two separate forms for exceptions); time-only inputs
+  are client-side only, the server still receives and validates a full
+  date-time, so API clients are unaffected.
 * PostgreSQL support is a translation layer in `lims/db.py` (placeholders,
   strftime, INSERT OR IGNORE, lastrowid, LIKE→ILIKE, schema DDL). SQL in the
   code base stays in the SQLite dialect; the suite runs on both backends.

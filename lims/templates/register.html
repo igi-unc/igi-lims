@@ -13,7 +13,7 @@
 </div>
 <div class="card">
   <h2>3. Derived specimen</h2>
-  <p>Register tubes made from an existing tube: cryo vials, enriched fractions, pellets, DNA or RNA, libraries, peptide eluates. Pick the parent tube, and the new IDs inherit everything to the left of the fraction.</p>
+  <p>Register tubes made from an existing tube: cryo vials, enriched fractions, pellets, DNA or RNA, libraries, peptide eluates. Pick the parent tube, and the new IDs inherit everything to the left of the fraction. If the base specimen was never registered because it was processed straight away, the same page can register both at once.</p>
   {% if g.user.role != 'viewer' %}<p><a class="btn" href="{{ url_for('samples.derive_pick') }}">Register a derived specimen</a></p>{% endif %}
 </div>
 </div>

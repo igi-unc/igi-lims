@@ -27,6 +27,7 @@ table.compact td { padding:3px 8px; }
 .flash { padding:8px 12px; border-radius:4px; margin-bottom:10px; }
 .flash.ok { background:#e8f7ec; color:var(--ok); border:1px solid #b7e2c3; }
 .flash.error { background:#fdecec; color:var(--err); border:1px solid #f3b8b8; }
+.flash.warn { background:#fff6e0; color:#7a4e00; border:1px solid #f0d48a; }
 form label { display:block; margin:6px 0; }
 form label span.lbl { display:block; font-size:12px; color:var(--muted); }
 form input[type=text], form input[type=password], form input[type=number], form input[type=date], form input[type=datetime-local], form select, form textarea { width:100%; padding:5px 7px; border:1px solid var(--line); border-radius:4px; font: inherit; }

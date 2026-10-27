@@ -156,6 +156,23 @@ def create_samples(conn, payload, force=False, reason=None):
     return created, violations
 
 
+OCCUPYING_STATUSES = ("Available", "In use")
+
+
+def location_conflicts(conn, loc, exclude=None):
+    """Tubes already sitting in this freezer/rack/box/position (a real slot: no part NA or blank).
+    Depleted, shipped and destroyed tubes keep their last location on record but do not occupy the slot."""
+    vals = [(loc.get(f) or "").strip() for f in LOCATION_FIELDS]
+    if any(v in ("", "NA") for v in vals):
+        return []
+    q = ("SELECT sample_id, status FROM sample WHERE freezer=? AND rack=? AND box=? AND position=? "
+         "AND deleted_at IS NULL AND status IN (%s)" % ",".join("?" for _ in OCCUPYING_STATUSES))
+    params = vals + list(OCCUPYING_STATUSES)
+    if exclude:
+        q += " AND sample_id<>?"; params.append(exclude)
+    return conn.execute(q + " ORDER BY sample_id", params).fetchall()
+
+
 def diff_changes(conn, sample_id, changes):
     """Return {field: (old, new)} for fields that actually change. Raises ValueError on bad input."""
     cur = get_sample(conn, sample_id)

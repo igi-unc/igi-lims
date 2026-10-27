@@ -128,6 +128,29 @@ def _render_form(template, payload, violations=None, prefix=None, **ctx):
                            fractions=codes("fraction"), materials=codes("material"), specimens=codes("specimen"), **ctx)
 
 
+def _validate_create(conn, payload):
+    """Field-level checks shared by every create form. Raises ValueError."""
+    _check_coded(conn, payload)
+    payload["attributes"] = attributes.validate_dict(conn, payload.get("attributes"), payload.get("fraction"), payload.get("material"))
+    for d in attributes.definitions_for(conn, payload.get("fraction"), payload.get("material")):
+        if d["required"] and not payload["attributes"].get(d["key"]):
+            raise ValueError(f"{d['label']} is required for {payload.get('fraction')}-{payload.get('material')} tubes")
+
+
+def _location_warning(conn, payload, exclude=None):
+    """Issue #2: warn (do not block) when the chosen slot already holds a tube. Returns a message, or None
+    when the slot is free or the user has already confirmed on the re-shown form."""
+    if request.form.get("confirm_location"):
+        return None
+    taken = svc.location_conflicts(conn, payload, exclude=exclude)
+    if not taken:
+        return None
+    slot = "/".join(payload.get(f) or "" for f in svc.LOCATION_FIELDS)
+    who = ", ".join(f"{t['sample_id']} ({t['status']})" for t in taken[:5]) + (" …" if len(taken) > 5 else "")
+    return (f"Location {slot} is already occupied by {who}. Choose another position, or submit again to confirm "
+            "that both tubes share this slot.")
+
+
 def _handle_create(payload, template, **ctx):
     """Shared POST logic for root and derived creation."""
     conn = get_db()
@@ -138,11 +161,12 @@ def _handle_create(payload, template, **ctx):
         flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
         return _render_form(template, payload, **ctx)
     try:
-        _check_coded(conn, payload)
-        payload["attributes"] = attributes.validate_dict(conn, payload.get("attributes"), payload.get("fraction"), payload.get("material"))
-        for d in attributes.definitions_for(conn, payload.get("fraction"), payload.get("material")):
-            if d["required"] and not payload["attributes"].get(d["key"]):
-                raise ValueError(f"{d['label']} is required for {payload.get('fraction')}-{payload.get('material')} tubes")
+        _validate_create(conn, payload)
+        warn = _location_warning(conn, payload)
+        if warn:
+            flash(warn, "warn")
+            prefix, violations = svc.preview(conn, payload)
+            return _render_form(template, payload, violations, prefix, confirm_location=True, **ctx)
         just = request.form.get("justification", "").strip()
         if action == "override" and not just:
             flash("A justification is required to override a derivation rule", "error")
@@ -230,6 +254,68 @@ def derive(sample_id):
     return _render_form("samples/derive.html", payload, parent=parent, allowed_fr=allowed_fr, allowed_mat=allowed_mat)
 
 
+@bp.route("/derive/with-base", methods=("GET", "POST"))
+@writer_required
+def derive_with_base():
+    """Issue #1: register a short-lived base specimen and the tubes derived from it in one go.
+    The base tube is filled from this form (participant, collection date, specimen, as-collected quantity) plus
+    the operator, time, SOP and biobank entered for the derived tubes, and is marked Depleted when consumed."""
+    conn = get_db()
+    participants = conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall()
+    ctx = {"participants": participants, "with_base": True}
+    if request.method == "POST":
+        payload = _form_payload(extra=("participant", "collection_date", "specimen",
+                                       "base_fraction", "base_material", "base_quantity", "base_unit"))
+        payload["parent_consumed"] = bool(request.form.get("parent_consumed"))
+        required = REQUIRED_CREATE_FIELDS + REQUIRED_ROOT_FIELDS + ["base_fraction", "base_material", "base_quantity", "base_unit"]
+        missing = _missing(payload, required)
+        if missing:
+            flash("All fields are required (enter NA where not applicable). Missing: " + ", ".join(missing), "error")
+            return _render_form("samples/derive_with_base.html", payload, **ctx)
+        root = {"participant": payload["participant"], "collection_date": payload["collection_date"],
+                "specimen": payload["specimen"], "fraction": payload["base_fraction"], "material": payload["base_material"],
+                "count": 1, "created_datetime": payload["created_datetime"], "created_by": payload["created_by"],
+                "sop_code": payload["sop_code"], "biobank_source": payload["biobank_source"],
+                "quantity": payload["base_quantity"], "unit": payload["base_unit"],
+                "freezer": "NA", "rack": "NA", "box": "NA", "position": "NA", "status": "Available",
+                "notes": "Base specimen registered automatically from the derived-specimen form; the processing time, "
+                         "operator, SOP and biobank source were copied from the derived tube(s). Verify and edit as needed.",
+                "attributes": {}}
+        try:
+            _validate_create(conn, root)
+            derived = {k: v for k, v in payload.items() if not k.startswith("base_")}
+            _validate_create(conn, derived)
+            warn = _location_warning(conn, derived)
+            if warn:
+                flash(warn, "warn")
+                return _render_form("samples/derive_with_base.html", payload, confirm_location=True, **ctx)
+            root_ids, violations = svc.create_samples(conn, root, reason="Base specimen registered automatically from the derived-specimen form")
+            if violations:
+                conn.rollback()
+                return _render_form("samples/derive_with_base.html", payload,
+                                    ["Base specimen: " + v for v in violations], None, **ctx)
+            derived["parent_id"] = root_ids[0]
+            created, violations = svc.create_samples(conn, derived)
+            if violations:
+                conn.rollback()
+                prefix, _ = svc.preview(conn, {**derived, "parent_id": None, "participant": root["participant"],
+                                                "collection_date": root["collection_date"], "specimen": root["specimen"]})
+                return _render_form("samples/derive_with_base.html", payload,
+                                    ["Derived tube: " + v for v in violations], prefix, **ctx)
+            conn.commit()
+            flash(f"Registered base specimen {root_ids[0]}" + (" (marked Depleted)" if derived.get("parent_consumed") else "")
+                  + f" and {len(created)} derived tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else ""), "ok")
+            return redirect(url_for("samples.detail", sample_id=created[0]))
+        except ValueError as e:
+            conn.rollback()
+            flash(str(e), "error")
+            return _render_form("samples/derive_with_base.html", payload, **ctx)
+    payload = {"participant": request.args.get("participant", ""), "base_fraction": "BLK", "base_material": "NAT",
+               "base_unit": "mL", "fraction": request.args.get("fraction", ""), "material": request.args.get("material", ""),
+               "count": 1, "status": "Available", "created_by": g.user["initials"], "parent_consumed": True}
+    return _render_form("samples/derive_with_base.html", payload, **ctx)
+
+
 # ------------------------------------------------------------------ edit / delete
 
 @bp.route("/<sample_id>/edit", methods=("GET", "POST"))
@@ -251,6 +337,12 @@ def edit(sample_id):
             if not diff:
                 flash("No changes", "ok")
                 return redirect(url_for("samples.detail", sample_id=sample_id))
+            if any(f in diff for f in svc.LOCATION_FIELDS + ["status"]):
+                warn = _location_warning(conn, changes, exclude=sample_id)
+                if warn:
+                    flash(warn, "warn")
+                    return render_template("samples/edit.html", s=s, p=changes, attr_vals=changes["attributes"],
+                                           confirm_location=True, **edit_ctx)
             svc.update_sample(conn, sample_id, changes, reason=request.form.get("justification", "").strip() or None)
             conn.commit()
             flash(f"Sample updated ({len(diff)} field(s) changed; recorded in the audit log)", "ok")
