@@ -230,8 +230,7 @@ PostgreSQL.
 
 ## Documentation
 
-`docs/IGI_LIMS_feature_overview.pdf` is an illustrated walkthrough. It still shows nomenclature v2
-(35-character IDs, root tubes) and needs rebuilding for v2.1. To rebuild
+`docs/IGI_LIMS_feature_overview.pdf` is an illustrated walkthrough of the v2.1 build. To rebuild
 it after UI changes (needs `pip install -r requirements-docs.txt` and a one-time
 `playwright install chromium`):
 

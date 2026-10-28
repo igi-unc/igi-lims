@@ -1,11 +1,12 @@
 {
  "ids": {
-  "participant": "JETQPDN",
-  "root": "IGI-MP-JETQPDN-261006-PF-BLK-NAT-01",
-  "cpu1": "IGI-MP-JETQPDN-261006-PF-PFM-CPU-01",
-  "cpu2": "IGI-MP-JETQPDN-261006-PF-PFM-CPU-02",
-  "ser": "IGI-MP-JETQPDN-261006-PF-SER-NAT-01",
-  "hmd1": "IGI-MP-JETQPDN-261006-PF-PFM-HMD-01"
+  "participant": "P001",
+  "collection": "1",
+  "cpu1": "IGI-MP-P001-UNC316-26OCT06-PF-PFM-CPU-01-JD-26OCT06",
+  "cpu2": "IGI-MP-P001-UNC316-26OCT06-PF-PFM-CPU-02-JD-26OCT06",
+  "snf1": "IGI-MP-P001-UNC316-26OCT06-PF-TUM-SNF-01-JD-26OCT08",
+  "pep": "IGI-MP-P001-UNC316-26OCT06-PF-TUM-PEP-01-JD-26OCT09",
+  "hmd1": "IGI-MP-P001-UNC316-26OCT06-PF-TUM-HMD-01-JD-26OCT09"
  },
  "shots": {
   "01_login": {
@@ -28,114 +29,146 @@
   "03_register": {
    "callouts": [
     "Step 1: a person enrolled in the trial",
-    "Step 2: a tube as collected (root of a tree)",
+    "Step 2: a specimen as received, then the tubes made from it",
     "Step 3: a tube made from an existing tube"
    ],
    "caption": "The Register page offers exactly three actions, in the order they happen in the lab."
   },
   "04_participant_form": {
    "callouts": [
-    "Left blank: the seven-letter code is generated (no I or O)",
+    "IGI patient ID: the next number is issued (admins may enter one)",
+    "UNC number, 3 digits: printed as UNC316 in every ID",
     "Cohort, from the cohort code list",
-    "The site's own ID for cross-reference",
-    "Create"
+    "Save"
    ],
-   "caption": "Registering a participant. Only the cohort is mandatory; the participant code is issued by the system."
+   "caption": "Registering a participant. The IGI patient ID and the UNC ID both appear in every sample ID and on every label."
   },
   "05_participant_detail": {
    "callouts": [
-    "Confirmation with the generated code",
-    "Go straight to registering this participant's first tube",
-    "Opens the read-only tree for this participant"
+    "Confirmation with the issued IGI patient ID",
+    "Go straight to registering this participant's first collection",
+    "Opens the tree for this participant"
    ],
    "caption": "The participant record. It lists every collection and links to the tree."
   },
-  "06_base_specimen_form": {
+  "06_collection_form": {
    "callouts": [
-    "Participant chosen on the previous page",
-    "Specimen, fraction and material as received: these become ID segments",
-    "Every field is a dropdown; lists are maintained under Codes",
-    "Storage location: freezer, rack, box, position",
-    "Metadata fields appear for the chosen fraction and material",
+    "Received date: printed in every tube ID from this collection (26OCT06)",
+    "Specimen: pleural fluid, blood, tissue ...",
+    "Times are entered as times; the date is the received date",
+    "What arrived: the fluid itself is never labelled or stored as a tube",
     "Notes: the only free-text field in the system",
-    "Create: the tube ID is composed by the database"
+    "Register, then add the tubes made from it"
    ],
-   "caption": "Registering the collected pleural fluid. All fields are required; NA is an explicit choice where a field does not apply."
+   "caption": "Registering a collection: the pleural fluid as it arrived. All fields are required; NA is an explicit choice where a field does not apply."
   },
-  "07_root_detail": {
+  "07_first_tubes_form": {
    "callouts": [
-    "The issued ID: IGI-MP-participant-date-PF-BLK-NAT-01",
-    "Derive children directly from this tube",
-    "Metadata recorded on the form",
-    "Edit applies at once and is flagged in the history",
+    "The previous group (2 x PFS-FRZ supernatant) was created",
+    "The collection these tubes come from",
+    "Fraction and material of this group: PFMC, cryopreserved",
+    "Two tubes get consecutive aliquot numbers",
+    "Operator: printed in the ID",
+    "Metadata fields for this fraction and material",
+    "Create and stay here for the next group"
+   ],
+   "caption": "Tubes made straight from the collection are first-generation tubes: they have no parent tube. Add one group at a time."
+  },
+  "08_tube_detail": {
+   "callouts": [
+    "The issued ID, 51 characters",
+    "Provenance: collection, then this tube",
+    "Derive children from this tube",
+    "The label: three rows broken at hyphens, plus a Data Matrix of the ID",
     "Append-only hand-off log"
    ],
-   "caption": "The tube page for the new root specimen."
+   "caption": "The tube page for the first PFMC cryovial."
   },
-  "08_derive_pick": {
+  "09_collection_page": {
+   "callouts": [
+    "The collection record: what arrived, when and from whom",
+    "Every tube from this collection, first generation and derived",
+    "The received date is in every ID, so it is corrected, never edited",
+    "Add more first-generation tubes later"
+   ],
+   "caption": "The collection page."
+  },
+  "10_derive_pick": {
    "callouts": [
     "Say what the new tube will be: participant, fraction and material",
-    "Find eligible parent tubes",
-    "Only tubes the derivation rules accept as inputs are listed",
+    "Straight from a collection is offered too, when the rules allow it",
+    "Tubes the derivation rules accept as inputs",
     "Continue with the selected parent"
    ],
-   "caption": "Registering a derived specimen starts from the product, not the parent. Here: PFMC (pleural fluid mononuclear cells), cryopreserved."
+   "caption": "Registering a derived specimen starts from the product, not the parent. Here: tumour-cell pellets, snap frozen."
   },
-  "09_derive_form": {
+  "11_derive_form": {
    "callouts": [
     "The parent tube",
-    "Number of tubes: two aliquots get consecutive numbers",
-    "Metadata for PFM and CPU: isolation, counts, viability, cryo medium",
+    "Processing date: becomes the last ID segment (26OCT08)",
+    "Metadata for TUM and SNF: enrichment, purity, pellet state",
     "Marks the parent Depleted in the same step",
     "Create"
    ],
-   "caption": "The derived-tube form. Fraction and material are fixed from step 1; the rest is filled in."
+   "caption": "The derived-tube form. The new tubes keep the first six ID segments of the parent and take their own operator and processing date."
   },
-  "10_derived_detail": {
+  "12_derived_detail": {
    "callouts": [
     "Two tubes created: ...-01 and ...-02",
-    "Parent link; the parent is now Depleted",
-    "Metadata stored with the tube"
+    "Collection, cryovial, pellet: every step is one click away",
+    "Same first six segments as the parent; own fraction, material, operator and date"
    ],
-   "caption": "The first cryovial. Its parent is one click away, and so is every ancestor."
+   "caption": "The first pellet. Its parent cryovial is now Depleted."
   },
-  "11_rule_block": {
+  "13_rule_block": {
    "callouts": [
     "The rule table blocks this derivation; nothing was saved",
-    "The specific rules violated",
+    "The specific rule broken: cells must be pelleted first",
     "Create anyway: needs a justification, and is flagged in the audit log"
    ],
-   "caption": "Trying to register serum from pleural fluid. The derivation rules refuse; the operator may override with a written justification."
+   "caption": "Trying to make a peptide eluate straight from a cryovial. The derivation rules refuse; the operator may override with a written justification."
   },
-  "12_override_created": {
+  "14_override_created": {
    "callouts": [
     "Created, with the override noted",
     "The tube carries a 'rule override' flag for life",
-    "The history row holds the rules broken and the justification"
+    "The history row holds the rule broken and the justification"
    ],
-   "caption": "The tube created by the override. It is flagged on its page and in the audit log, with the justification."
+   "caption": "The tube created by the override."
   },
-  "13_tree": {
+  "15_data_file": {
+   "callouts": [
+    "Assay and platform are required lists",
+    "The suggested name: sample ID, source, assay, platform",
+    "Bucket URI; the file name must start with the sample ID"
+   ],
+   "caption": "Linking a sequencing output to the HMW DNA tube handed to the facility."
+  },
+  "16_tree": {
    "callouts": [
     "Pick a participant",
-    "Every collection and everything derived from it, top down"
+    "A collection (dark): the specimen as received",
+    "Stacked aliquots: click to spread them out",
+    "Fold or unfold any branch",
+    "Expand all, collapse to collections, stacking, zoom"
    ],
-   "caption": "Samples & Participants: a read-only view. Depleted tubes are shown with their status."
+   "caption": "Samples & Participants: the participant's collections and everything derived from them, top down. Colours follow status."
   },
-  "14_tree_hover": {
+  "17_tree_hover": {
    "callouts": [
     "Hover shows status, quantity, location and key metadata"
    ],
-   "caption": "Hovering a node."
+   "caption": "Hovering a tube."
   },
-  "15_tree_panel": {
+  "18_tree_panel": {
    "callouts": [
-    "Click pins the details",
-    "The only way out is to the tube page"
+    "The printed label with its 2D barcode",
+    "All fields and metadata",
+    "On to the tube page"
    ],
-   "caption": "Clicking a node pins its details, with all metadata, and a link to the tube page."
+   "caption": "Clicking a tube pins its details and its label."
   },
-  "16_custody_form": {
+  "19_custody_form": {
    "callouts": [
     "From: a user or a party such as HTSF or CCPD",
     "Purpose, from the custody purpose list",
@@ -144,24 +177,25 @@
    ],
    "caption": "Recording a hand-off of the DNA tube to the sequencing core."
   },
-  "17_edit_form": {
+  "20_edit_form": {
    "callouts": [
-    "Changes apply at once and are flagged in the audit log",
+    "Printed on the label: read-only (corrected instead)",
     "Quantity 40 to 36",
     "Metadata is edited on the same form",
     "Optional reason, kept with the audit row",
     "Save"
    ],
-   "caption": "Modifying a record. The before and after values and the reason go to the audit log."
+   "caption": "Modifying a record. Before and after values and the reason go to the audit log."
   },
-  "18_edit_saved": {
+  "21_corrected": {
    "callouts": [
-    "Saved; the number of changed fields is reported",
-    "The tube is marked as edited from now on",
-    "Quantity now 36",
-    "Flagged rows: the edit with before/after and the reason, and the custody status change"
+    "Correction recorded; label and ID unchanged",
+    "The tube is tagged as edited and corrected",
+    "The printed value stays; the correction sits beside it",
+    "Every correction with its reason and author",
+    "Edits, custody status change and correction, all flagged"
    ],
-   "caption": "The DNA tube straight after the edit. Flagged history rows are anything other than the original creation."
+   "caption": "The DNA tube after an edit and a correction. The operator printed on the label (JD) was wrong; the correction records AS without rewriting the ID."
   },
   "24_audit": {
    "callouts": [
@@ -169,14 +203,14 @@
     "Before and After as key: value lines",
     "The operator's stated reason for edits, deletions and overrides"
    ],
-   "caption": "The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here; edits are flagged."
+   "caption": "The audit log filtered to one tube. Creation, edits, custody and corrections all appear here; changes are flagged."
   },
   "24b_audit_changes": {
    "callouts": [
     "Changes only: edits, deletions, restores and rule overrides",
     "Each flagged row names who, when, what changed and why"
    ],
-   "caption": "The changes-only view: the review queue replaced by a filter. Alex Smith's vial move, Jane Doe's edit, the custody status change and the earlier rule override are all here."
+   "caption": "The changes-only view. Alex Smith's vial move, Jane Doe's edit, the correction, the custody status change and the earlier rule override are all here."
   },
   "25_qc_upload": {
    "callouts": [
@@ -207,7 +241,7 @@
     "Add an entry to any list",
     "Create a whole new list for a new metadata field"
    ],
-   "caption": "The Codes page. Entries are retired, never deleted, so old records keep their meaning."
+   "caption": "The Codes page. Entries are retired, never deleted, so old records keep their meaning. Codes used in IDs must match their segment width."
   },
   "29_fields": {
    "callouts": [

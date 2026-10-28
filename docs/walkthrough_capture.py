@@ -33,10 +33,13 @@ EXTRA_CODES = [
     ("sop", "SOP-001", "Pleural fluid receipt and aliquoting"),
     ("sop", "SOP-002", "PFMC isolation and cryopreservation"),
     ("sop", "SOP-003", "HMW DNA extraction (Nanobind)"),
+    ("sop", "SOP-004", "Tumour cell enrichment and pellets"),
+    ("sop", "SOP-008", "Blood receipt, plasma and PBMC"),
+    ("party", "CLINIC", "Clinic / OR (collection site)"),
     ("freezer", "FRZ-A", "-80 C freezer A, PIRL 3rd floor"),
     ("freezer", "LN2-1", "LN2 dewar 1"),
     ("rack", "R1", "Rack 1"), ("rack", "R2", "Rack 2"),
-    ("box", "B01", "Box 01"), ("box", "B02", "Box 02"),
+    ("box", "B01", "Box 01"), ("box", "B02", "Box 02"), ("box", "B03", "Box 03"), ("box", "B04", "Box 04"),
     ("kit_lot", "LOT-24091", "Nanobind lot 24091"),
     ("buffer", "EB", "Elution buffer (10 mM Tris)"),
 ]
@@ -254,177 +257,236 @@ def walkthrough():
         page.goto(BASE + "/register")
         S.take(page, "03_register", [
             ("a:has-text('Register a participant')", "Step 1: a person enrolled in the trial", "right"),
-            ("a:has-text('Register a base specimen')", "Step 2: a tube as collected (root of a tree)", "right"),
+            ("a:has-text('Register a collection')", "Step 2: a specimen as received, then the tubes made from it", "right"),
             ("a:has-text('Register a derived specimen')", "Step 3: a tube made from an existing tube", "right"),
         ], caption="The Register page offers exactly three actions, in the order they happen in the lab.")
 
         # 4. Participant
         page.goto(BASE + "/participants/new")
+        fill(page, "unc_number", "316")
         sel(page, "cohort_code", "MP")
-        fill(page, "external_participant_id", "MPE-017")
-        sel(page, "site_code", "UNC")
         fill(page, "notes", "Enrolled 2026-10-06, consent v3.")
         S.take(page, "04_participant_form", [
-            ("input[name=participant_id]", "Left blank: the seven-letter code is generated (no I or O)"),
+            ("input[name=participant_id]", "IGI patient ID: the next number is issued (admins may enter one)"),
+            ("input[name=unc_number]", "UNC number, 3 digits: printed as UNC316 in every ID"),
             ("select[name=cohort_code]", "Cohort, from the cohort code list"),
-            ("input[name=external_participant_id]", "The site's own ID for cross-reference"),
-            ("form button[type=submit]", "Create"),
-        ], caption="Registering a participant. Only the cohort is mandatory; the participant code is issued by the system.")
+            ("form button[type=submit]", "Save"),
+        ], caption="Registering a participant. The IGI patient ID and the UNC ID both appear in every sample ID and on every label.")
         page.click("form button[type=submit]")
         page.wait_for_url(BASE + "/participants/*")
         PID = last_seg(page)
         meta["ids"]["participant"] = PID
         S.take(page, "05_participant_detail", [
-            (".flash", "Confirmation with the generated code"),
-            ("a:has-text('Register a collected specimen')", "Go straight to registering this participant's first tube", "right"),
-            ("a:has-text('Tree view')", "Opens the read-only tree for this participant", "right"),
+            (".flash", "Confirmation with the issued IGI patient ID"),
+            ("a:has-text('Register a collection')", "Go straight to registering this participant's first collection", "right"),
+            ("a:has-text('Tree view')", "Opens the tree for this participant", "right"),
         ], caption="The participant record. It lists every collection and links to the tree.")
 
-        # 6. Base specimen
-        page.goto(BASE + f"/samples/new?participant={PID}")
-        fill(page, "collection_date", "2026-10-06")
-        sel(page, "specimen", "PF")
-        sel(page, "fraction", "BLK")
-        sel(page, "material", "NAT")
-        page.wait_for_selector("[name=attr_container_type]", timeout=5000)
-        fill_common(page, quantity=50, unit="mL", sop_code="SOP-001",
-                    notes="Received from OR at 14:05. About 50 mL, cloudy, no clots.")
-        set_attrs(page, container_type="BAG", time_collected="2026-10-06T13:10", time_received="2026-10-06T14:05",
-                  transport_temp="4C", appearance="turbid", hemolysis_grade="none")
-        S.take(page, "06_base_specimen_form", [
-            ("select[name=participant]", "Participant chosen on the previous page"),
-            ("select[name=specimen]", "Specimen, fraction and material as received: these become ID segments"),
-            ("select[name=sop_code]", "Every field is a dropdown; lists are maintained under Codes"),
-            ("select[name=freezer]", "Storage location: freezer, rack, box, position"),
-            ("[name=attr_container_type]", "Metadata fields appear for the chosen fraction and material"),
+        # 6. Collection
+        page.goto(BASE + f"/collections/new?participant={PID}")
+        fill(page, "received_date", "2026-10-06")
+        sel(page, "specimen_code", "PF")
+        sel(page, "biobank_source", "IH"); sel(page, "received_from", "CLINIC"); sel(page, "received_by", "JD")
+        page.fill("input[data-time-for=time_collected]", "13:10"); page.fill("input[data-time-for=time_received]", "14:05")
+        sel(page, "container_type", "BAG"); sel(page, "transport_temp", "4C"); sel(page, "appearance", "turbid")
+        fill(page, "quantity", "50"); sel(page, "unit", "mL")
+        fill(page, "notes", "Received from OR at 14:05. About 50 mL, cloudy, no clots.")
+        S.take(page, "06_collection_form", [
+            ("input[name=received_date]", "Received date: printed in every tube ID from this collection (26OCT06)"),
+            ("select[name=specimen_code]", "Specimen: pleural fluid, blood, tissue ..."),
+            ("input[data-time-for=time_collected]", "Times are entered as times; the date is the received date"),
+            ("input[name=quantity]", "What arrived: the fluid itself is never labelled or stored as a tube"),
             ("textarea[name=notes]", "Notes: the only free-text field in the system", "right"),
-            ("button[value=create]", "Create: the tube ID is composed by the database"),
-        ], full=True, max_h=1500,
-            caption="Registering the collected pleural fluid. All fields are required; NA is an explicit choice where a field does not apply.")
-        page.click("button[value=create]")
-        page.wait_for_url(BASE + "/samples/IGI-*")
-        ROOT_ID = last_seg(page)
-        meta["ids"]["root"] = ROOT_ID
-        S.take(page, "07_root_detail", [
-            ("h1 code", "The issued ID: IGI-MP-participant-date-PF-BLK-NAT-01"),
-            ("a:has-text('Derive new tube')", "Derive children directly from this tube", "right"),
-            ("h2:has-text('Metadata')", "Metadata recorded on the form", "right"),
-            ("a.btn:has-text('Edit')", "Edit applies at once and is flagged in the history"),
-            ("h2:has-text('Chain of custody')", "Append-only hand-off log", "right"),
-        ], full=True, max_h=1500, caption="The tube page for the new root specimen.")
-
-        # 8. Derived specimen: pick parent
-        page.goto(BASE + f"/samples/derive?participant={PID}&fraction=PFM&material=CPU")
-        page.wait_for_selector("input[name=parent_id]")
-        page.locator("input[type=radio][name=parent_id]").first.check()
-        S.take(page, "08_derive_pick", [
-            ("select[name=material]", "Say what the new tube will be: participant, fraction and material", "right"),
-            ("button:has-text('Find eligible')", "Find eligible parent tubes", "right"),
-            ("table.compact", "Only tubes the derivation rules accept as inputs are listed", "right"),
-            ("button:has-text('Continue with this parent')", "Continue with the selected parent"),
-        ], full=True, max_h=1100,
-            caption="Registering a derived specimen starts from the product, not the parent. Here: PFMC (pleural fluid mononuclear cells), cryopreserved.")
-        page.click("button:has-text('Continue with this parent')")
-        page.wait_for_selector("input[name=count]")
-        sel(page, "fraction", "PFM")
-        sel(page, "material", "CPU")
+            ("form button[type=submit]", "Register, then add the tubes made from it"),
+        ], full=True, max_h=1300,
+            caption="Registering a collection: the pleural fluid as it arrived. All fields are required; NA is an explicit choice where a field does not apply.")
+        page.click("form button[type=submit]")
+        page.wait_for_url(BASE + "/collections/*/tubes")
+        CID = page.url.split("/collections/")[1].split("/")[0]
+        meta["ids"]["collection"] = CID
+        # first group: supernatant, then "add another group"
+        sel(page, "fraction", "PFS"); sel(page, "material", "FRZ")
+        page.wait_for_selector("[name=attr_spin_protocol]", timeout=5000)
+        fill_common(page, count=2, created_datetime="2026-10-06T15:00", sop_code="SOP-001", quantity=1.5, unit="mL",
+                    freezer="FRZ-A", rack="R1", box="B01", position="A1", notes="Cell-free supernatant after a 300 g spin.")
+        page.click("button[name=then][value=more]")
+        page.wait_for_selector("text=Created 2 tube")
+        sel(page, "fraction", "PFM"); sel(page, "material", "CPU")
         page.wait_for_selector("[name=attr_isolation_method]", timeout=5000)
         fill_common(page, count=2, created_datetime="2026-10-06T17:45", sop_code="SOP-002", quantity=1, unit="mL",
-                    freezer="LN2-1", rack="R1", box="B02", position="A1",
-                    notes="Ficoll prep, 2 vials at 5e6 cells/vial in CS10.")
+                    freezer="LN2-1", rack="R1", box="B02", position="A1", notes="Ficoll prep, 2 vials at 5e6 cells/vial in CS10.")
         set_attrs(page, isolation_method="FICOLL", rbc_lysis="no", cell_count=12000000, viability_pct=91,
                   count_method="Countess", cryo_medium="CS10", cells_per_vial=5000000, freeze_method="MRFROSTY",
                   storage_phase="LN2 vapor")
-        page.check("input[name=parent_consumed]")
-        S.take(page, "09_derive_form", [
-            ("h2 code", "The parent tube", "right"),
-            ("input[name=count]", "Number of tubes: two aliquots get consecutive numbers"),
-            ("[name=attr_isolation_method]", "Metadata for PFM and CPU: isolation, counts, viability, cryo medium"),
-            ("input[name=parent_consumed]", "Marks the parent Depleted in the same step"),
-            ("button[value=create]", "Create"),
-        ], full=True, max_h=1500, caption="The derived-tube form. Fraction and material are fixed from step 1; the rest is filled in.")
+        S.take(page, "07_first_tubes_form", [
+            (".flash", "The previous group (2 x PFS-FRZ supernatant) was created", "right"),
+            ("h2 a", "The collection these tubes come from", "right"),
+            ("select[name=material]", "Fraction and material of this group: PFMC, cryopreserved"),
+            ("input[name=count]", "Two tubes get consecutive aliquot numbers"),
+            ("select[name=created_by]", "Operator: printed in the ID"),
+            ("[name=attr_isolation_method]", "Metadata fields for this fraction and material"),
+            ("button[name=then]", "Create and stay here for the next group"),
+        ], full=True, max_h=1700,
+            caption="Tubes made straight from the collection are first-generation tubes: they have no parent tube. Add one group at a time.")
         page.click("button[value=create]")
         page.wait_for_url(BASE + "/samples/IGI-*")
         CPU1 = last_seg(page)
-        CPU2 = CPU1[:-2] + "02"
+        CPU2 = CPU1.replace("-CPU-01-", "-CPU-02-")
         meta["ids"]["cpu1"], meta["ids"]["cpu2"] = CPU1, CPU2
-        S.take(page, "10_derived_detail", [
-            (".flash", "Two tubes created: ...-01 and ...-02"),
-            (f"a:has-text('{ROOT_ID}')", "Parent link; the parent is now Depleted"),
-            ("h2:has-text('Metadata')", "Metadata stored with the tube", "right"),
-        ], full=True, max_h=1300, caption="The first cryovial. Its parent is one click away, and so is every ancestor.")
+        S.take(page, "08_tube_detail", [
+            ("h1 code", "The issued ID, 51 characters"),
+            ("div.chain", "Provenance: collection, then this tube", "right"),
+            ("a:has-text('Derive new tube')", "Derive children from this tube", "right"),
+            ("img.label-img", "The label: three rows broken at hyphens, plus a Data Matrix of the ID", "right"),
+            ("h2:has-text('Chain of custody')", "Append-only hand-off log", "right"),
+        ], full=True, max_h=1700, caption="The tube page for the first PFMC cryovial.")
+        page.goto(BASE + f"/collections/{CID}")
+        S.take(page, "09_collection_page", [
+            ("h2:has-text('As received')", "The collection record: what arrived, when and from whom", "right"),
+            ("h2:has-text('Tubes')", "Every tube from this collection, first generation and derived", "left"),
+            ("summary:has-text('Correct the received date')", "The received date is in every ID, so it is corrected, never edited", "right"),
+            ("a:has-text('Add tubes made from this specimen')", "Add more first-generation tubes later", "bottom"),
+        ], full=True, max_h=1200, caption="The collection page.")
 
-        # 11. Blocked by rules
-        page.goto(BASE + f"/samples/{ROOT_ID}/derive")
-        sel(page, "fraction", "SER")
-        sel(page, "material", "NAT")
-        fill_common(page, sop_code="SOP-001", quantity=2, unit="mL", notes="Attempted serum from pleural fluid.")
+        # matched blood, a second collection (no screenshots)
+        page.goto(BASE + f"/collections/new?participant={PID}")
+        fill(page, "received_date", "2026-10-06"); sel(page, "specimen_code", "PB")
+        sel(page, "biobank_source", "IH"); sel(page, "received_from", "CLINIC"); sel(page, "received_by", "JD")
+        sel(page, "container_type", "EDTA"); sel(page, "transport_temp", "ambient"); sel(page, "appearance", "clear")
+        fill(page, "quantity", "20"); sel(page, "unit", "mL"); fill(page, "notes", "Two EDTA tubes drawn at the time of the tap.")
+        page.click("form button[type=submit]"); page.wait_for_url(BASE + "/collections/*/tubes")
+        for fr, mat, n, box, att in (("PLA", "FRZ", 3, "B03", {}), ("PBM", "CPU", 4, "B04", {"isolation_method": "SEPMATE"})):
+            sel(page, "fraction", fr); sel(page, "material", mat); page.wait_for_timeout(150)
+            fill_common(page, count=n, created_datetime="2026-10-06T16:30", sop_code="SOP-008", quantity=1, unit="mL",
+                        freezer="FRZ-A" if mat == "FRZ" else "LN2-1", rack="R2", box=box, position="A1", notes="NA")
+            set_attrs(page, **att)
+            page.click("button[name=then][value=more]"); page.wait_for_selector(f"text=Created {n} tube")
+
+        # 10. Derived specimen: pick parent
+        page.goto(BASE + f"/samples/derive?participant={PID}&fraction=TUM&material=SNF")
+        page.wait_for_selector("input[name=parent_id]")
+        page.locator(f"input[type=radio][value='{CPU1}']").check()
+        S.take(page, "10_derive_pick", [
+            ("select[name=material]", "Say what the new tube will be: participant, fraction and material", "right"),
+            ("label:has-text('Collection')", "Straight from a collection is offered too, when the rules allow it", "right"),
+            (f"label[for]:has-text('{CPU1}')", "Tubes the derivation rules accept as inputs", "right"),
+            ("button:has-text('Continue with this parent')", "Continue with the selected parent"),
+        ], full=True, max_h=1300,
+            caption="Registering a derived specimen starts from the product, not the parent. Here: tumour-cell pellets, snap frozen.")
+        page.click("button:has-text('Continue with this parent')")
+        page.wait_for_selector("input[name=count]")
+        sel(page, "fraction", "TUM"); sel(page, "material", "SNF")
+        page.wait_for_selector("[name=attr_pellet_state]", timeout=5000)
+        fill_common(page, count=2, created_datetime="2026-10-08T10:30", sop_code="SOP-004", quantity=1000000, unit="cells",
+                    freezer="FRZ-A", rack="R2", box="B01", position="A1", notes="EpCAM-enriched tumour cells, two dry pellets.")
+        set_attrs(page, enrichment_method="EPCAM", purity_pct=86, cell_count=2000000, pellet_state="dry",
+                  intended_use="DNA+RNA", freeze_method="LN2")
+        page.check("input[name=parent_consumed]")
+        S.take(page, "11_derive_form", [
+            ("h2 code", "The parent tube", "right"),
+            ("input[name=created_datetime]", "Processing date: becomes the last ID segment (26OCT08)"),
+            ("[name=attr_enrichment_method]", "Metadata for TUM and SNF: enrichment, purity, pellet state"),
+            ("input[name=parent_consumed]", "Marks the parent Depleted in the same step"),
+            ("button[value=create]", "Create"),
+        ], full=True, max_h=1700, caption="The derived-tube form. The new tubes keep the first six ID segments of the parent and take their own operator and processing date.")
+        page.click("button[value=create]")
+        page.wait_for_url(BASE + "/samples/IGI-*")
+        SNF1 = last_seg(page)
+        meta["ids"]["snf1"] = SNF1
+        S.take(page, "12_derived_detail", [
+            (".flash", "Two tubes created: ...-01 and ...-02"),
+            ("div.chain", "Collection, cryovial, pellet: every step is one click away", "right"),
+            ("h1 code", "Same first six segments as the parent; own fraction, material, operator and date", "bottom"),
+        ], full=True, max_h=1300, caption="The first pellet. Its parent cryovial is now Depleted.")
+
+        # 13. Blocked by rules
+        page.goto(BASE + f"/samples/{CPU2}/derive")
+        sel(page, "fraction", "TUM"); sel(page, "material", "PEP")
+        page.wait_for_selector("[name=attr_hla_class]", timeout=5000)
+        fill_common(page, created_datetime="2026-10-09T09:00", sop_code="SOP-004", quantity=20, unit="uL", notes="Direct lysis pilot.")
+        set_attrs(page, hla_class="I")
         page.click("button[value=create]")
         page.wait_for_selector(".violations")
-        page.fill(".violations textarea[name=justification]", "Pilot: serum-like supernatant requested by the biomarker group; recorded as an exception.")
-        S.take(page, "11_rule_block", [
+        page.fill(".violations textarea[name=justification]", "Pilot: direct lysis of a cryovial for HLA peptides, agreed with the MS core; recorded as an exception.")
+        S.take(page, "13_rule_block", [
             (".violations h3", "The rule table blocks this derivation; nothing was saved"),
-            (".violations ul", "The specific rules violated", "right"),
+            (".violations ul", "The specific rule broken: cells must be pelleted first", "right"),
             ("button[value=override]", "Create anyway: needs a justification, and is flagged in the audit log"),
-        ], full=True, max_h=1500, caption="Trying to register serum from pleural fluid. The derivation rules refuse; the operator may override with a written justification.")
+        ], full=True, max_h=1700, caption="Trying to make a peptide eluate straight from a cryovial. The derivation rules refuse; the operator may override with a written justification.")
         page.click("button[value=override]")
         page.wait_for_url(BASE + "/samples/IGI-*")
-        SER1 = last_seg(page)
-        meta["ids"]["ser"] = SER1
-        S.take(page, "12_override_created", [
+        meta["ids"]["pep"] = last_seg(page)
+        S.take(page, "14_override_created", [
             (".flash", "Created, with the override noted"),
             ("a.tag.warn", "The tube carries a 'rule override' flag for life", "right"),
-            ("h2:has-text('Record history')", "The history row holds the rules broken and the justification", "right"),
-        ], full=True, max_h=2000, caption="The tube created by the override. It is flagged on its page and in the audit log, with the justification.")
+            ("h2:has-text('Record history')", "The history row holds the rule broken and the justification", "right"),
+        ], full=True, max_h=2100, caption="The tube created by the override.")
 
-        # 12. HMW DNA from a cryovial
-        page.goto(BASE + f"/samples/{CPU1}/derive")
-        sel(page, "fraction", "PFM")
-        sel(page, "material", "HMD")
+        # 15. HMW DNA from a pellet, logged under the wrong operator (corrected later)
+        page.goto(BASE + f"/samples/{SNF1}/derive")
+        sel(page, "fraction", "TUM"); sel(page, "material", "HMD")
         page.wait_for_selector("[name=attr_extraction_kit]", timeout=5000)
-        fill_common(page, created_datetime="2026-10-08T11:20", sop_code="SOP-003", quantity=40, unit="uL",
-                    freezer="FRZ-A", rack="R2", box="B01", position="B3", notes="Nanobind extraction for ONT.")
+        fill_common(page, created_datetime="2026-10-09T11:20", sop_code="SOP-003", quantity=40, unit="uL",
+                    freezer="FRZ-A", rack="R2", box="B02", position="B3", notes="Nanobind extraction for ONT.")
         set_attrs(page, extraction_kit="NANOBIND", kit_lot="LOT-24091", concentration_ng_ul=85.2,
                   concentration_method="Qubit", a260_280=1.84, a260_230=2.1, volume_ul=40, din=9.4, n50_kb=62,
-                  elution_buffer="EB", input_cells=2500000)
+                  elution_buffer="EB", input_cells=1000000)
+        page.check("input[name=parent_consumed]")
         page.click("button[value=create]")
         page.wait_for_url(BASE + "/samples/IGI-*")
         HMD1 = last_seg(page)
         meta["ids"]["hmd1"] = HMD1
 
-        # 13. Browse tree
+        # 16. Data file with suggested name
+        page.click("summary:has-text('Link a data file')")
+        sel(page, "assay_code", "WGS"); sel(page, "platform_code", "ONT")
+        fill(page, "uri", f"gs://igi-mp-trial-data/ont/{HMD1}_tumor_DNA_WGS_ONT.bam")
+        fill(page, "run_id", "PAW12345"); fill(page, "checksum_md5", "9e107d9d372bb6826bd81d3542a419d6")
+        fill(page, "pipeline", "dorado"); fill(page, "pipeline_version", "0.9.1")
+        page.locator("form[action$='/files']").scroll_into_view_if_needed()
+        S.take(page, "15_data_file", [
+            ("select[name=assay_code]", "Assay and platform are required lists", "top"),
+            ("#file-stem", "The suggested name: sample ID, source, assay, platform", "left"),
+            ("input[name=uri]", "Bucket URI; the file name must start with the sample ID", "left"),
+        ], full=True, max_h=2300, caption="Linking a sequencing output to the HMW DNA tube handed to the facility.")
+        page.locator("form[action$='/files'] button").click()
+        page.wait_for_load_state()
+
+        # 17. Browse tree
         page.goto(BASE + f"/browse?participant={PID}")
         page.wait_for_selector("#tree-svg g.node")
-        S.take(page, "13_tree", [
+        page.wait_for_timeout(300)
+        S.take(page, "16_tree", [
             ("ul li.sel", "Pick a participant"),
-            ("#tree-svg", "Every collection and everything derived from it, top down", "right"),
-        ], caption="Samples & Participants: a read-only view. Depleted tubes are shown with their status.")
-        node = page.locator("#tree-svg g.node", has_text="HMD")
+            ("#tree-svg g.node:has-text('26OCT06 PF')", "A collection (dark): the specimen as received", "top"),
+            ("#tree-svg g.node:has-text('PBM-CPU')", "Stacked aliquots: click to spread them out", "bottom"),
+            ("#tree-svg g.tgl", "Fold or unfold any branch", "left"),
+            (".tree-toolbar", "Expand all, collapse to collections, stacking, zoom", "top"),
+        ], caption="Samples & Participants: the participant's collections and everything derived from them, top down. Colours follow status.")
+        node = page.locator("#tree-svg g.node", has_text="TUM-HMD-01")
         node.hover()
         page.wait_for_selector("#tree-tip:not([hidden])")
-        S.take(page, "14_tree_hover", [("#tree-tip", "Hover shows status, quantity, location and key metadata")],
-               caption="Hovering a node.")
+        S.take(page, "17_tree_hover", [("#tree-tip", "Hover shows status, quantity, location and key metadata")],
+               caption="Hovering a tube.")
         node.click()
-        page.wait_for_selector("#tree-panel:not([hidden])")
+        page.wait_for_selector("#tree-panel:not([hidden]) .label-img")
         page.mouse.move(5, 5)
-        page.wait_for_timeout(200)
-        S.take(page, "15_tree_panel", [("#tree-panel", "Click pins the details", "right"),
-                                        ("#tree-panel a:has-text('Open tube page')", "The only way out is to the tube page", "right")],
-               full=True, max_h=1500, caption="Clicking a node pins its details, with all metadata, and a link to the tube page.")
+        page.wait_for_timeout(300)
+        S.take(page, "18_tree_panel", [("#tree-panel .label-img", "The printed label with its 2D barcode", "right"),
+                                        ("#tree-panel table", "All fields and metadata", "right"),
+                                        ("#tree-panel a:has-text('Open tube page')", "On to the tube page", "right")],
+               full=True, max_h=1800, caption="Clicking a tube pins its details and its label.")
 
-        # 16. Custody
+        # 19. Custody
         page.goto(BASE + f"/samples/{HMD1}")
         page.click("summary:has-text('Record a hand-off')")
-        fill(page, "event_datetime", "2026-10-09T09:15")
-        sel(page, "from_party", "JD")
-        sel(page, "to_party", "HTSF")
-        sel(page, "purpose", "SEQ")
-        sel(page, "condition_on_receipt", "good")
-        sel(page, "set_status", "In use")
-        fill(page, "notes", "Submitted for ONT sequencing, run requested.")
+        fill(page, "event_datetime", "2026-10-10T09:15")
+        sel(page, "from_party", "JD"); sel(page, "to_party", "HTSF"); sel(page, "purpose", "SEQ")
+        sel(page, "condition_on_receipt", "good"); sel(page, "set_status", "In use")
+        fill(page, "notes", "Submitted for ONT sequencing.")
         form = page.locator("form[action$='/custody']")
         form.scroll_into_view_if_needed()
-        S.take(page, "16_custody_form", [
+        S.take(page, "19_custody_form", [
             ("select[name=from_party]", "From: a user or a party such as HTSF or CCPD", "top"),
             ("select[name=purpose]", "Purpose, from the custody purpose list", "top"),
             ("select[name=set_status]", "Optionally update the tube status in the same step"),
@@ -433,28 +495,37 @@ def walkthrough():
         form.locator("button").click()
         page.wait_for_load_state()
 
-        # 17. Edit (direct, audited)
+        # 20. Edit (direct, audited); label fields locked
         page.goto(BASE + f"/samples/{HMD1}/edit")
         fill(page, "quantity", "36")
         fill(page, "attr_concentration_ng_ul", "82.7")
         page.fill("textarea[name=justification]", "Used 4 uL for TapeStation and Qubit re-check; concentration updated from the re-measurement.")
-        S.take(page, "17_edit_form", [
-            ("p.muted", "Changes apply at once and are flagged in the audit log", "right"),
+        S.take(page, "20_edit_form", [
+            ("label:has-text('Processed on (on the label)')", "Printed on the label: read-only (corrected instead)"),
             ("input[name=quantity]", "Quantity 40 to 36"),
             ("[name=attr_concentration_ng_ul]", "Metadata is edited on the same form"),
             ("textarea[name=justification]", "Optional reason, kept with the audit row"),
             ("form button[type=submit]", "Save"),
-        ], full=True, max_h=1700, caption="Modifying a record. The before and after values and the reason go to the audit log.")
+        ], full=True, max_h=1700, caption="Modifying a record. Before and after values and the reason go to the audit log.")
         page.click("form button[type=submit]")
         page.wait_for_url(BASE + f"/samples/{HMD1}")
-        S.take(page, "18_edit_saved", [
-            (".flash", "Saved; the number of changed fields is reported"),
-            ("a.tag:has-text('edited')", "The tube is marked as edited from now on", "right"),
-            ("tr:has(th:has-text('Quantity')) td", "Quantity now 36", "right"),
-            ("h2:has-text('Record history')", "Flagged rows: the edit with before/after and the reason, and the custody status change", "right"),
-        ], full=True, max_h=2100, caption="The DNA tube straight after the edit. Flagged history rows are anything other than the original creation.")
 
-        # 19. A second user's edit (the audit log shows who did what)
+        # 21. Correction of a label value
+        page.click("summary:has-text('Correct a value printed on the label')")
+        sel(page, "field", "created_by")
+        sel(page, "value_created_by", "AS")
+        page.fill("#add-correction textarea[name=reason]", "Alex did the extraction; Jane logged it under her own initials.")
+        page.click("#add-correction button[type=submit]")
+        page.wait_for_url(BASE + f"/samples/{HMD1}")
+        S.take(page, "21_corrected", [
+            (".flash", "Correction recorded; label and ID unchanged"),
+            ("h1 a.tag.warn", "The tube is tagged as edited and corrected", "bottom"),
+            ("a.tag.warn:has-text('corrected to AS')", "The printed value stays; the correction sits beside it", "right"),
+            ("h2#corrections", "Every correction with its reason and author", "right"),
+            ("h2:has-text('Record history')", "Edits, custody status change and correction, all flagged", "right"),
+        ], full=True, max_h=2300, caption="The DNA tube after an edit and a correction. The operator printed on the label (JD) was wrong; the correction records AS without rewriting the ID.")
+
+        # 22. A second user's edit (the audit log shows who did what)
         page2 = login(ctx_as, "asmith")
         page2.click("form button")
         page2.wait_for_url(BASE + "/**")
@@ -471,12 +542,12 @@ def walkthrough():
             ("form.filters", "Filter by table, record ID or user, or show changes only", "right"),
             ("th:has-text('Before')", "Before and After as key: value lines", "bottom"),
             ("th:has-text('Reason')", "The operator's stated reason for edits, deletions and overrides", "bottom"),
-        ], caption="The audit log filtered to one tube. Inserts, updates, custody and metadata writes all appear here; edits are flagged.")
+        ], caption="The audit log filtered to one tube. Creation, edits, custody and corrections all appear here; changes are flagged.")
         page.goto(BASE + "/admin/audit?changes=1")
         S.take(page, "24b_audit_changes", [
             ("input[name=changes]", "Changes only: edits, deletions, restores and rule overrides", "top"),
             ("table tbody tr.flag", "Each flagged row names who, when, what changed and why", "bottom"),
-        ], full=True, max_h=2400, caption="The changes-only view: the review queue replaced by a filter. Alex Smith's vial move, Jane Doe's edit, the custody status change and the earlier rule override are all here.")
+        ], full=True, max_h=2400, caption="The changes-only view. Alex Smith's vial move, Jane Doe's edit, the correction, the custody status change and the earlier rule override are all here.")
 
         # 25. QC import
         src = ROOT / "tests" / "fixtures" / "instrument_exports" / "countess3_synthetic.csv"
@@ -520,7 +591,7 @@ def walkthrough():
         S.take(page3, "28_codes", [
             ("h3:has-text('Add a code')", "Add an entry to any list", "right"),
             ("button:has-text('Add list')", "Create a whole new list for a new metadata field", "right"),
-        ], full=True, max_h=1100, caption="The Codes page. Entries are retired, never deleted, so old records keep their meaning.")
+        ], full=True, max_h=1100, caption="The Codes page. Entries are retired, never deleted, so old records keep their meaning. Codes used in IDs must match their segment width.")
         page3.goto(BASE + "/admin/fields")
         S.take(page3, "29_fields", [("form", "Add a metadata field: scope, label, type, unit, list, required")],
                full=True, max_h=1100, caption="The Fields page defines which metadata each fraction or material carries.")
