@@ -56,7 +56,11 @@ pre.json { background:#f0f2f5; padding:8px; border-radius:4px; overflow:auto; fo
 details summary { cursor:pointer; color:var(--accent); }
 .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
 .filters label { margin:0; } .filters input, .filters select { width:auto; min-width:120px; }
-.tree-wrap { overflow:auto; max-height:80vh; background:#fff; border:1px solid var(--line); border-radius:6px; }
+.tree-wrap { overflow:auto; max-height:75vh; background:#fff; border:1px solid var(--line); border-radius:6px; }
+.tree-toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 6px; font-size:13px; }
+.tree-toolbar .zoom { margin-left:auto; display:inline-flex; gap:4px; align-items:center; }
+.tree-toolbar .pct { min-width:3.2em; text-align:center; color:var(--muted, #6b7280); font-size:12px; }
+svg.tree g.tgl:hover circle { fill:#eef2ff; } svg.tree g.node:hover rect:last-of-type { filter:brightness(.97); }
 svg.tree { display:block; }
 .tabs a { display:inline-block; padding:4px 10px; border:1px solid var(--line); border-bottom:none; border-radius:4px 4px 0 0; margin-right:2px; background:#eef0f3; }
 .tabs a.active { background:#fff; font-weight:600; }

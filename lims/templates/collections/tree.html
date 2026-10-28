@@ -4,7 +4,7 @@
   <a href="{{ url_for('samples.list_samples', collection=c.collection_id) }}">table view</a> ·
   {% if request.args.get('deleted') %}<a href="{{ url_for('collections.tree', collection_id=c.collection_id, highlight=highlight) }}">hide deleted</a>{% else %}<a href="{{ url_for('collections.tree', collection_id=c.collection_id, highlight=highlight, deleted=1) }}">show deleted</a>{% endif %}</p>
 <div class="tree-wrap card"><svg id="tree-svg" class="tree"></svg></div>
-<p class="muted">The dark box is the collection (the specimen as received, not a tube). Each other box is a tube, labelled fraction-material-aliquot. Lines run from parent to child. Click a box to open it. Colours follow status.</p>
+<p class="muted">The dark box is the collection (the specimen as received, not a tube). Each other box is a tube, labelled fraction-material-aliquot; stacked boxes such as "PFM-CPU ×10" hold sibling aliquots, click to spread them out. Use +/− to fold a branch. Colours follow status.</p>
 <script>window.TREE = {{ tree_json|safe }}; window.HIGHLIGHT = {{ highlight|tojson }}; window.ORIENT = "vertical";</script>
 <script src="{{ url_for('static', filename='tree.js') }}"></script>
 {% endblock %}
