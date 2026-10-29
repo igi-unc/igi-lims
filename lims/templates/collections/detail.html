@@ -41,11 +41,12 @@
 <h2>Tubes ({{ tubes|length }})</h2>
 {% if tubes %}{% set can_print = g.user.role in ('admin', 'user') %}
 {% if can_print %}<form method="post" action="{{ url_for('printing.create') }}" id="print-form"><input type="hidden" name="next" value="{{ request.path }}">
+<p class="muted small">Each tube's label is printed once. Tubes marked <span class="tag">printed</span> are reprinted from their own page, with a reason.</p>
 <p><button type="submit" class="secondary small">Send selected labels to the printer</button>
 <label class="small"><input type="checkbox" id="print-all"> select all</label>
 <label class="small"><input type="checkbox" id="print-avail"> select Available only</label></p>{% endif %}
 <table class="compact"><thead><tr>{% if can_print %}<th></th>{% endif %}<th>Tube</th><th>Parent</th><th>Status / location</th></tr></thead><tbody>
-{% for t in tubes %}<tr class="{% if t.deleted_at %}del{% endif %}">{% if can_print %}<td>{% if not t.deleted_at %}<input type="checkbox" name="sample_id" value="{{ t.sample_id }}" data-status="{{ t.status }}" aria-label="print {{ t.sample_id }}">{% endif %}</td>{% endif %}<td><a href="{{ url_for('samples.detail', sample_id=t.sample_id) }}" title="{{ t.sample_id }}"><code>{{ t.sample_id|short_id }}</code></a> <span class="muted">{{ t.created_by }} {{ t.processing_date|yymmmdd }}</span></td>
+{% for t in tubes %}<tr class="{% if t.deleted_at %}del{% endif %}">{% if can_print %}<td>{% if t.deleted_at %}{% elif t.sample_id in waiting %}<span class="tag" title="waiting in the print queue">queued</span>{% elif t.sample_id in printed %}<span class="tag" title="label printed {{ printed[t.sample_id] }}; reprint from the tube page">printed</span>{% else %}<input type="checkbox" name="sample_id" value="{{ t.sample_id }}" data-status="{{ t.status }}" aria-label="print {{ t.sample_id }}">{% endif %}</td>{% endif %}<td><a href="{{ url_for('samples.detail', sample_id=t.sample_id) }}" title="{{ t.sample_id }}"><code>{{ t.sample_id|short_id }}</code></a> <span class="muted">{{ t.created_by }} {{ t.processing_date|yymmmdd }}</span></td>
 <td>{% if t.parent_id %}<code>{{ t.parent_id|short_id }}</code>{% else %}<span class="muted">first generation</span>{% endif %}</td><td>{{ status_loc(t) }}</td></tr>{% endfor %}
 </tbody></table>{% if can_print %}</form>
 <script>

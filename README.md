@@ -175,9 +175,17 @@ computer:
 1. Anyone who can register tubes clicks **Send ... to the printer**: on the
    page shown right after creating tubes (all the new tubes), on a tube page
    (one label), or on a collection page (tick boxes, "select Available only").
-   The job joins the **Print queue** (menu), where it can be cancelled,
-   requeued after a failure, or printed again. Each job also offers a CSV
-   (barcode plus the three text rows) for Brady Express Labels or Workstation.
+   The job joins the **Print queue** (menu), where it can be cancelled or
+   requeued after a failure. Each job also offers a CSV (barcode plus the three
+   text rows) for Brady Express Labels or Workstation.
+   **Each tube's label is printed once.** When the station confirms a job, its
+   labels are recorded as printed (the tube page shows the history). A printed
+   tube cannot be queued again, and a tube already waiting cannot be queued
+   twice; collection pages grey them out. A deliberate reprint (lost, smudged
+   or misprinted label) is done from the tube page with a required reason,
+   which is recorded and appears in the audit log's changes-only view.
+   Requeueing a job the station took but never confirmed also needs a reason,
+   since its labels may already have come out.
 2. A **print station** prints the queue in order. It is any device next to the
    printer logged in as an account with role `printer` (create it on the Users
    page, or `flask create-user station --role printer --initials PRN ...`).
@@ -187,7 +195,8 @@ computer:
 3. On the station, open the LIMS (it lands on *Print station*), click
    **Connect printer** and pick the M611. From then on it checks every few
    seconds and prints each job: a header label ("PRINT JOB #12 / FOR JD /
-   6 LABELS FOLLOW") and one label per tube, in aliquot order. Reconnect after
+   6 LABELS FOLLOW"; on by default, skippable per job from the tube page) and
+   one label per tube, in aliquot order. Reconnect after
    a reload or a restart (Bluetooth needs one click per page load). *Test
    print* prints the nomenclature's example ID for checking alignment.
 

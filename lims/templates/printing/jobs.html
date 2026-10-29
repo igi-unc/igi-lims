@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}Print queue · IGI LIMS{% endblock %}{% block content %}
 <h1>Print queue</h1>
-<p class="muted">Labels sent from tube and collection pages wait here until the print station next to the label printer prints them, oldest first.
+<p class="muted">Each tube's label is printed once; a reprint needs a reason and is flagged. Labels sent from tube and collection pages wait here until the print station next to the label printer prints them, oldest first.
 Stock: {{ stock.part }} ({{ stock.width_in }} × {{ stock.height_in }} in, {{ stock.dpi }} dpi).
 {% if stations %}Station account(s): {% for s in stations %}{{ s.username }}{% if not loop.last %}, {% endif %}{% endfor %}.{% else %}No print-station account exists yet; an admin creates one on the Users page with role <code>printer</code>.{% endif %}
 {% if last_seen %}Last job picked up {{ last_seen }}.{% endif %}</p>
@@ -10,11 +10,14 @@ Stock: {{ stock.part }} ({{ stock.width_in }} × {{ stock.height_in }} in, {{ st
 <td>{{ r.requested_at }} <span class="muted">{{ r.requested_by }}</span></td>
 <td>{{ r.n_labels }}{% if r.header %} <span class="muted">+ header</span>{% endif %}
   <details><summary class="small">tubes</summary><ul class="plain small">{% for sid in ids[r.id] %}<li><a href="{{ url_for('samples.detail', sample_id=sid) }}"><code>{{ sid }}</code></a></li>{% endfor %}</ul></details></td>
-<td><span class="status {{ 'Available' if r.status == 'printed' else ('Depleted' if r.status == 'failed' else ('In use' if r.status in ('queued', 'printing') else '')) }}">{{ r.status }}</span>{% if r.error %}<br><span class="muted small">{{ r.error }}</span>{% endif %}</td>
+<td><span class="status {{ 'Available' if r.status == 'printed' else ('Depleted' if r.status == 'failed' else ('In use' if r.status in ('queued', 'printing') else '')) }}">{{ r.status }}</span>{% if r.error %}<br><span class="muted small">{{ r.error }}</span>{% endif %}{% if r.reprint_reason %}<br><span class="tag warn">reprint</span> <span class="small">{{ r.reprint_reason }}</span>{% endif %}</td>
 <td class="muted">{{ r.station or '' }}{% if r.finished_at %}<br>{{ r.finished_at }}{% endif %}</td>
 <td>{% if g.user.role in ('admin', 'user') %}
   {% if r.status == 'queued' %}<form class="inline" method="post" action="{{ url_for('printing.change', job_id=r.id, action='cancel') }}"><button class="small secondary">cancel</button></form>{% endif %}
-  {% if r.status in ('failed', 'printing', 'printed', 'cancelled') %}<form class="inline" method="post" action="{{ url_for('printing.change', job_id=r.id, action='requeue') }}"><button class="small secondary">{% if r.status == 'printed' %}print again{% else %}requeue{% endif %}</button></form>{% endif %}
+  {% if r.status in ('failed', 'cancelled') %}<form class="inline" method="post" action="{{ url_for('printing.change', job_id=r.id, action='requeue') }}"><button class="small secondary">requeue</button></form>{% endif %}
+  {% if r.status == 'printing' %}<details><summary class="small">stuck? requeue</summary><form method="post" action="{{ url_for('printing.change', job_id=r.id, action='requeue') }}">
+    <p class="muted small">The station took this job but never confirmed it. Check whether the labels came out first: requeueing prints them again.</p>
+    <input type="text" name="reason" required placeholder="reason, e.g. printer jammed, nothing printed"> <button class="small secondary">requeue</button></form></details>{% endif %}
 {% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">No print jobs yet.</td></tr>{% endfor %}
 </tbody></table>

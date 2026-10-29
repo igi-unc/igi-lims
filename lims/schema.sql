@@ -237,6 +237,18 @@ CREATE TABLE IF NOT EXISTS print_job (
     claim_token         TEXT,
     claimed_at          TEXT,
     finished_at         TEXT,
-    error               TEXT
+    error               TEXT,
+    reprint_reason      TEXT                          -- required when any tube in the job already has a printed label
 );
 CREATE INDEX IF NOT EXISTS idx_print_job_status ON print_job(status, id);
+
+-- One row per label the station confirmed as printed. A tube's label is printed once; reprints need a reason.
+CREATE TABLE IF NOT EXISTS label_print (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sample_id       TEXT NOT NULL REFERENCES sample(sample_id),
+    job_id          INTEGER REFERENCES print_job(id),
+    printed_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    station         TEXT,
+    reprint_reason  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_label_print_sample ON label_print(sample_id);

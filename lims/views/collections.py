@@ -68,12 +68,18 @@ def detail(collection_id):
     c = _get_or_404(conn, collection_id)
     tubes = conn.execute("SELECT * FROM sample WHERE collection_id=? ORDER BY sample_id", (collection_id,)).fetchall()
     corrections = svc.corrections_for_collection(conn, collection_id)
+    from . import printing
+    printed = printing.printed_ids(conn, [t["sample_id"] for t in tubes])
+    waiting = set()
+    for r in conn.execute("SELECT sample_ids FROM print_job WHERE status IN ('queued','printing')"):
+        waiting.update(json.loads(r["sample_ids"]))
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='collection' AND record_id=? ORDER BY id DESC",
                            (str(collection_id),)).fetchall()
     participant = conn.execute("SELECT * FROM participant WHERE participant_id=?", (c["participant_id"],)).fetchone()
     return render_template("collections/detail.html", c=c, label=svc.collection_label(c), tubes=tubes,
                            first_gen=[t for t in tubes if not t["parent_id"]], participant=participant,
                            corrections=corrections, effective=svc.effective_values(corrections), history=history,
+                           printed=printed, waiting=waiting,
                            meanings=code_meaning_map(), json=json)
 
 

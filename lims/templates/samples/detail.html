@@ -88,11 +88,23 @@
 <h3>Label</h3>
 <img class="label-img" src="{{ url_for('samples.label_svg', sample_id=s.sample_id) }}" alt="{% for row in label %}{{ row }} {% endfor %}">
 <p class="muted small">Preview of the printed label. The 2D code (Data Matrix) holds the full sample ID.</p>
-{% if g.user.role in ('admin', 'user') %}<form method="post" action="{{ url_for('printing.create') }}" class="inline">
+{% if active_job %}<p class="small"><span class="tag">waiting to print</span> in <a href="{{ url_for('printing.jobs') }}">print job #{{ active_job }}</a></p>
+{% elif label_prints %}<p class="small"><span class="tag">label printed</span> {{ label_prints[-1].printed_at }} (job #{{ label_prints[-1].job_id }}){% if label_prints|length > 1 %} · printed {{ label_prints|length }} times{% endif %}</p>
+  {% if g.user.role in ('admin', 'user') and not s.deleted_at %}<details><summary class="small">Reprint this label</summary>
+  <form method="post" action="{{ url_for('printing.create') }}">
+    <input type="hidden" name="sample_id" value="{{ s.sample_id }}"><input type="hidden" name="next" value="{{ request.path }}">
+    <p class="muted small">Each tube should have one label. Reprint only to replace a damaged, lost or misprinted label; the reason is kept in the audit log.</p>
+    <label class="wide"><span class="lbl">Reason (required)</span><input type="text" name="reprint_reason" required placeholder="e.g. label smudged in the LN2 dewar"></label>
+    <button type="submit" class="secondary small">Reprint</button>
+  </form></details>{% endif %}
+{% elif g.user.role in ('admin', 'user') and not s.deleted_at %}<form method="post" action="{{ url_for('printing.create') }}" class="inline">
   <input type="hidden" name="sample_id" value="{{ s.sample_id }}"><input type="hidden" name="next" value="{{ request.path }}">
   <button type="submit" class="secondary small">Send this label to the printer</button>
   <label class="small"><input type="checkbox" name="header" value="0"> no header label</label>
-</form>{% endif %}
+</form>{% else %}<p class="small muted">Label not printed yet.</p>{% endif %}
+{% if label_prints %}<details><summary class="small">Label print history ({{ label_prints|length }})</summary><table class="compact small"><thead><tr><th>Printed</th><th>Job</th><th>Station</th><th>Reprint reason</th></tr></thead><tbody>
+{% for lp in label_prints %}<tr class="{% if lp.reprint_reason %}flag{% endif %}"><td>{{ lp.printed_at }}</td><td>#{{ lp.job_id }}</td><td>{{ lp.station or '' }}</td><td>{{ lp.reprint_reason or '' }}</td></tr>{% endfor %}
+</tbody></table></details>{% endif %}
 </div>
 
 <div class="card">

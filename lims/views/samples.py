@@ -73,6 +73,9 @@ def detail(sample_id):
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
     coll = svc.get_collection(conn, s["collection_id"])
+    from . import printing
+    label_prints = conn.execute("SELECT * FROM label_print WHERE sample_id=? ORDER BY id", (sample_id,)).fetchall()
+    _, active_job = printing.label_state(conn, sample_id)
     just = session.pop("just_created", None)
     just_created = svc.ids_between(conn, just[0], just[1]) if just else []
     flags = {"edits": sum(1 for h in history if h["action"] in ("update", "delete", "restore")),
@@ -87,7 +90,8 @@ def detail(sample_id):
                            corrections=corrections, effective=svc.effective_values(corrections), coll=coll,
                            coll_label=svc.collection_label(coll), label_fields=svc.label_fields(), field_names=svc.FIELD_NAMES,
                            collection_size=conn.execute("SELECT count(*) FROM sample WHERE collection_id=?", (s["collection_id"],)).fetchone()[0],
-                           file_stem=svc.suggested_file_stem(s, None, None), just_created=just_created, assay_labels=current_app.config["ASSAY_LABELS"],
+                           file_stem=svc.suggested_file_stem(s, None, None), just_created=just_created,
+                           label_prints=label_prints, active_job=active_job, assay_labels=current_app.config["ASSAY_LABELS"],
                            platform_labels=current_app.config["PLATFORM_LABELS"],
                            json=json)
 

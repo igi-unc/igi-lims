@@ -22,8 +22,29 @@ def _now():
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def queue_job(conn, sample_ids, header=True):
-    """Queue labels for these tubes (in this order). Returns the job id. Raises ValueError."""
+def label_state(conn, sample_id):
+    """(last printed label row or None, active job id or None) for one tube."""
+    printed = conn.execute("SELECT * FROM label_print WHERE sample_id=? ORDER BY id DESC LIMIT 1", (sample_id,)).fetchone()
+    active = conn.execute("SELECT id FROM print_job WHERE status IN ('queued','printing') AND sample_ids LIKE ? ORDER BY id LIMIT 1",
+                          ('%"' + sample_id + '"%',)).fetchone()
+    return printed, (active["id"] if active else None)
+
+
+def printed_ids(conn, sample_ids):
+    """{sample_id: last printed_at} for those that have a printed label."""
+    out = {}
+    for chunk in (sample_ids[i:i + 500] for i in range(0, len(sample_ids), 500)):
+        if chunk:
+            q = ",".join("?" for _ in chunk)
+            for r in conn.execute(f"SELECT sample_id, max(printed_at) at FROM label_print WHERE sample_id IN ({q}) GROUP BY sample_id", chunk):
+                out[r["sample_id"]] = r["at"]
+    return out
+
+
+def queue_job(conn, sample_ids, header=True, reprint_reason=None):
+    """Queue labels for these tubes (in this order). Returns the job id. Raises ValueError.
+    Each tube's label is printed once: a tube that already has a printed label needs a reprint reason, and a tube
+    already waiting in the queue cannot be queued twice."""
     seen, ids = set(), []
     for sid in sample_ids:
         sid = (sid or "").strip().upper()
@@ -34,14 +55,31 @@ def queue_job(conn, sample_ids, header=True):
         raise ValueError("Choose at least one tube to print")
     if len(ids) > current_app.config["PRINT_JOB_MAX_LABELS"]:
         raise ValueError(f"At most {current_app.config['PRINT_JOB_MAX_LABELS']} labels per job")
+    reprint_reason = (reprint_reason or "").strip() or None
+    already = []
     for sid in ids:
         s = svc.get_sample(conn, sid)
         if s is None or s["deleted_at"]:
             raise ValueError(f"No tube {sid}")
-    cur = conn.execute("INSERT INTO print_job(requested_by, requested_initials, sample_ids, n_labels, header) VALUES (?,?,?,?,?)",
-                       (g.user["username"], g.user["initials"], json.dumps(ids), len(ids), 1 if header else 0))
+        printed, active = label_state(conn, sid)
+        if active:
+            raise ValueError(f"The label for {sid} is already waiting in print job #{active}")
+        if printed:
+            already.append((sid, printed))
+    if already and not reprint_reason:
+        sid, row = already[0]
+        more = f" and {len(already) - 1} other tube(s)" if len(already) > 1 else ""
+        raise ValueError(f"{sid}{more} already has a printed label (printed {row['printed_at']}). "
+                         "Labels are printed once; reprint from the tube page and give a reason.")
+    cur = conn.execute("INSERT INTO print_job(requested_by, requested_initials, sample_ids, n_labels, header, reprint_reason) "
+                       "VALUES (?,?,?,?,?,?)",
+                       (g.user["username"], g.user["initials"], json.dumps(ids), len(ids), 1 if header else 0,
+                        reprint_reason if already else None))
     jid = cur.lastrowid
-    audit.log(conn, "print_job", jid, "insert", after={"labels": len(ids), "first": ids[0], "header": bool(header)})
+    audit.log(conn, "print_job", jid, "insert",
+              after={"labels": len(ids), "first": ids[0], "header": bool(header),
+                     **({"reprints": [s for s, _ in already]} if already else {})},
+              reason=("Label reprint: " + reprint_reason) if already else None)
     return jid
 
 
@@ -50,7 +88,8 @@ def queue_job(conn, sample_ids, header=True):
 def create():
     conn = get_db()
     try:
-        jid = queue_job(conn, request.form.getlist("sample_id"), header=request.form.get("header", "1") == "1")
+        jid = queue_job(conn, request.form.getlist("sample_id"), header=request.form.get("header", "1") == "1",
+                        reprint_reason=request.form.get("reprint_reason"))
         conn.commit()
         n = conn.execute("SELECT n_labels FROM print_job WHERE id=?", (jid,)).fetchone()[0]
         ahead = conn.execute("SELECT count(*) FROM print_job WHERE status IN ('queued','printing') AND id<?", (jid,)).fetchone()[0]
@@ -81,15 +120,28 @@ def change(job_id, action):
     job = conn.execute("SELECT * FROM print_job WHERE id=?", (job_id,)).fetchone()
     if job is None:
         abort(404)
+    reason = (request.form.get("reason") or "").strip() or None
     if action == "cancel" and job["status"] == "queued":
         conn.execute("UPDATE print_job SET status='cancelled', finished_at=? WHERE id=?", (_now(), job_id))
-    elif action == "requeue" and job["status"] in ("failed", "printing", "printed", "cancelled"):
+    elif action == "requeue" and job["status"] in ("failed", "cancelled", "printing"):
+        # nothing from a failed or cancelled job was confirmed printed. A job stuck at 'printing' may have printed
+        # without the station confirming, so requeueing it counts as a deliberate reprint and needs a reason.
+        if job["status"] == "printing" and not reason:
+            flash(f"Job #{job_id} may already have printed. Requeueing it is a reprint: give a reason.", "error")
+            return redirect(url_for("printing.jobs"))
+        for sid in json.loads(job["sample_ids"]):
+            _, active = label_state(conn, sid)
+            if active and active != job_id:
+                flash(f"The label for {sid} is already waiting in print job #{active}", "error")
+                return redirect(url_for("printing.jobs"))
         conn.execute("UPDATE print_job SET status='queued', station=NULL, claim_token=NULL, claimed_at=NULL, finished_at=NULL, "
-                     "error=NULL WHERE id=?", (job_id,))
+                     "error=NULL, reprint_reason=COALESCE(?, reprint_reason) WHERE id=?", (reason, job_id))
     else:
-        flash(f"Job #{job_id} is {job['status']}; cannot {action} it", "error")
+        flash(f"Job #{job_id} is {job['status']}; cannot {action} it" +
+              (". Printed labels are reprinted one tube at a time from the tube page, with a reason." if job["status"] == "printed" else ""),
+              "error")
         return redirect(url_for("printing.jobs"))
-    audit.log(conn, "print_job", job_id, action, before={"status": job["status"]})
+    audit.log(conn, "print_job", job_id, action, before={"status": job["status"]}, reason=reason)
     conn.commit()
     flash(f"Job #{job_id}: {action} done", "ok")
     return redirect(url_for("printing.jobs"))
@@ -183,6 +235,10 @@ def done(job_id):
     err = None if ok else (str(data.get("error") or "printer reported a failure")[:500])
     conn.execute("UPDATE print_job SET status=?, finished_at=?, error=? WHERE id=?",
                  ("printed" if ok else "failed", _now(), err, job_id))
+    if ok:
+        for sid in json.loads(job["sample_ids"]):
+            conn.execute("INSERT INTO label_print(sample_id, job_id, station, reprint_reason) VALUES (?,?,?,?)",
+                         (sid, job_id, g.user["username"], job["reprint_reason"]))
     audit.log(conn, "print_job", job_id, "update", before={"status": "printing"},
               after={"status": "printed" if ok else "failed", **({"error": err} if err else {})})
     conn.commit()
