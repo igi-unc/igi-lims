@@ -15,6 +15,7 @@
     <a href="{{ url_for('main.register') }}">Register</a>
     {% if g.user.role != 'viewer' %}<a href="{{ url_for('qc.upload') }}">Import QC</a>{% endif %}
     <a href="{{ url_for('admin.audit_log') }}">Audit</a>
+    <a href="{{ url_for('printing.jobs') }}">Print queue</a>
     {% if g.user.role == 'admin' %}
     <a href="{{ url_for('admin.code_lists') }}">Codes</a>
     <a href="{{ url_for('admin.rule_table') }}">Rules</a>

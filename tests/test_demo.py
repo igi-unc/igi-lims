@@ -53,7 +53,7 @@ def test_demo_reset_and_cron_endpoint(app, client):
     with app.app_context():
         conn = get_db()
         users = sorted(r[0] for r in conn.execute("SELECT username FROM account"))
-        assert users == ["demo", "ken", "mf", "reviewer", "viewer"]     # the fixture's accounts are gone; operators MF and KEN added
+        assert users == ["demo", "ken", "mf", "reviewer", "station", "viewer"]     # the fixture's accounts are gone; operators MF and KEN added
         assert conn.execute("SELECT count(*) FROM participant").fetchone()[0] == 4   # main + three smaller ones
         cohorts = sorted(r[0] for r in conn.execute("SELECT cohort_code FROM participant"))
         assert cohorts == ["AM", "MP", "NC", "TN"]

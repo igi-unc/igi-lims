@@ -124,7 +124,7 @@ def check_codes(conn, components):
             elif not row["active"]:
                 problems.append(f"{name} code '{components[name]}' is retired")
         elif kind == "operator":
-            if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (components[name],)).fetchone():
+            if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1 AND role<>'printer'", (components[name],)).fetchone():
                 problems.append(f"Operator '{components[name]}' is not an active user")
     return problems
 

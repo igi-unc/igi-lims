@@ -514,7 +514,7 @@ def _check_correction_value(conn, field, value):
         except ValueError:
             raise ValueError("The corrected processing date must be a date and time")
     if field == "created_by":
-        if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (value,)).fetchone():
+        if not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1 AND role<>'printer'", (value,)).fetchone():
             raise ValueError(f"Operator '{value}' is not an active user")
         return value
     return value
@@ -554,3 +554,15 @@ def add_correction(conn, field, value, reason, sample_id=None, collection_id=Non
     audit.log(conn, target[0], target[1], "correct", before={field: current},
               after={field: value, "correction_id": cur.lastrowid, "note": "label value unchanged"}, reason=reason)
     return target
+
+
+def ids_between(conn, first_id, last_id):
+    """The tubes created together with first_id .. last_id: same prefix (segments 1-8), consecutive aliquots."""
+    a, b = get_sample(conn, first_id), get_sample(conn, last_id)
+    if a is None or b is None:
+        return []
+    comp = ids.parse(first_id)
+    prefix = ids.prefix_without_aliquot(comp)
+    return [r["sample_id"] for r in conn.execute(
+        "SELECT sample_id FROM sample WHERE sample_id LIKE ? || '%' AND aliquot BETWEEN ? AND ? AND deleted_at IS NULL "
+        "ORDER BY aliquot", (prefix, a["aliquot"], b["aliquot"]))]

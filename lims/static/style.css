@@ -48,6 +48,8 @@ button.small { padding:2px 8px; font-size:12px; }
 .chain .here { font-weight:700; }
 ul.plain { list-style:none; padding:0; margin:0; } ul.plain li { padding:2px 0; }
 ul.tree, ul.tree ul { list-style:none; padding-left:18px; margin:0; } ul.tree li { padding:1px 0; border-left:1px dotted var(--line); padding-left:8px; }
+.label-strip { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+.label-strip img, img.label-preview { width:200px; height:auto; border:1px solid var(--line); image-rendering:pixelated; background:#fff; }
 .label-img { display:block; width:320px; max-width:100%; height:auto; margin:6px 0; }
 .label-wrap { margin:4px 0 8px; }
 p.small, .muted.small { font-size:12px; }

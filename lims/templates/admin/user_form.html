@@ -4,7 +4,7 @@
   <label>Username <input name="username" required value="{{ u.username or '' }}"></label>
   <label>Display name <input name="display_name" required value="{{ u.display_name or '' }}"></label>
   <label>Initials (printed on labels) <input name="initials" required maxlength="4" value="{{ u.initials or '' }}"></label>
-  <label>Role <select name="role">{% for r in ('user','admin','viewer') %}<option {% if u.role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
+  <label>Role <select name="role">{% for r in ('user','admin','viewer','printer') %}<option {% if u.role == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
   <label>Initial password <input type="password" name="password" required minlength="8"></label>
   <button type="submit">Create</button>
 </form></div>

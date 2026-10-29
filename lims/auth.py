@@ -26,6 +26,11 @@ def check_initials(conn, initials, own_username=None):
         raise ValueError(f"Initials {initials} already belong to {row['username']}; operator codes must be unique")
 
 
+# The only pages a print-station account (role 'printer') can reach.
+PRINTER_ENDPOINTS = {"printing.station", "printing.claim", "printing.done", "printing.header_svg", "printing.test_svg", "samples.label_svg",
+                     "auth.login", "auth.logout", "auth.change_password", "static", None}
+
+
 def create_user(conn, username, display_name, initials, password, role="user"):
     initials = (initials or "").strip().upper()
     check_initials(conn, initials)
@@ -42,6 +47,11 @@ def load_user():
     if username:
         row = get_db().execute("SELECT * FROM account WHERE username=? AND active=1", (username,)).fetchone()
         g.user = row
+    if g.user is not None and g.user["role"] == "printer" and request.endpoint not in PRINTER_ENDPOINTS:
+        # a print-station account sees nothing but the station and the labels it prints
+        if request.method == "GET":
+            return redirect(url_for("printing.station"))
+        abort(403)
 
 
 def login_required(view):
@@ -94,6 +104,8 @@ def login():
             session.permanent = True
             audit.log(conn, "user", username, "login", username=username)
             conn.commit()
+            if row["role"] == "printer":
+                return redirect(url_for("printing.station"))
             nxt = request.args.get("next") or url_for("main.index")
             return redirect(nxt if nxt.startswith("/") else url_for("main.index"))
         flash("Invalid username or password", "error")

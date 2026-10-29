@@ -1,5 +1,5 @@
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g, abort, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, abort, current_app, session
 
 from ..auth import login_required, writer_required
 from ..db import get_db
@@ -73,6 +73,8 @@ def detail(sample_id):
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
     coll = svc.get_collection(conn, s["collection_id"])
+    just = session.pop("just_created", None)
+    just_created = svc.ids_between(conn, just[0], just[1]) if just else []
     flags = {"edits": sum(1 for h in history if h["action"] in ("update", "delete", "restore")),
              "corrections": len(corrections),
              "overrides": sum(1 for h in history if h["action"] == "insert" and (h["reason"] or "").startswith("Rule override"))}
@@ -85,7 +87,7 @@ def detail(sample_id):
                            corrections=corrections, effective=svc.effective_values(corrections), coll=coll,
                            coll_label=svc.collection_label(coll), label_fields=svc.label_fields(), field_names=svc.FIELD_NAMES,
                            collection_size=conn.execute("SELECT count(*) FROM sample WHERE collection_id=?", (s["collection_id"],)).fetchone()[0],
-                           file_stem=svc.suggested_file_stem(s, None, None), assay_labels=current_app.config["ASSAY_LABELS"],
+                           file_stem=svc.suggested_file_stem(s, None, None), just_created=just_created, assay_labels=current_app.config["ASSAY_LABELS"],
                            platform_labels=current_app.config["PLATFORM_LABELS"],
                            json=json)
 
@@ -103,7 +105,7 @@ def tree(root_id):
 # ------------------------------------------------------------------ create
 
 def _users():
-    return get_db().execute("SELECT initials, display_name FROM account WHERE active=1 ORDER BY initials").fetchall()
+    return get_db().execute("SELECT initials, display_name FROM account WHERE active=1 AND role<>'printer' ORDER BY initials").fetchall()
 
 
 def _lists():
@@ -123,7 +125,7 @@ def _check_coded(conn, payload, fields=CODED_FIELDS):
         if v and not conn.execute("SELECT 1 FROM code_list WHERE category=? AND code=? AND active=1", (cat, v)).fetchone():
             raise ValueError(f"{f.replace('_', ' ').capitalize()} '{v}' is not in the {cat} list (add it under Codes)")
     op = payload.get("created_by")
-    if op and not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (op,)).fetchone():
+    if op and not conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1 AND role<>'printer'", (op,)).fetchone():
         raise ValueError(f"Operator '{op}' is not an active user")
 
 
@@ -185,6 +187,7 @@ def _handle_create(payload, template, **ctx):
         conn.commit()
         flash(f"Created {len(created)} tube(s): {created[0]}" + (f" … {created[-1]}" if len(created) > 1 else "")
               + (" (rule override recorded in the audit log)" if violations else ""), "ok")
+        session["just_created"] = [created[0], created[-1]]
         if request.form.get("then") == "more" and payload.get("collection_id"):
             return redirect(url_for("collections.add_tubes", collection_id=payload["collection_id"]))
         return redirect(url_for("samples.detail", sample_id=created[0]))
@@ -308,7 +311,8 @@ def label_svg(sample_id):
     s = svc.get_sample(get_db(), sample_id)
     if s is None:
         abort(404)
-    resp = current_app.response_class(labels.label_svg(s), mimetype="image/svg+xml")
+    body = labels.label_print_svg(s) if request.args.get("print") else labels.label_svg(s)
+    resp = current_app.response_class(body, mimetype="image/svg+xml")
     resp.headers["Cache-Control"] = "private, max-age=3600"   # the label never changes once the tube exists
     return resp
 
@@ -368,7 +372,7 @@ def add_custody(sample_id):
     if not (f["event_datetime"] and f["from_party"] and f["to_party"] and f["purpose"]):
         flash("Date/time, from, to and purpose are required", "error")
         return redirect(url_for("samples.detail", sample_id=sample_id))
-    ok_party = lambda v: conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1", (v,)).fetchone() or \
+    ok_party = lambda v: conn.execute("SELECT 1 FROM account WHERE initials=? AND active=1 AND role<>'printer'", (v,)).fetchone() or \
         conn.execute("SELECT 1 FROM code_list WHERE category='party' AND code=? AND active=1", (v,)).fetchone()
     if not (ok_party(f["from_party"]) and ok_party(f["to_party"])):
         flash("From and To must be a user or an entry in the party list", "error")

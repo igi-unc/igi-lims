@@ -13,8 +13,8 @@ def create_app(test_config=None):
     db.init_app(app)
     app.register_blueprint(auth.bp)
 
-    from .views import main, samples, participants, admin, api, qcimport, demo, collections
-    for m in (main, samples, participants, admin, api, qcimport, demo, collections):
+    from .views import main, samples, participants, admin, api, qcimport, demo, collections, printing
+    for m in (main, samples, participants, admin, api, qcimport, demo, collections, printing):
         app.register_blueprint(m.bp)
 
     @app.template_filter("yymmmdd")

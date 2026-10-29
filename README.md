@@ -167,6 +167,40 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 | `/api/collections/<collection_id>` | collection record, its tree and corrections |
 | `/api/files?assay=&participant=` | data files joined to tubes |
 
+## Label printing (Brady M611)
+
+Labels are printed through a queue, so nobody needs the printer on their own
+computer:
+
+1. Anyone who can register tubes clicks **Send ... to the printer**: on the
+   page shown right after creating tubes (all the new tubes), on a tube page
+   (one label), or on a collection page (tick boxes, "select Available only").
+   The job joins the **Print queue** (menu), where it can be cancelled,
+   requeued after a failure, or printed again. Each job also offers a CSV
+   (barcode plus the three text rows) for Brady Express Labels or Workstation.
+2. A **print station** prints the queue in order. It is any device next to the
+   printer logged in as an account with role `printer` (create it on the Users
+   page, or `flask create-user station --role printer --initials PRN ...`).
+   That account sees only the station page and the label images it prints; it
+   is redirected away from everything else, and its initials never appear as
+   an operator.
+3. On the station, open the LIMS (it lands on *Print station*), click
+   **Connect printer** and pick the M611. From then on it checks every few
+   seconds and prints each job: a header label ("PRINT JOB #12 / FOR JD /
+   6 LABELS FOLLOW") and one label per tube, in aliquot order. Reconnect after
+   a reload or a restart (Bluetooth needs one click per page load). *Test
+   print* prints the nomenclature's example ID for checking alignment.
+
+The station uses Brady's Web SDK (loaded from the jsDelivr CDN, version
+pinned in `BRADY_SDK_URL`), which talks to the printer over Web Bluetooth.
+That works in Chrome or Edge on a computer or Android tablet. **On an iPad,
+Safari and Chrome cannot use Bluetooth from a web page; use the free Bluefy
+browser.** The page must be served over HTTPS (Vercel is; `localhost` also
+counts). Labels are drawn for the stock in `LABEL_STOCK` (default
+M6-17-492, 1.0 x 0.5 in, 300 dpi; override with `LIMS_LABEL_PART`,
+`LIMS_LABEL_WIDTH_IN`, `LIMS_LABEL_HEIGHT_IN`, `LIMS_LABEL_DPI`); the station
+warns when the printer reports different labels loaded.
+
 ## Falling back to nomenclature v2
 
 The v2 code (35-character IDs, 7-letter participant codes, root tubes) is tagged

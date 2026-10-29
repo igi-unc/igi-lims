@@ -28,7 +28,7 @@ def _form_ctx(conn):
     return {"participants": conn.execute("SELECT * FROM participant WHERE deleted_at IS NULL ORDER BY participant_id").fetchall(),
             "specimens": codes("specimen"), "sites": codes("site"), "biobanks": codes("biobank_source"),
             "parties": codes("party"), "containers": codes("container_type"), "units": codes("unit"),
-            "users": conn.execute("SELECT initials, display_name FROM account WHERE active=1 ORDER BY initials").fetchall()}
+            "users": conn.execute("SELECT initials, display_name FROM account WHERE active=1 AND role<>'printer' ORDER BY initials").fetchall()}
 
 
 def _get_or_404(conn, collection_id):

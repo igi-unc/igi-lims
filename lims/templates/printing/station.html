@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block title %}Print station · IGI LIMS{% endblock %}{% block content %}
+<h1>Print station</h1>
+<p class="muted">Leave this page open on the computer next to the Brady printer. After you connect the printer it collects queued jobs every few seconds and prints them in order, each job starting with a header label that names who asked for it.
+Needs a browser that can reach Bluetooth printers: Chrome or Edge on a computer or Android tablet, or Bluefy on an iPad. Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_in }} in at {{ stock.dpi }} dpi.</p>
+<div class="cols">
+<div class="card">
+  <h2>Printer</h2>
+  <p id="st-browser" class="muted"></p>
+  <p><button type="button" id="st-connect">Connect printer</button>
+     <button type="button" id="st-test" class="secondary" disabled>Test print</button>
+     <label class="small"><input type="checkbox" id="st-auto" checked> print queued jobs automatically</label></p>
+  <table class="compact"><tbody id="st-status"><tr><td class="muted">Not connected. Click "Connect printer" and choose the M611 from the list (once per page load).</td></tr></tbody></table>
+  <p id="st-warn" class="flash warn" hidden></p>
+</div>
+<div class="card">
+  <h2>Queue <span class="muted" id="st-queued">({{ queued }} waiting)</span></h2>
+  <div id="st-current" class="muted">Idle.</div>
+  <div id="st-preview" class="label-strip"></div>
+  <h3>This session</h3>
+  <ul class="plain small" id="st-log"><li class="muted">Nothing printed yet.</li></ul>
+  <p class="small"><a href="{{ url_for('auth.logout') }}">log out</a></p>
+</div>
+</div>
+<script>
+window.STATION = {sdkUrl: {{ sdk_url|tojson }}, claimUrl: {{ url_for('printing.claim')|tojson }},
+                  doneUrl: {{ url_for('printing.done', job_id=0)|tojson }}, testUrl: {{ url_for('printing.test_svg')|tojson }},
+                  stock: {{ stock|tojson }}};
+</script>
+<script type="module" src="{{ url_for('static', filename='station.js') }}"></script>
+{% endblock %}

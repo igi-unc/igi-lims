@@ -4,6 +4,13 @@
 {% if flags.corrections %} <a class="tag warn" href="#corrections" title="A value printed on the label has been corrected; the label and ID are unchanged">corrected</a>{% endif %}
 {% if flags.overrides %} <a class="tag warn" href="#history" title="Created against a derivation rule; see Record history for the justification">rule override</a>{% endif %}</h1>
 
+{% if just_created and g.user.role in ('admin', 'user') %}<div class="card print-offer">
+<form method="post" action="{{ url_for('printing.create') }}" class="inline">
+  {% for sid in just_created %}<input type="hidden" name="sample_id" value="{{ sid }}">{% endfor %}
+  <input type="hidden" name="next" value="{{ request.path }}">
+  <strong>{{ just_created|length }} new tube(s).</strong> <button type="submit">Send {{ just_created|length }} label(s) to the printer</button>
+  <span class="muted">They print at the print station, in aliquot order, after a header label with your initials.</span>
+</form></div>{% endif %}
 <div class="card">
 <h2>Provenance</h2>
 <div class="chain">
@@ -81,6 +88,11 @@
 <h3>Label</h3>
 <img class="label-img" src="{{ url_for('samples.label_svg', sample_id=s.sample_id) }}" alt="{% for row in label %}{{ row }} {% endfor %}">
 <p class="muted small">Preview of the printed label. The 2D code (Data Matrix) holds the full sample ID.</p>
+{% if g.user.role in ('admin', 'user') %}<form method="post" action="{{ url_for('printing.create') }}" class="inline">
+  <input type="hidden" name="sample_id" value="{{ s.sample_id }}"><input type="hidden" name="next" value="{{ request.path }}">
+  <button type="submit" class="secondary small">Send this label to the printer</button>
+  <label class="small"><input type="checkbox" name="header" value="0"> no header label</label>
+</form>{% endif %}
 </div>
 
 <div class="card">

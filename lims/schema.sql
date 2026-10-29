@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS account (   -- "user" is reserved in PostgreSQL
     display_name    TEXT NOT NULL,
     initials        TEXT NOT NULL,
     password_hash   TEXT NOT NULL,
-    role            TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','viewer')),
+    role            TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','viewer','printer')),   -- printer: print station only
     active          INTEGER NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
@@ -221,3 +221,22 @@ CREATE TABLE IF NOT EXISTS sample_attribute (
     updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     PRIMARY KEY (sample_id, key)
 );
+
+-- Label printing: users queue jobs from any browser; the print station (role 'printer', next to the Brady
+-- printer) claims them in order and prints them.
+CREATE TABLE IF NOT EXISTS print_job (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    requested_by        TEXT NOT NULL,                -- username
+    requested_initials  TEXT,
+    requested_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    sample_ids          TEXT NOT NULL,                -- JSON list, in print order
+    n_labels            INTEGER NOT NULL,
+    header              INTEGER NOT NULL DEFAULT 1,   -- print a job header label first
+    status              TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','printing','printed','failed','cancelled')),
+    station             TEXT,                         -- username of the station that claimed it
+    claim_token         TEXT,
+    claimed_at          TEXT,
+    finished_at         TEXT,
+    error               TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_print_job_status ON print_job(status, id);

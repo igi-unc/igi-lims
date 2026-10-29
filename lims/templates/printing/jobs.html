@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Print queue · IGI LIMS{% endblock %}{% block content %}
+<h1>Print queue</h1>
+<p class="muted">Labels sent from tube and collection pages wait here until the print station next to the label printer prints them, oldest first.
+Stock: {{ stock.part }} ({{ stock.width_in }} × {{ stock.height_in }} in, {{ stock.dpi }} dpi).
+{% if stations %}Station account(s): {% for s in stations %}{{ s.username }}{% if not loop.last %}, {% endif %}{% endfor %}.{% else %}No print-station account exists yet; an admin creates one on the Users page with role <code>printer</code>.{% endif %}
+{% if last_seen %}Last job picked up {{ last_seen }}.{% endif %}</p>
+<table><thead><tr><th>Job</th><th>Requested</th><th>Labels</th><th>Status</th><th>Station</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr>
+<td>#{{ r.id }} <a class="small" href="{{ url_for('printing.job_csv', job_id=r.id) }}" title="for Brady Express Labels or Workstation">CSV</a></td>
+<td>{{ r.requested_at }} <span class="muted">{{ r.requested_by }}</span></td>
+<td>{{ r.n_labels }}{% if r.header %} <span class="muted">+ header</span>{% endif %}
+  <details><summary class="small">tubes</summary><ul class="plain small">{% for sid in ids[r.id] %}<li><a href="{{ url_for('samples.detail', sample_id=sid) }}"><code>{{ sid }}</code></a></li>{% endfor %}</ul></details></td>
+<td><span class="status {{ 'Available' if r.status == 'printed' else ('Depleted' if r.status == 'failed' else ('In use' if r.status in ('queued', 'printing') else '')) }}">{{ r.status }}</span>{% if r.error %}<br><span class="muted small">{{ r.error }}</span>{% endif %}</td>
+<td class="muted">{{ r.station or '' }}{% if r.finished_at %}<br>{{ r.finished_at }}{% endif %}</td>
+<td>{% if g.user.role in ('admin', 'user') %}
+  {% if r.status == 'queued' %}<form class="inline" method="post" action="{{ url_for('printing.change', job_id=r.id, action='cancel') }}"><button class="small secondary">cancel</button></form>{% endif %}
+  {% if r.status in ('failed', 'printing', 'printed', 'cancelled') %}<form class="inline" method="post" action="{{ url_for('printing.change', job_id=r.id, action='requeue') }}"><button class="small secondary">{% if r.status == 'printed' %}print again{% else %}requeue{% endif %}</button></form>{% endif %}
+{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">No print jobs yet.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

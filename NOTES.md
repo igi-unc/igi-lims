@@ -85,6 +85,17 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
+* Label printing (2026-10-29): print queue + one print station (role
+  `printer`) using Brady's Web SDK 3.3.3 from the CDN. Tested end to end in
+  Chromium with a stand-in for the SDK (jobs claimed in order, 300 x 150 dot
+  bitmaps, barcode decodes); **not yet tested on a real M611 or in Bluefy on
+  the iPad**. Unknowns to settle at the first real print: whether
+  `printBitmaps` scales our 2:1 image exactly onto M6-17-492, whether the
+  text is legible at that size (rows are condensed to fit 18 characters in
+  about 15 mm), and whether Bluefy runs Brady's WebAssembly. Fallbacks: the
+  per-job CSV into Brady Express Labels on the iPad; an Android tablet or any
+  laptop with Chrome as the station; a native iPad app with Brady's iOS SDK
+  (needs a Mac with Xcode and an Apple developer account).
 * GitHub issues #1-#3 (2026-10-27): location conflicts warn and ask for a
   second submit rather than block (a slot can legitimately hold several tubes,
   e.g. one box position for a bag); the combined base+derived form offers no

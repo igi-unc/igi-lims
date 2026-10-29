@@ -43,6 +43,14 @@ ID_SEPARATOR = "-"
 ID_LENGTH = None        # 51 or 52: the operator is 2 or 3 letters. The pattern, not the length, catches errors.
 ALIQUOT_WIDTH = 2
 ALIQUOT_MAX = 99
+# Printed label stock (Brady M611 with M6-17-492 cryo labels: 1.0 x 0.5 inch, 300 dpi).
+LABEL_STOCK = {"part": os.environ.get("LIMS_LABEL_PART", "M6-17-492"),
+               "width_in": float(os.environ.get("LIMS_LABEL_WIDTH_IN", "1.0")),
+               "height_in": float(os.environ.get("LIMS_LABEL_HEIGHT_IN", "0.5")),
+               "dpi": int(os.environ.get("LIMS_LABEL_DPI", "300"))}
+BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
+                               "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
+PRINT_JOB_MAX_LABELS = 200
 # Label: three rows of at most 18 characters, broken at hyphens, beside a Data Matrix of the full ID.
 LABEL_ROWS = [["project", "cohort", "participant", "unc_id"],
               ["received_date", "specimen", "fraction", "material"],

@@ -388,6 +388,7 @@ DEMO_USERS = [  # username, display name, initials, role
     ("demo", "Demo Admin", "DA", "admin"),
     ("reviewer", "Second Reviewer", "SR", "user"),
     ("viewer", "Read-only Viewer", "RV", "viewer"),
+    ("station", "Print station", "PRN", "printer"),
 ]
 
 
