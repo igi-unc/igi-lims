@@ -92,6 +92,12 @@
   fake camera (no native reader, so the ponyfill path): a tube code opens the
   tube, a non-IGI code is shown and not followed. Not yet tried on an iPad or
   phone against a real printed label.
+* Label layout confirmed (2026-10-30): on the lab's Windows computer the M611
+  driver prints M6-17-492 correctly with calibration LAYOUT C (upright
+  0.5 x 1 in page, label image turned a quarter turn left). Earlier guesses
+  (as-drawn page; driver label-size or orientation settings) did not work:
+  Chrome overrides the driver's orientation. C is now the default
+  (`LABEL_PRINT_LAYOUT`).
 * Windows/USB printing (2026-10-30): the lab chose a Windows computer with
   the M611 on USB. The station page's "Windows printer" mode prints label-sized
   pages with window.print(); Chrome started with --kiosk-printing sends them

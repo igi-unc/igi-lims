@@ -214,14 +214,13 @@ computer:
      started from a shortcut with silent printing switched on:
      `chrome.exe --kiosk-printing --app=https://<lims>/print/station`
      (the station page shows the exact line; put the shortcut in
-     `shell:startup`). In the driver's **Printing preferences** the label size
-     must be **1.0 in wide x 0.5 in long**: labels leave the printer with the
-     notch on the left and the long edge at the top, so 1 in runs across the
-     roll. If the driver uses 0.5 x 1, labels print sideways or run across two
-     labels. *Alignment test* prints a bordered TOP/LEFT/RIGHT/BOTTOM label for
-     checking this; the *Page layout* menu covers a label that comes out upside
-     down, and the station page draws how a correct label and the two typical
-     misprints (driver set to 0.5 x 1) look.
+     `shell:startup`). Leave the driver's orientation and size settings alone
+     (Chrome decides them). The station prints an upright 0.5 x 1 in page with
+     the label turned a quarter turn left, which is what Brady's M611 driver
+     needs (calibration layout C, confirmed on the printer; `LABEL_PRINT_LAYOUT`).
+     For another printer or driver, **Calibrate** prints the alignment label in
+     all four layouts (A to D) as one four-page print; choose the letter that
+     comes out on one label, complete and upright, under *Page layout*.
      If a print dialog ever appears (Chrome was not started with the switch),
      the station stops and marks the job failed rather than claiming it
      printed. "Printed" means Windows accepted the job for the printer.

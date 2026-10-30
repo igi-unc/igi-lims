@@ -29,10 +29,11 @@ document.querySelectorAll("[data-mode]").forEach(a => a.addEventListener("click"
 function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 
 // ---------------------------------------------------------------- Windows printer (driver + kiosk printing)
-// The page must match the label size set in the Brady driver. With the driver set to the stock as it sits on the roll
-// (1 in across x 0.5 in along), the label prints as drawn ("landscape", the default). The "portrait" layouts are for a
-// driver whose label size is 0.5 across x 1 along: they turn the label a quarter turn onto an upright page.
-let orient = localStorage.getItem("stationLayout") || "landscape";
+// Brady's M611 driver lays an upright 0.5 x 1 in page onto the 1 x 0.5 in label, so the label image is printed on an
+// upright page turned a quarter turn left ("portrait", calibration LAYOUT C, confirmed on the printer). The other
+// layouts remain for other printers or drivers; Calibrate prints all four to choose from.
+// the layout a person chose on this station, else the site default (LABEL_PRINT_LAYOUT; "portrait" = calibration C)
+let orient = localStorage.getItem("stationLayoutChoice") || S.defaultLayout || "portrait";
 const LAYOUTS = ["landscape", "landscape-flip", "portrait", "portrait-right"];
 // Every layout is a CSS named page, so one print can mix them (the calibration print). The chosen layout is also the
 // default @page for printers or browsers that ignore named pages.
@@ -57,14 +58,17 @@ function pageCss(current) {
   return css + "}";
 }
 function applyOrient(o) {
-  orient = o; localStorage.setItem("stationLayout", o);
+  orient = o;
   let st = document.getElementById("print-page-style");
   if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
   st.textContent = pageCss(o);
   $("st-orient").value = o;
-  document.querySelectorAll(".pv figure[data-layout]").forEach(f => f.classList.toggle("current", f.dataset.layout === o));
+
 }
-$("st-orient").addEventListener("change", e => { applyOrient(e.target.value); addLog("page layout: " + e.target.selectedOptions[0].text); });
+$("st-orient").addEventListener("change", e => {
+  localStorage.setItem("stationLayoutChoice", e.target.value);
+  applyOrient(e.target.value); addLog("page layout: " + e.target.selectedOptions[0].text);
+});
 applyOrient(orient);
 function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("could not load " + url)); i.src = url; });

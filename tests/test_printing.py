@@ -85,6 +85,7 @@ def test_station_account_sees_nothing_else(app, alice, client):
     # Windows-printer mode: the kiosk-printing shortcut for this very page, and label-sized print pages
     assert "--kiosk-printing --app=http://localhost/print/station" in page
     assert 'id="st-orient"' in page and 'value="landscape-flip"' in page and 'value="portrait-right"' in page and 'id="st-wcal"' in page and 'id="print-area"' in page
+    assert '"defaultLayout": "portrait"' in page or 'defaultLayout: "portrait"' in page
     assert "LAYOUT C" in client.get("/print/station/align.svg?tag=c").data.decode()
     assert client.get("/print/station/align.svg").status_code == 200 and ">TOP<" in client.get("/print/station/align.svg").data.decode()
     js = client.get("/static/station.js").data.decode()

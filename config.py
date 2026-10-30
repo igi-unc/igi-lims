@@ -48,6 +48,10 @@ LABEL_STOCK = {"part": os.environ.get("LIMS_LABEL_PART", "M6-17-492"),
                "width_in": float(os.environ.get("LIMS_LABEL_WIDTH_IN", "1.0")),
                "height_in": float(os.environ.get("LIMS_LABEL_HEIGHT_IN", "0.5")),
                "dpi": int(os.environ.get("LIMS_LABEL_DPI", "300"))}
+# Page layout for Windows-printer stations. "portrait" (calibration LAYOUT C: upright 0.5 x 1 in page, label turned
+# left) is what Brady's M611 driver needs for M6-17-492, confirmed with a test print on 2026-10-30. Other values:
+# "landscape" (A), "landscape-flip" (B), "portrait-right" (D).
+LABEL_PRINT_LAYOUT = os.environ.get("LIMS_LABEL_PRINT_LAYOUT", "portrait")
 BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
                                "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
 PRINT_JOB_MAX_LABELS = 200
