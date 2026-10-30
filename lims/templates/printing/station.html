@@ -24,10 +24,16 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
       <select id="st-orient">
         <option value="landscape">Page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn (driver label size {{ stock.width_in }} wide × {{ stock.height_in }} long)</option>
         <option value="landscape-flip">Page {{ stock.width_in }} × {{ stock.height_in }} in, turned upside down (if the label comes out upside down)</option>
+        <option value="portrait">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left</option>
+        <option value="portrait-right">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right</option>
       </select></label></p>
     <p><button type="button" id="st-start">Start printing</button>
        <button type="button" id="st-wtest" class="secondary">Test print</button>
-       <button type="button" id="st-walign" class="secondary">Alignment test</button></p>
+       <button type="button" id="st-walign" class="secondary">Alignment test</button>
+       <button type="button" id="st-wcal" class="secondary">Calibrate (4 labels)</button></p>
+    <p class="muted small"><b>Calibrate</b> prints the alignment label once in each layout, marked LAYOUT A to D:
+      A = {{ stock.width_in }} × {{ stock.height_in }} as drawn, B = upside down, C = upright page turned left, D = upright page turned right.
+      Pick the one that comes out on a single label, complete and the right way up, and choose that layout above.</p>
     <p class="muted small">Alignment test prints one label with a border and TOP / LEFT / RIGHT / BOTTOM marks. If it comes out wrong, photograph it still attached to the roll, as it leaves the printer.</p>
     <details open class="pv"><summary>What the labels should look like</summary>
       <p class="muted small">Drawn as a label leaves the printer: notch on the left, long edge at the top.</p>

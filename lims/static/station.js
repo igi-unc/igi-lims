@@ -33,7 +33,6 @@ function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 // (1 in across x 0.5 in along), the label prints as drawn ("landscape", the default). The "portrait" layouts are for a
 // driver whose label size is 0.5 across x 1 along: they turn the label a quarter turn onto an upright page.
 let orient = localStorage.getItem("stationLayout") || "landscape";
-if (orient.startsWith("portrait")) orient = "landscape";   // upright-page layouts were withdrawn: M6-17-492 is 0.5 in along the roll
 function pageCss(o) {
   const W = S.stock.width_in, H = S.stock.height_in, upright = o.startsWith("portrait");
   const pw = upright ? H : W, ph = upright ? W : H;
@@ -81,6 +80,17 @@ $("st-start").addEventListener("click", () => {
   $("st-start").textContent = windowsRunning ? "Stop printing" : "Start printing";
   addLog(windowsRunning ? "printing through the Windows printer" : "stopped");
   showStatus();
+});
+$("st-wcal").addEventListener("click", async () => {
+  const keep = orient, layouts = [["landscape", "A"], ["landscape-flip", "B"], ["portrait", "C"], ["portrait-right", "D"]];
+  try {
+    for (const [o, tag] of layouts) {
+      applyOrient(o);
+      await printWindows([S.alignUrl + "?tag=" + tag]);
+    }
+    addLog("calibration: printed LAYOUT A to D; choose the one that came out right");
+  } catch (e) { addLog("calibration failed: " + (e.message || e), "error"); }
+  finally { applyOrient(keep); }
 });
 $("st-walign").addEventListener("click", async () => {
   try { await printWindows([S.alignUrl]); addLog("alignment label sent to the Windows printer"); }

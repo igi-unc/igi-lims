@@ -187,8 +187,9 @@ TEST_ID = "IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06"   # the nomencl
 @station_required
 def align_svg():
     st = current_app.config["LABEL_STOCK"]
-    return current_app.response_class(labels.alignment_print_svg(caption=f'{st["width_in"]:g} x {st["height_in"]:g} IN'),
-                                      mimetype="image/svg+xml")
+    tag = "".join(ch for ch in (request.args.get("tag") or "") if ch.isalnum())[:2].upper()
+    caption = f"LAYOUT {tag}" if tag else f'{st["width_in"]:g} x {st["height_in"]:g} IN'
+    return current_app.response_class(labels.alignment_print_svg(caption=caption), mimetype="image/svg+xml")
 
 
 @bp.route("/station/test.svg")
