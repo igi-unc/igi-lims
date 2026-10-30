@@ -51,7 +51,7 @@ function pageCss(current) {
   for (const o of LAYOUTS) {
     const r = layoutRules(o);
     css += `  @page lay-${o} { size: ${r.pw}in ${r.ph}in; margin: 0; }
-  #print-area .pl.lay-${o} { page: lay-${o}; width:${r.pw}in; height:${r.ph}in; }
+  #print-area .pl.lay-${o} { page: lay-${o}; width:${r.pw}in; height:calc(${r.ph}in - 0.005in); }
   #print-area .pl.lay-${o} img { ${r.img} }\n`;
   }
   return css + "}";

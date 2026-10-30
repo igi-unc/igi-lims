@@ -92,9 +92,10 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
     body > header, .no-print, .flash, .demo-banner { display:none !important; }
     main { padding:0 !important; margin:0 !important; max-width:none !important; }
-    #print-area { display:block; }
+    #print-area { display:block; line-height:0; font-size:0; }
+    #print-area ~ *, script { display:none !important; }
     #print-area .pl { position:relative; overflow:hidden; break-after:page; page-break-after:always; }
-    #print-area .pl:last-child { break-after:auto; page-break-after:auto; }
+    #print-area .pl:last-child { break-after:avoid; page-break-after:avoid; }
     #print-area img { display:block; }
   }
   /* page size and label rotation: set by station.js from the "Page layout" choice */
