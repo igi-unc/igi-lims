@@ -82,6 +82,10 @@ def test_station_account_sees_nothing_else(app, alice, client):
     assert client.post(f"/collections/{cid}/tubes", data={}).status_code == 403
     page = client.get("/print/station").data.decode()
     assert "Connect printer" in page and "station.js" in page
+    # Windows-printer mode: the kiosk-printing shortcut for this very page, and label-sized print pages
+    assert "--kiosk-printing --app=http://localhost/print/station" in page
+    assert "size: 1.0in 0.5in" in page and 'id="print-area"' in page
+    assert "<nav>" not in page                                  # the station account gets no menu
     assert client.get("/print/station/test.svg").status_code == 200
 
 

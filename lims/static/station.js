@@ -1,9 +1,13 @@
-// Print station: connects to a Brady printer with Brady's Web SDK (Web Bluetooth), then claims queued print jobs
-// from the LIMS and prints them, one label image per tube (plus a header label per job).
+// Print station. Two ways to reach the printer:
+//   windows   - the Brady driver on this computer (USB). Each job is laid out as label-sized pages and printed with
+//               window.print(); Chrome started with --kiosk-printing sends it to the default printer without a dialog.
+//   bluetooth - Brady's Web SDK over Web Bluetooth (Chrome/Edge on a computer or Android tablet).
+// Either way the station claims queued jobs from the LIMS in order and reports each one printed or failed.
 const S = window.STATION;
 const $ = id => document.getElementById(id);
 const esc = v => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-let sdk = null, busy = false;
+let mode = localStorage.getItem("stationMode") || "windows";
+let sdk = null, busy = false, windowsRunning = false;
 const log = [];
 
 function addLog(text, cls) {
@@ -11,11 +15,68 @@ function addLog(text, cls) {
   $("st-log").innerHTML = log.slice(0, 30).join("");
 }
 
-function connected() { try { return !!(sdk && sdk.isConnected()); } catch (e) { return false; } }
+// ---------------------------------------------------------------- mode switch
+function setMode(m) {
+  mode = m; localStorage.setItem("stationMode", m);
+  $("pane-windows").hidden = m !== "windows";
+  $("pane-bluetooth").hidden = m !== "bluetooth";
+  $("mode-windows").classList.toggle("active", m === "windows");
+  $("mode-bluetooth").classList.toggle("active", m === "bluetooth");
+  showStatus();
+}
+document.querySelectorAll("[data-mode]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); setMode(a.dataset.mode); }));
+
+function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
+
+// ---------------------------------------------------------------- Windows printer (driver + kiosk printing)
+function loadImg(url) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("could not load " + url)); i.src = url; });
+}
+
+async function printWindows(urls) {
+  const area = $("print-area");
+  area.innerHTML = "";
+  const imgs = await Promise.all(urls.map(loadImg));          // all labels loaded before printing
+  imgs.forEach(i => { const d = document.createElement("div"); d.className = "pl"; d.appendChild(i); area.appendChild(d); });
+  showPreview(urls);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const t0 = performance.now();
+  window.print();                                             // with --kiosk-printing: straight to the default printer
+  const waited = performance.now() - t0;
+  area.innerHTML = "";
+  if (waited > 2500) {                                        // a print dialog was open: not in silent-printing mode
+    stopWindows("A print dialog appeared, so Chrome is not in silent-printing mode (start it from the --kiosk-printing shortcut). Printing stopped.");
+    throw new Error("print dialog shown instead of silent printing; check whether the labels came out before requeueing");
+  }
+  return true;
+}
+
+$("st-start").addEventListener("click", () => {
+  windowsRunning = !windowsRunning;
+  $("st-start").textContent = windowsRunning ? "Stop printing" : "Start printing";
+  addLog(windowsRunning ? "printing through the Windows printer" : "stopped");
+  showStatus();
+});
+$("st-wtest").addEventListener("click", async () => {
+  try { await printWindows([S.testUrl]); addLog("test label sent to the Windows printer"); }
+  catch (e) { addLog("test label failed: " + (e.message || e), "error"); }
+});
+// a station that was printing through Windows starts again by itself after a restart (Startup-folder shortcut);
+// a browser that never pressed Start never prints on its own
+if (mode === "windows" && localStorage.getItem("stationAutostart") === "1") { windowsRunning = true; $("st-start").textContent = "Stop printing"; }
+$("st-start").addEventListener("click", () => localStorage.setItem("stationAutostart", windowsRunning ? "1" : "0"));
+function stopWindows(reason) {
+  windowsRunning = false; localStorage.setItem("stationAutostart", "0");
+  $("st-start").textContent = "Start printing";
+  addLog(reason, "error");
+}
+
+// ---------------------------------------------------------------- Bluetooth (Brady Web SDK)
+function btConnected() { try { return !!(sdk && sdk.isConnected()); } catch (e) { return false; } }
 
 function showStatus() {
   const rows = [];
-  if (sdk && connected()) {
+  if (sdk && btConnected()) {
     const p = (k, label) => { if (sdk[k] !== undefined && sdk[k] !== null && sdk[k] !== "") rows.push(`<tr><th>${label}</th><td>${esc(sdk[k])}</td></tr>`); };
     p("printerName", "Printer"); p("status", "Status"); p("supplyName", "Labels loaded"); p("supplyDimensions", "Label size");
     p("dotsPerInch", "Resolution (dpi)"); p("batteryLevelPercentage", "Battery %"); p("ribbonRemainingPercent", "Ribbon left %");
@@ -23,11 +84,10 @@ function showStatus() {
   }
   $("st-status").innerHTML = rows.length ? rows.join("") :
     `<tr><td class="muted">${sdk ? "Disconnected. Click \"Connect printer\" again." : "Not connected. Click \"Connect printer\" and choose the M611 from the list (once per page load)."}</td></tr>`;
-  $("st-test").disabled = !connected();
-  // the loaded labels should be the stock the LIMS draws for
+  $("st-test").disabled = !btConnected();
   const warn = $("st-warn");
-  const dims = sdk && connected() ? String(sdk.supplyDimensions || "") : "";
-  const name = sdk && connected() ? String(sdk.supplyName || "") : "";
+  const dims = sdk && btConnected() ? String(sdk.supplyDimensions || "") : "";
+  const name = sdk && btConnected() ? String(sdk.supplyName || "") : "";
   if (dims || name) {
     const want = [S.stock.width_in, S.stock.height_in].map(Number);
     const nums = (dims.match(/[\d.]+/g) || []).map(Number);
@@ -41,21 +101,17 @@ function showStatus() {
 async function loadSdk() {
   if (sdk) return sdk;
   const mod = await import(S.sdkUrl);
-  const BradySdk = mod.default;
-  sdk = new BradySdk(() => showStatus(), false);
-  if (sdk.isSupportedBrowser && !(await sdk.isSupportedBrowser())) {
-    $("st-browser").textContent = "This browser cannot reach Bluetooth printers. Use Chrome or Edge on this computer.";
-  }
+  sdk = new mod.default(() => showStatus(), false);
+  if (sdk.isSupportedBrowser && !(await sdk.isSupportedBrowser()))
+    $("st-browser").textContent = "This browser cannot reach Bluetooth printers. Use Chrome or Edge, or the Windows printer mode.";
   return sdk;
 }
 
-// Draw a same-origin SVG label into a pure black-and-white bitmap the size the printer expects.
+// same-origin SVG label -> pure black-and-white bitmap the size the printer expects
 async function bitmap(url) {
   const dpi = Number((sdk && sdk.dotsPerInch) || S.stock.dpi);
   const W = Math.round(S.stock.width_in * dpi), H = Math.round(S.stock.height_in * dpi);
-  const svgImg = new Image();
-  svgImg.src = url;
-  await svgImg.decode();
+  const svgImg = await loadImg(url);
   const c = document.createElement("canvas");
   c.width = W; c.height = H;
   const ctx = c.getContext("2d");
@@ -63,23 +119,42 @@ async function bitmap(url) {
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(svgImg, 0, 0, W, H);
   const d = ctx.getImageData(0, 0, W, H), px = d.data;
-  for (let i = 0; i < px.length; i += 4) {           // thermal transfer prints black or nothing
+  for (let i = 0; i < px.length; i += 4) {
     const v = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) < 150 ? 0 : 255;
     px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255;
   }
   ctx.putImageData(d, 0, 0);
-  const out = new Image();
-  out.src = c.toDataURL("image/png");
-  await out.decode();
-  out.className = "label-preview";
-  return out;
+  return loadImg(c.toDataURL("image/png"));
 }
 
-async function printImages(imgs) {
+async function printBluetooth(urls) {
+  const imgs = [];
+  for (const u of urls) imgs.push(await bitmap(u));
+  showPreview(urls);
+  const ok = imgs.length === 1 ? await sdk.printBitmap(imgs[0]) : await sdk.printBitmaps(imgs);
+  if (!ok) throw new Error((sdk.message || "the printer refused the job") + (sdk.messageRemedy ? " (" + sdk.messageRemedy + ")" : ""));
+  return true;
+}
+
+$("st-connect").addEventListener("click", async () => {
+  try {
+    await loadSdk();
+    const id = await sdk.showDiscoveredBleDevices(localStorage.getItem("bradyPrinterId") || undefined);
+    if (id) localStorage.setItem("bradyPrinterId", id);
+    if (!btConnected()) addLog("not connected: " + (sdk.getConnectionErrorMessage ? sdk.getConnectionErrorMessage() : "no printer chosen"), "error");
+    else addLog(`connected to ${sdk.printerName || "printer"}`);
+  } catch (e) { addLog("could not load Brady's printing library or connect: " + (e.message || e), "error"); }
+  showStatus();
+});
+$("st-test").addEventListener("click", async () => {
+  try { await printBluetooth([S.testUrl]); addLog("test label printed"); }
+  catch (e) { addLog("test label failed: " + (e.message || e), "error"); }
+});
+
+// ---------------------------------------------------------------- the queue
+function showPreview(urls) {
   const strip = $("st-preview");
-  strip.innerHTML = "";
-  imgs.forEach(i => strip.appendChild(i.cloneNode()));
-  return imgs.length === 1 ? sdk.printBitmap(imgs[0]) : sdk.printBitmaps(imgs);
+  strip.innerHTML = urls.map(u => `<img class="label-preview" src="${esc(u)}" alt="">`).join("");
 }
 
 async function post(url, body) {
@@ -90,7 +165,7 @@ async function post(url, body) {
 }
 
 async function tick() {
-  if (busy || !connected() || !$("st-auto").checked) return;
+  if (busy || !ready() || !$("st-auto").checked) return;
   busy = true;
   let job = null;
   try {
@@ -99,12 +174,10 @@ async function tick() {
     job = res.job;
     if (!job) { $("st-current").textContent = "Idle."; return; }
     $("st-current").textContent = `Printing job #${job.id} for ${job.initials || job.requested_by}: ${job.n_labels} label(s)…`;
-    const imgs = [];
-    for (const im of job.images) imgs.push(await bitmap(im.url));
-    const ok = await printImages(imgs);
-    if (!ok) throw new Error((sdk.message || "the printer refused the job") + (sdk.messageRemedy ? " (" + sdk.messageRemedy + ")" : ""));
+    const urls = job.images.map(i => i.url);
+    if (mode === "windows") await printWindows(urls); else await printBluetooth(urls);
     await post(S.doneUrl.replace("/0/", `/${job.id}/`), {token: job.token, ok: true});
-    addLog(`job #${job.id}: ${job.n_labels} label(s) for ${job.initials || job.requested_by}`, "");
+    addLog(`job #${job.id}: ${job.n_labels} label(s) for ${job.initials || job.requested_by}`);
     $("st-current").textContent = `Job #${job.id} printed.`;
   } catch (e) {
     if (job) {
@@ -115,29 +188,9 @@ async function tick() {
   } finally { busy = false; }
 }
 
-$("st-connect").addEventListener("click", async () => {
-  try {
-    await loadSdk();
-    const id = await sdk.showDiscoveredBleDevices(localStorage.getItem("bradyPrinterId") || undefined);
-    if (id) localStorage.setItem("bradyPrinterId", id);
-    if (!connected()) addLog("not connected: " + (sdk.getConnectionErrorMessage ? sdk.getConnectionErrorMessage() : "no printer chosen"), "error");
-    else addLog(`connected to ${sdk.printerName || "printer"}`);
-  } catch (e) {
-    addLog("could not load Brady's printing library or connect: " + (e.message || e), "error");
-  }
-  showStatus();
-});
-
-$("st-test").addEventListener("click", async () => {
-  try {
-    const ok = await printImages([await bitmap(S.testUrl)]);
-    addLog(ok ? "test label printed" : "test label failed: " + (sdk.message || ""), ok ? "" : "error");
-  } catch (e) { addLog("test label failed: " + (e.message || e), "error"); }
-});
-
 const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 if (!navigator.bluetooth) $("st-browser").textContent = iOS
-  ? "On an iPad, Safari and Chrome cannot reach Bluetooth printers. Open this page in the Bluefy browser (free in the App Store) instead."
-  : "This browser has no Bluetooth support for web pages. Use Chrome or Edge.";
-showStatus();
+  ? "On an iPad, Safari and Chrome cannot reach Bluetooth printers."
+  : "This browser has no Bluetooth support for web pages. Use Chrome or Edge, or the Windows printer mode.";
+setMode(mode);
 setInterval(tick, 4000);

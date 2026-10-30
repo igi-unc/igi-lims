@@ -85,6 +85,14 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
+* Windows/USB printing (2026-10-30): the lab chose a Windows computer with
+  the M611 on USB. The station page's "Windows printer" mode prints label-sized
+  pages with window.print(); Chrome started with --kiosk-printing sends them
+  silently to the default printer (the Brady driver). Verified in headless
+  Chromium (pages, 1.0 x 0.5 in size, barcode, dialog detection), **not yet on
+  the lab computer**: check that the driver maps the 1 x 0.5 in page onto the
+  label without scaling or offset, and that Chrome prints unattended after a
+  reload. Bluetooth mode remains for tablets.
 * Label printing (2026-10-29): print queue + one print station (role
   `printer`) using Brady's Web SDK 3.3.3 from the CDN. Tested end to end in
   Chromium with a stand-in for the SDK (jobs claimed in order, 300 x 150 dot

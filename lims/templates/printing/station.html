@@ -1,16 +1,36 @@
 {% extends "base.html" %}{% block title %}Print station · IGI LIMS{% endblock %}{% block content %}
+<div class="no-print">
 <h1>Print station</h1>
-<p class="muted">Leave this page open on the computer next to the Brady printer. After you connect the printer it collects queued jobs every few seconds and prints them in order, each job starting with a header label that names who asked for it.
-Needs a browser that can reach Bluetooth printers: Chrome or Edge on a computer or Android tablet, or Bluefy on an iPad. Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_in }} in at {{ stock.dpi }} dpi.</p>
+<p class="muted">Leave this page open on the computer next to the Brady printer. It collects queued jobs every few seconds and prints them in order, each job starting with a header label that names who asked for it.
+Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_in }} in.</p>
 <div class="cols">
 <div class="card">
   <h2>Printer</h2>
-  <p id="st-browser" class="muted"></p>
-  <p><button type="button" id="st-connect">Connect printer</button>
-     <button type="button" id="st-test" class="secondary" disabled>Test print</button>
-     <label class="small"><input type="checkbox" id="st-auto" checked> print queued jobs automatically</label></p>
-  <table class="compact"><tbody id="st-status"><tr><td class="muted">Not connected. Click "Connect printer" and choose the M611 from the list (once per page load).</td></tr></tbody></table>
-  <p id="st-warn" class="flash warn" hidden></p>
+  <p class="tabs" role="tablist">
+    <a href="#" data-mode="windows" id="mode-windows">Windows printer (USB)</a>
+    <a href="#" data-mode="bluetooth" id="mode-bluetooth">Bluetooth</a>
+  </p>
+  <div id="pane-windows" hidden>
+    <p class="small">Prints through the Brady driver installed on this computer. Set it up once:</p>
+    <ol class="small">
+      <li>Install Brady's M611 driver, plug the printer in by USB, and make <b>BradyPrinter M611</b> the default printer (Windows Settings, Printers &amp; scanners; turn off "Let Windows manage my default printer"). In the printer's preferences, choose the {{ stock.part }} label size and no margins.</li>
+      <li>Start Chrome from a shortcut with silent printing switched on, pointing at this page:<br>
+        <code class="wrap" id="st-shortcut">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing --app={{ request.url_root.rstrip('/') }}{{ url_for('printing.station') }}</code><br>
+        Put the shortcut in the Startup folder (Win+R, <code>shell:startup</code>) so it opens after a restart. Close every other Chrome window before the first start, or the switch is ignored.</li>
+      <li>Click <b>Test print</b>. If a print dialog appears, Chrome was not started with the switch.</li>
+    </ol>
+    <p><button type="button" id="st-start">Start printing</button>
+       <button type="button" id="st-wtest" class="secondary">Test print</button></p>
+  </div>
+  <div id="pane-bluetooth" hidden>
+    <p id="st-browser" class="muted"></p>
+    <p class="small">Connects to the printer directly over Bluetooth with Brady's Web SDK (Chrome or Edge on a computer or Android tablet).</p>
+    <p><button type="button" id="st-connect">Connect printer</button>
+       <button type="button" id="st-test" class="secondary" disabled>Test print</button></p>
+    <table class="compact"><tbody id="st-status"><tr><td class="muted">Not connected. Click "Connect printer" and choose the M611 from the list (once per page load).</td></tr></tbody></table>
+    <p id="st-warn" class="flash warn" hidden></p>
+  </div>
+  <p><label class="small"><input type="checkbox" id="st-auto" checked> print queued jobs automatically</label></p>
 </div>
 <div class="card">
   <h2>Queue <span class="muted" id="st-queued">({{ queued }} waiting)</span></h2>
@@ -21,6 +41,21 @@ Needs a browser that can reach Bluetooth printers: Chrome or Edge on a computer 
   <p class="small"><a href="{{ url_for('auth.logout') }}">log out</a></p>
 </div>
 </div>
+</div>
+<div id="print-area" aria-hidden="true"></div>
+<style>
+  #print-area { display:none; }
+  @media print {
+    @page { size: {{ stock.width_in }}in {{ stock.height_in }}in; margin: 0; }
+    html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
+    body > header, .no-print, .flash, .demo-banner { display:none !important; }
+    main { padding:0 !important; margin:0 !important; max-width:none !important; }
+    #print-area { display:block; }
+    #print-area .pl { width:{{ stock.width_in }}in; height:{{ stock.height_in }}in; overflow:hidden; break-after:page; page-break-after:always; }
+    #print-area .pl:last-child { break-after:auto; page-break-after:auto; }
+    #print-area img { display:block; width:{{ stock.width_in }}in; height:{{ stock.height_in }}in; }
+  }
+</style>
 <script>
 window.STATION = {sdkUrl: {{ sdk_url|tojson }}, claimUrl: {{ url_for('printing.claim')|tojson }},
                   doneUrl: {{ url_for('printing.done', job_id=0)|tojson }}, testUrl: {{ url_for('printing.test_svg')|tojson }},

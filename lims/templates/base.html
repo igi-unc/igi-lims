@@ -9,7 +9,9 @@
 <body>
 <header class="top">
   <a class="brand" href="{{ url_for('main.index') }}">IGI LIMS</a>
-  {% if g.user %}
+  {% if g.user and g.user.role == 'printer' %}
+  <span class="who">{{ g.user.display_name }} · <a href="{{ url_for('auth.logout') }}">log out</a></span>
+  {% elif g.user %}
   <nav>
     <a href="{{ url_for('main.browse') }}">Samples &amp; Participants</a>
     <a href="{{ url_for('main.register') }}">Register</a>

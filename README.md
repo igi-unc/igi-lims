@@ -186,29 +186,35 @@ computer:
    which is recorded and appears in the audit log's changes-only view.
    Requeueing a job the station took but never confirmed also needs a reason,
    since its labels may already have come out.
-2. A **print station** prints the queue in order. It is any device next to the
-   printer logged in as an account with role `printer` (create it on the Users
-   page, or `flask create-user station --role printer --initials PRN ...`).
+2. A **print station** prints the queue in order. It is a browser next to the
+   printer, logged in as an account with role `printer` (create it on the
+   Users page, or `flask create-user station --role printer --initials PRN ...`).
    That account sees only the station page and the label images it prints; it
    is redirected away from everything else, and its initials never appear as
    an operator.
-3. On the station, open the LIMS (it lands on *Print station*), click
-   **Connect printer** and pick the M611. From then on it checks every few
-   seconds and prints each job: a header label ("PRINT JOB #12 / FOR JD /
-   6 LABELS FOLLOW"; on by default, skippable per job from the tube page) and
-   one label per tube, in aliquot order. Reconnect after
-   a reload or a restart (Bluetooth needs one click per page load). *Test
-   print* prints the nomenclature's example ID for checking alignment.
+3. The station reaches the printer in one of two ways (tabs on the page):
+   * **Windows printer (USB), the lab setup.** Brady's M611 driver is
+     installed, the printer is plugged in by USB and set as the Windows
+     default printer, with the M6-17-492 label size and no margins. Chrome is
+     started from a shortcut with silent printing switched on:
+     `chrome.exe --kiosk-printing --app=https://<lims>/print/station`
+     (the station page shows the exact line; put the shortcut in
+     `shell:startup`). Press **Start printing** once; the station then prints
+     each job as label-sized pages, and starts again by itself after a restart.
+     If a print dialog ever appears (Chrome was not started with the switch),
+     the station stops and marks the job failed rather than claiming it
+     printed. "Printed" means Windows accepted the job for the printer.
+   * **Bluetooth.** Brady's Web SDK (loaded from the jsDelivr CDN, version
+     pinned in `BRADY_SDK_URL`) over Web Bluetooth, in Chrome or Edge on a
+     computer or Android tablet. Click **Connect printer** once per page load.
+     iPads cannot do this in Safari or Chrome.
+   Each job prints a header label ("PRINT JOB #12 / FOR JD / 6 LABELS FOLLOW";
+   on by default, skippable per job from the tube page) and one label per
+   tube, in aliquot order. *Test print* prints the nomenclature's example ID.
 
-The station uses Brady's Web SDK (loaded from the jsDelivr CDN, version
-pinned in `BRADY_SDK_URL`), which talks to the printer over Web Bluetooth.
-That works in Chrome or Edge on a computer or Android tablet. **On an iPad,
-Safari and Chrome cannot use Bluetooth from a web page; use the free Bluefy
-browser.** The page must be served over HTTPS (Vercel is; `localhost` also
-counts). Labels are drawn for the stock in `LABEL_STOCK` (default
-M6-17-492, 1.0 x 0.5 in, 300 dpi; override with `LIMS_LABEL_PART`,
-`LIMS_LABEL_WIDTH_IN`, `LIMS_LABEL_HEIGHT_IN`, `LIMS_LABEL_DPI`); the station
-warns when the printer reports different labels loaded.
+Labels are drawn for the stock in `LABEL_STOCK` (default M6-17-492,
+1.0 x 0.5 in, 300 dpi; override with `LIMS_LABEL_PART`, `LIMS_LABEL_WIDTH_IN`,
+`LIMS_LABEL_HEIGHT_IN`, `LIMS_LABEL_DPI`).
 
 ## Falling back to nomenclature v2
 
