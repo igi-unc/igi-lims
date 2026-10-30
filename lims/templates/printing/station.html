@@ -24,13 +24,28 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
       <select id="st-orient">
         <option value="landscape">Page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn (driver label size {{ stock.width_in }} wide × {{ stock.height_in }} long)</option>
         <option value="landscape-flip">Page {{ stock.width_in }} × {{ stock.height_in }} in, turned upside down (if the label comes out upside down)</option>
-        <option value="portrait">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (driver label size {{ stock.height_in }} wide × {{ stock.width_in }} long)</option>
-        <option value="portrait-right">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right (as above, if it prints upside down)</option>
       </select></label></p>
     <p><button type="button" id="st-start">Start printing</button>
        <button type="button" id="st-wtest" class="secondary">Test print</button>
        <button type="button" id="st-walign" class="secondary">Alignment test</button></p>
     <p class="muted small">Alignment test prints one label with a border and TOP / LEFT / RIGHT / BOTTOM marks. If it comes out wrong, photograph it still attached to the roll, as it leaves the printer.</p>
+    <details open class="pv"><summary>What the labels should look like</summary>
+      <p class="muted small">Drawn as a label leaves the printer: notch on the left, long edge at the top.</p>
+      <div class="pv-row">
+        <figure data-layout="landscape"><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-up"></div></div>
+          <figcaption><b>As drawn</b> (driver label size {{ stock.width_in }} wide × {{ stock.height_in }} long). This is the goal.</figcaption></figure>
+        <figure data-layout="landscape-flip"><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-up"></div></div>
+          <figcaption><b>Upside down</b>: what this layout fixes. If "as drawn" prints like this, choose "turned upside down" and it prints the right way up.</figcaption></figure>
+      </div>
+      <p class="muted small">Signs that the driver's label size is set to {{ stock.height_in }} wide × {{ stock.width_in }} long instead (fix it in Printing preferences, not here):</p>
+      <div class="pv-row">
+        <figure><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw"></div></div>
+          <figcaption>Sideways, only the barcode and the first characters, right half of the label (your first test).</figcaption></figure>
+        <figure><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw"></div></div>
+          <div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw pv-second"></div></div>
+          <figcaption>Sideways and running across two labels (your second test).</figcaption></figure>
+      </div>
+    </details>
   </div>
   <div id="pane-bluetooth" hidden>
     <p id="st-browser" class="muted"></p>
@@ -55,6 +70,18 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
 <div id="print-area" aria-hidden="true"></div>
 <style>
   #print-area { display:none; }
+  /* print preview drawings: 1 in = 160 px */
+  .pv-row { display:flex; flex-wrap:wrap; gap:16px; margin:6px 0 10px; }
+  .pv figure { margin:0; width:230px; }
+  .pv figcaption { font-size:12px; color:var(--muted); margin-top:4px; }
+  .pv .liner { position:relative; display:inline-block; background:#d9d9d6; padding:7px 7px 7px 30px; border-radius:3px; margin-bottom:4px; }
+  .pv .notch { position:absolute; left:0; top:50%; width:18px; height:12px; margin-top:-6px; background:var(--bg, #f6f7f9); border-radius:0 6px 6px 0; }
+  .pv .lab { position:relative; width:{{ (stock.width_in * 160)|round|int }}px; height:{{ (stock.height_in * 160)|round|int }}px; background:#fff; border-radius:5px; overflow:hidden; }
+  .pv .lab img { position:absolute; left:0; top:0; width:{{ (stock.width_in * 160)|round|int }}px; height:{{ (stock.height_in * 160)|round|int }}px; transform-origin:0 0; }
+  .pv figure[data-layout="landscape-flip"] .lab img { transform-origin:50% 50%; transform:rotate(180deg); }
+  .pv .lab img.pv-cw { transform:translateX({{ (stock.width_in * 160)|round|int }}px) rotate(90deg); }
+  .pv .lab img.pv-cw.pv-second { transform:translate({{ (stock.width_in * 160)|round|int }}px, -{{ (stock.height_in * 160)|round|int }}px) rotate(90deg); }
+  .pv figure.current .liner { outline:3px solid var(--accent); outline-offset:2px; }
   @media print {
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
     body > header, .no-print, .flash, .demo-banner { display:none !important; }

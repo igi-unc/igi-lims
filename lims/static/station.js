@@ -33,6 +33,7 @@ function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 // (1 in across x 0.5 in along), the label prints as drawn ("landscape", the default). The "portrait" layouts are for a
 // driver whose label size is 0.5 across x 1 along: they turn the label a quarter turn onto an upright page.
 let orient = localStorage.getItem("stationLayout") || "landscape";
+if (orient.startsWith("portrait")) orient = "landscape";   // upright-page layouts were withdrawn: M6-17-492 is 0.5 in along the roll
 function pageCss(o) {
   const W = S.stock.width_in, H = S.stock.height_in, upright = o.startsWith("portrait");
   const pw = upright ? H : W, ph = upright ? W : H;
@@ -49,6 +50,7 @@ function applyOrient(o) {
   if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
   st.textContent = pageCss(o);
   $("st-orient").value = o;
+  document.querySelectorAll(".pv figure[data-layout]").forEach(f => f.classList.toggle("current", f.dataset.layout === o));
 }
 $("st-orient").addEventListener("change", e => { applyOrient(e.target.value); addLog("page layout: " + e.target.selectedOptions[0].text); });
 applyOrient(orient);

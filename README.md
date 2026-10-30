@@ -205,7 +205,8 @@ computer:
      roll. If the driver uses 0.5 x 1, labels print sideways or run across two
      labels. *Alignment test* prints a bordered TOP/LEFT/RIGHT/BOTTOM label for
      checking this; the *Page layout* menu covers a label that comes out upside
-     down, or a driver that can only be set to 0.5 x 1.
+     down, and the station page draws how a correct label and the two typical
+     misprints (driver set to 0.5 x 1) look.
      If a print dialog ever appears (Chrome was not started with the switch),
      the station stops and marks the job failed rather than claiming it
      printed. "Printed" means Windows accepted the job for the printer.
