@@ -1,46 +1,52 @@
 {% extends "base.html" %}{% block title %}Print station · IGI LIMS{% endblock %}{% block content %}
 <div class="no-print">
 <h1>Print station</h1>
-<p class="muted">Leave this page open on the computer next to the Brady printer. It collects queued jobs every few seconds and prints them in order, each job starting with a header label that names who asked for it.
-Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_in }} in.</p>
+<p class="muted">Keep this page open on the computer next to the label printer. It prints queued labels in order, each job after a header label naming who asked for it.</p>
 <div class="cols">
 <div class="card">
   <h2>Printer</h2>
-  <p class="tabs" role="tablist">
-    <a href="#" data-mode="windows" id="mode-windows">Windows printer (USB)</a>
-    <a href="#" data-mode="bluetooth" id="mode-bluetooth">Bluetooth</a>
-  </p>
   <div id="pane-windows" hidden>
-    <p class="small">Prints through the Brady driver installed on this computer. Set it up once:</p>
-    <ol class="small">
-      <li>Install Brady's M611 driver, plug the printer in by USB, and make <b>BradyPrinter M611</b> the default printer (Windows Settings, Printers &amp; scanners; turn off "Let Windows manage my default printer").</li>
-      <li>Leave the driver's own orientation and size settings alone: Chrome decides them when it prints. The page layout below (C for the Brady M611 driver) makes the label come out straight.</li>
-      <li>Start Chrome from a shortcut with silent printing switched on, pointing at this page:<br>
-        <code class="wrap" id="st-shortcut">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing --app={{ request.url_root.rstrip('/') }}{{ url_for('printing.station') }}</code><br>
-        Put the shortcut in the Startup folder (Win+R, <code>shell:startup</code>) so it opens after a restart. Close every other Chrome window before the first start, or the switch is ignored.</li>
-      <li>Click <b>Test print</b>. If a print dialog appears, Chrome was not started with the switch.</li>
-    </ol>
-    <p><label class="small"><span class="lbl">Page layout (match how the driver feeds the label)</span>
-      <select id="st-orient">
-        <option value="portrait">C: page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (Brady M611 driver)</option>
-        <option value="portrait-right">D: page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right</option>
-        <option value="landscape">A: page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn</option>
-        <option value="landscape-flip">B: page {{ stock.width_in }} × {{ stock.height_in }} in, upside down</option>
-      </select></label></p>
-    <p class="small"><span class="lbl">Fine position (mm; moves everything on the label)</span>
-      shift right <input type="number" id="st-dx" step="0.1" min="-3" max="3" style="width:5em">
-      shift down <input type="number" id="st-dy" step="0.1" min="-3" max="3" style="width:5em">
-      <button type="button" id="st-dreset" class="secondary small">site default</button>
-      <span class="muted">Use Alignment test: if the border runs off the left edge, increase "shift right"; off the top, increase "shift down".</span></p>
+    <p><span id="st-wstate" class="tag warn">stopped</span> Windows printer (USB) · layout <b id="st-wlayout"></b></p>
     <p><button type="button" id="st-start">Start printing</button>
-       <button type="button" id="st-wtest" class="secondary">Test print</button>
-       <button type="button" id="st-walign" class="secondary">Alignment test</button>
-       <button type="button" id="st-wcal" class="secondary">Calibrate (4 labels)</button></p>
-    <p class="muted small"><b>Calibrate</b> prints the alignment label once in each layout, marked LAYOUT A to D:
-      A = {{ stock.width_in }} × {{ stock.height_in }} as drawn, B = upside down, C = upright page turned left, D = upright page turned right.
-      All four go out as one 4-page print (in a print dialog you will see four pages). Pick the one that comes out on a single label, complete and the right way up, and choose that layout above.</p>
-    <p class="muted small">Alignment test prints one label with a border and TOP / LEFT / RIGHT / BOTTOM marks. If it comes out wrong, photograph it still attached to the roll, as it leaves the printer.</p>
-    <details open class="pv"><summary>What the labels should look like</summary>
+       <button type="button" id="st-wtest" class="secondary">Test print</button></p>
+  </div>
+  <div id="pane-bluetooth" hidden>
+    <p id="st-browser" class="muted"></p>
+    <p><button type="button" id="st-connect">Connect printer</button>
+       <button type="button" id="st-test" class="secondary" disabled>Test print</button></p>
+    <table class="compact"><tbody id="st-status"><tr><td class="muted">Not connected. Click "Connect printer" and choose the M611 from the list (once per page load).</td></tr></tbody></table>
+    <p id="st-warn" class="flash warn" hidden></p>
+  </div>
+  <p><label class="small"><input type="checkbox" id="st-auto" checked> print queued jobs automatically</label></p>
+
+  <details class="st-sec"><summary>Settings and calibration</summary>
+    <p class="small"><span class="lbl">Connection</span></p>
+    <p class="tabs" role="tablist">
+      <a href="#" data-mode="windows" id="mode-windows">Windows printer (USB)</a>
+      <a href="#" data-mode="bluetooth" id="mode-bluetooth">Bluetooth</a>
+    </p>
+    <div id="set-windows">
+      <p><label class="small"><span class="lbl">Page layout</span>
+        <select id="st-orient">
+          <option value="portrait">C: page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (Brady M611 driver)</option>
+          <option value="portrait-right">D: page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right</option>
+          <option value="landscape">A: page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn</option>
+          <option value="landscape-flip">B: page {{ stock.width_in }} × {{ stock.height_in }} in, upside down</option>
+        </select></label></p>
+      <p class="small"><span class="lbl">Fine position (mm)</span>
+        right <input type="number" id="st-dx" step="0.1" min="-3" max="3" style="width:5em">
+        down <input type="number" id="st-dy" step="0.1" min="-3" max="3" style="width:5em">
+        <button type="button" id="st-dreset" class="secondary small">site default</button></p>
+      <p><button type="button" id="st-walign" class="secondary small">Alignment test</button>
+         <button type="button" id="st-wcal" class="secondary small">Calibrate (4 labels)</button></p>
+      <ul class="small muted">
+        <li><b>Alignment test</b> prints one bordered label marked TOP, LEFT, RIGHT, BOTTOM. If the border runs off the left edge, raise "right"; off the top, raise "down".</li>
+        <li><b>Calibrate</b> prints that label in all four layouts (A to D) as one 4-page print. Choose the letter that comes out on one label, complete and the right way up.</li>
+      </ul>
+    </div>
+  </details>
+
+    <details class="pv st-sec"><summary>What a correct label looks like</summary>
       <p class="muted small">Drawn as a label leaves the printer: notch on the left, long edge at the top.</p>
       <div class="pv-row">
         <figure class="current"><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-up"></div></div>
@@ -51,22 +57,24 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
       <p class="muted small">Signs of the wrong page layout for this printer (run Calibrate and pick the letter that prints correctly):</p>
       <div class="pv-row">
         <figure><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw"></div></div>
-          <figcaption>Sideways, only the barcode and the first characters, right half of the label (layout A on the M611).</figcaption></figure>
+          <figcaption>Sideways, only the barcode and the first characters on the right half.</figcaption></figure>
         <figure><div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw"></div></div>
           <div class="liner"><span class="notch"></span><div class="lab"><img src="{{ url_for('printing.test_svg') }}" alt="" class="pv-cw pv-second"></div></div>
-          <figcaption>Sideways and running across two labels (your second test).</figcaption></figure>
+          <figcaption>Sideways and running across two labels.</figcaption></figure>
       </div>
     </details>
-  </div>
-  <div id="pane-bluetooth" hidden>
-    <p id="st-browser" class="muted"></p>
-    <p class="small">Connects to the printer directly over Bluetooth with Brady's Web SDK (Chrome or Edge on a computer or Android tablet).</p>
-    <p><button type="button" id="st-connect">Connect printer</button>
-       <button type="button" id="st-test" class="secondary" disabled>Test print</button></p>
-    <table class="compact"><tbody id="st-status"><tr><td class="muted">Not connected. Click "Connect printer" and choose the M611 from the list (once per page load).</td></tr></tbody></table>
-    <p id="st-warn" class="flash warn" hidden></p>
-  </div>
-  <p><label class="small"><input type="checkbox" id="st-auto" checked> print queued jobs automatically</label></p>
+
+  <details class="st-sec"><summary>Setting up this computer</summary>
+    <p class="small"><b>Windows printer (USB)</b>, done once:</p>
+    <ol class="small">
+      <li>Install Brady's M611 driver, plug the printer in by USB, and make <b>BradyPrinter M611</b> the default printer (Windows Settings, Printers &amp; scanners; turn off "Let Windows manage my default printer"). Leave the driver's orientation and size settings alone; Chrome decides them.</li>
+      <li>Create a Chrome shortcut with silent printing switched on, pointing at this page:<br>
+        <code class="wrap" id="st-shortcut">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing --app={{ request.url_root.rstrip('/') }}{{ url_for('printing.station') }}</code><br>
+        Put it in the Startup folder (Win+R, <code>shell:startup</code>). Close every other Chrome window before its first start, or the switch is ignored.</li>
+      <li>Log in as the station account, click <b>Test print</b> (no dialog should appear), then <b>Start printing</b>. After a restart it starts printing by itself.</li>
+    </ol>
+    <p class="small"><b>Bluetooth</b> (Chrome or Edge on a computer or Android tablet): choose Bluetooth under Settings, then Connect printer once per page load. Labels are drawn for {{ stock.part }}, {{ stock.width_in }} × {{ stock.height_in }} in.</p>
+  </details>
 </div>
 <div class="card">
   <h2>Queue <span class="muted" id="st-queued">({{ queued }} waiting)</span></h2>
@@ -74,7 +82,6 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
   <div id="st-preview" class="label-strip"></div>
   <h3>This session</h3>
   <ul class="plain small" id="st-log"><li class="muted">Nothing printed yet.</li></ul>
-  <p class="small"><a href="{{ url_for('auth.logout') }}">log out</a></p>
 </div>
 </div>
 </div>
@@ -92,6 +99,8 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
   .pv figure[data-layout="landscape-flip"] .lab img { transform-origin:50% 50%; transform:rotate(180deg); }
   .pv .lab img.pv-cw { transform:translateX({{ (stock.width_in * 160)|round|int }}px) rotate(90deg); }
   .pv .lab img.pv-cw.pv-second { transform:translate({{ (stock.width_in * 160)|round|int }}px, -{{ (stock.height_in * 160)|round|int }}px) rotate(90deg); }
+  .st-sec { margin-top:8px; border-top:1px solid var(--line); padding-top:6px; }
+  .st-sec > summary { font-weight:600; }
   .pv figure.current .liner { outline:3px solid var(--accent); outline-offset:2px; }
   @media print {
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; }

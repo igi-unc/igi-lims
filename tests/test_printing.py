@@ -81,7 +81,7 @@ def test_station_account_sees_nothing_else(app, alice, client):
     assert client.post("/print/jobs", data={"sample_id": sid("PF", "PFM", "CPU")}).status_code == 403
     assert client.post(f"/collections/{cid}/tubes", data={}).status_code == 403
     page = client.get("/print/station").data.decode()
-    assert "Connect printer" in page and "station.js" in page
+    assert "Connect printer" in page and "station.js" in page and page.count("class=\"st-sec") == 2 and "pv st-sec" in page
     # Windows-printer mode: the kiosk-printing shortcut for this very page, and label-sized print pages
     assert "--kiosk-printing --app=http://localhost/print/station" in page
     assert 'id="st-orient"' in page and 'value="landscape-flip"' in page and 'value="portrait-right"' in page and 'id="st-wcal"' in page and 'id="print-area"' in page

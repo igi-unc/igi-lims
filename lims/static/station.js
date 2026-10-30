@@ -20,12 +20,21 @@ function setMode(m) {
   mode = m; localStorage.setItem("stationMode", m);
   $("pane-windows").hidden = m !== "windows";
   $("pane-bluetooth").hidden = m !== "bluetooth";
+  $("set-windows").hidden = m !== "windows";
   $("mode-windows").classList.toggle("active", m === "windows");
   $("mode-bluetooth").classList.toggle("active", m === "bluetooth");
   showStatus();
 }
 document.querySelectorAll("[data-mode]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); setMode(a.dataset.mode); }));
 
+const LETTER = {"landscape": "A", "landscape-flip": "B", "portrait": "C", "portrait-right": "D"};
+function wstate() {
+  const el = $("st-wstate");
+  if (!el) return;
+  el.textContent = windowsRunning ? "printing" : "stopped";
+  el.className = windowsRunning ? "tag" : "tag warn";
+  $("st-wlayout").textContent = LETTER[orient] || orient;
+}
 function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 
 // ---------------------------------------------------------------- Windows printer (driver + kiosk printing)
@@ -79,6 +88,7 @@ function applyOrient(o) {
   if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
   st.textContent = pageCss(o);
   $("st-orient").value = o;
+  wstate();
 
 }
 $("st-orient").addEventListener("change", e => {
@@ -113,6 +123,7 @@ async function printWindows(pages, checkDialog = false) {
 $("st-start").addEventListener("click", () => {
   windowsRunning = !windowsRunning;
   $("st-start").textContent = windowsRunning ? "Stop printing" : "Start printing";
+  wstate();
   addLog(windowsRunning ? "printing through the Windows printer" : "stopped");
   showStatus();
 });
@@ -133,10 +144,12 @@ $("st-wtest").addEventListener("click", async () => {
 // a station that was printing through Windows starts again by itself after a restart (Startup-folder shortcut);
 // a browser that never pressed Start never prints on its own
 if (mode === "windows" && localStorage.getItem("stationAutostart") === "1") { windowsRunning = true; $("st-start").textContent = "Stop printing"; }
+wstate();
 $("st-start").addEventListener("click", () => localStorage.setItem("stationAutostart", windowsRunning ? "1" : "0"));
 function stopWindows(reason) {
   windowsRunning = false; localStorage.setItem("stationAutostart", "0");
   $("st-start").textContent = "Start printing";
+  wstate();
   addLog(reason, "error");
 }
 
