@@ -33,15 +33,28 @@ function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 // (1 in across x 0.5 in along), the label prints as drawn ("landscape", the default). The "portrait" layouts are for a
 // driver whose label size is 0.5 across x 1 along: they turn the label a quarter turn onto an upright page.
 let orient = localStorage.getItem("stationLayout") || "landscape";
-function pageCss(o) {
+const LAYOUTS = ["landscape", "landscape-flip", "portrait", "portrait-right"];
+// Every layout is a CSS named page, so one print can mix them (the calibration print). The chosen layout is also the
+// default @page for printers or browsers that ignore named pages.
+function layoutRules(o) {
   const W = S.stock.width_in, H = S.stock.height_in, upright = o.startsWith("portrait");
   const pw = upright ? H : W, ph = upright ? W : H;
   let img = `width:${W}in;height:${H}in;`;
   if (o === "landscape-flip") img += `position:absolute;left:0;top:0;transform-origin:50% 50%;transform:rotate(180deg);`;
   if (o === "portrait") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateY(${W}in) rotate(-90deg);`;
   if (o === "portrait-right") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${H}in) rotate(90deg);`;
-  return `@media print { @page { size: ${pw}in ${ph}in; margin: 0; }
-    #print-area .pl { width:${pw}in; height:${ph}in; } #print-area img { ${img} } }`;
+  return {pw, ph, img};
+}
+function pageCss(current) {
+  const cur = layoutRules(current);
+  let css = `@media print { @page { size: ${cur.pw}in ${cur.ph}in; margin: 0; }\n`;
+  for (const o of LAYOUTS) {
+    const r = layoutRules(o);
+    css += `  @page lay-${o} { size: ${r.pw}in ${r.ph}in; margin: 0; }
+  #print-area .pl.lay-${o} { page: lay-${o}; width:${r.pw}in; height:${r.ph}in; }
+  #print-area .pl.lay-${o} img { ${r.img} }\n`;
+  }
+  return css + "}";
 }
 function applyOrient(o) {
   orient = o; localStorage.setItem("stationLayout", o);
@@ -57,18 +70,20 @@ function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("could not load " + url)); i.src = url; });
 }
 
-async function printWindows(urls) {
+// pages: list of URLs, or of [url, layout] pairs; queue jobs (checkDialog) stop the station if a print dialog appeared
+async function printWindows(pages, checkDialog = false) {
   const area = $("print-area");
   area.innerHTML = "";
-  const imgs = await Promise.all(urls.map(loadImg));          // all labels loaded before printing
-  imgs.forEach(i => { const d = document.createElement("div"); d.className = "pl"; d.appendChild(i); area.appendChild(d); });
-  showPreview(urls);
+  const items = pages.map(p => Array.isArray(p) ? p : [p, orient]);
+  const imgs = await Promise.all(items.map(([u]) => loadImg(u)));     // all labels loaded before printing
+  imgs.forEach((img, i) => { const d = document.createElement("div"); d.className = "pl lay-" + items[i][1]; d.appendChild(img); area.appendChild(d); });
+  showPreview(items.map(([u]) => u));
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const t0 = performance.now();
   window.print();                                             // with --kiosk-printing: straight to the default printer
   const waited = performance.now() - t0;
   area.innerHTML = "";
-  if (waited > 2500) {                                        // a print dialog was open: not in silent-printing mode
+  if (checkDialog && waited > 2500) {                         // a print dialog was open: not in silent-printing mode
     stopWindows("A print dialog appeared, so Chrome is not in silent-printing mode (start it from the --kiosk-printing shortcut). Printing stopped.");
     throw new Error("print dialog shown instead of silent printing; check whether the labels came out before requeueing");
   }
@@ -82,15 +97,10 @@ $("st-start").addEventListener("click", () => {
   showStatus();
 });
 $("st-wcal").addEventListener("click", async () => {
-  const keep = orient, layouts = [["landscape", "A"], ["landscape-flip", "B"], ["portrait", "C"], ["portrait-right", "D"]];
-  try {
-    for (const [o, tag] of layouts) {
-      applyOrient(o);
-      await printWindows([S.alignUrl + "?tag=" + tag]);
-    }
-    addLog("calibration: printed LAYOUT A to D; choose the one that came out right");
-  } catch (e) { addLog("calibration failed: " + (e.message || e), "error"); }
-  finally { applyOrient(keep); }
+  const pages = [["landscape", "A"], ["landscape-flip", "B"], ["portrait", "C"], ["portrait-right", "D"]]
+    .map(([o, tag]) => [S.alignUrl + "?tag=" + tag, o]);
+  try { await printWindows(pages); addLog("calibration: printed LAYOUT A to D as one 4-page print; choose the one that came out right"); }
+  catch (e) { addLog("calibration failed: " + (e.message || e), "error"); }
 });
 $("st-walign").addEventListener("click", async () => {
   try { await printWindows([S.alignUrl]); addLog("alignment label sent to the Windows printer"); }
@@ -214,7 +224,7 @@ async function tick() {
     if (!job) { $("st-current").textContent = "Idle."; return; }
     $("st-current").textContent = `Printing job #${job.id} for ${job.initials || job.requested_by}: ${job.n_labels} label(s)…`;
     const urls = job.images.map(i => i.url);
-    if (mode === "windows") await printWindows(urls); else await printBluetooth(urls);
+    if (mode === "windows") await printWindows(urls, true); else await printBluetooth(urls);
     await post(S.doneUrl.replace("/0/", `/${job.id}/`), {token: job.token, ok: true});
     addLog(`job #${job.id}: ${job.n_labels} label(s) for ${job.initials || job.requested_by}`);
     $("st-current").textContent = `Job #${job.id} printed.`;
