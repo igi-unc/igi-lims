@@ -47,6 +47,15 @@ def go():
     return redirect(url_for("samples.list_samples", q=q))
 
 
+@bp.route("/scan")
+@login_required
+def scan():
+    """Point a phone, tablet or webcam at a tube's Data Matrix to open its page. The code holds only the sample ID;
+    this page (behind the login) turns it into the tube page."""
+    from flask import current_app
+    return render_template("scan.html", pattern=ids.full_pattern(), reader_url=current_app.config["BARCODE_READER_URL"])
+
+
 @bp.route("/browse")
 @login_required
 def browse():

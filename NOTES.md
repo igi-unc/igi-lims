@@ -85,6 +85,13 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
+* Camera scanning (2026-10-30): /scan reads the Data Matrix (sample ID only;
+  Steven chose to keep the code an ID rather than a URL) with the native
+  BarcodeDetector where it reads Data Matrix, else the barcode-detector
+  ponyfill (ZXing-C++ WASM) from jsDelivr. Tested in headless Chromium with a
+  fake camera (no native reader, so the ponyfill path): a tube code opens the
+  tube, a non-IGI code is shown and not followed. Not yet tried on an iPad or
+  phone against a real printed label.
 * Windows/USB printing (2026-10-30): the lab chose a Windows computer with
   the M611 on USB. The station page's "Windows printer" mode prints label-sized
   pages with window.print(); Chrome started with --kiosk-printing sends them

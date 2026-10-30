@@ -51,6 +51,10 @@ LABEL_STOCK = {"part": os.environ.get("LIMS_LABEL_PART", "M6-17-492"),
 BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
                                "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
 PRINT_JOB_MAX_LABELS = 200
+# Camera scanning: browsers without a built-in Data Matrix reader (Safari on iPad/iPhone, Chrome on Windows) load
+# this BarcodeDetector ponyfill (ZXing-C++ in WebAssembly, MIT licence), version pinned.
+BARCODE_READER_URL = os.environ.get("LIMS_BARCODE_READER_URL",
+                                    "https://fastly.jsdelivr.net/npm/barcode-detector@3.2.3/dist/es/ponyfill.min.js")
 # Label: three rows of at most 18 characters, broken at hyphens, beside a Data Matrix of the full ID.
 LABEL_ROWS = [["project", "cohort", "participant", "unc_id"],
               ["received_date", "specimen", "fraction", "material"],

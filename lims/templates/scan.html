@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}Scan · IGI LIMS{% endblock %}{% block content %}
+<h1>Scan a tube</h1>
+<p class="muted">Point the camera at the 2D code on a tube label; its page opens as soon as the code is read. The code holds only the sample ID, so nothing is shown to anyone who is not logged in.</p>
+<div class="card scan">
+  <div class="scan-view"><video id="sc-video" playsinline muted></video><div class="scan-frame"></div></div>
+  <p id="sc-status" class="muted">Starting the camera…</p>
+  <p><button type="button" id="sc-start" hidden>Start camera</button>
+     <select id="sc-camera" hidden aria-label="camera"></select>
+     <label class="small"><input type="checkbox" id="sc-stay"> stay on this page and list scanned tubes</label></p>
+  <ul class="plain" id="sc-list"></ul>
+  <form method="get" action="{{ url_for('main.go') }}" class="filters">
+    <label><span class="lbl">Or type / paste an ID</span><input type="text" name="q" autocomplete="off" style="min-width:330px"></label>
+    <button type="submit" class="secondary">Open</button>
+  </form>
+</div>
+<script>window.SCAN = {pattern: {{ pattern|tojson }}, readerUrl: {{ reader_url|tojson }}, sampleUrl: {{ url_for('samples.detail', sample_id='__ID__')|tojson }},
+                       goUrl: {{ url_for('main.go')|tojson }}};</script>
+<script type="module" src="{{ url_for('static', filename='scan.js') }}"></script>
+{% endblock %}

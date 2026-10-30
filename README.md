@@ -167,6 +167,21 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 | `/api/collections/<collection_id>` | collection record, its tree and corrections |
 | `/api/files?assay=&participant=` | data files joined to tubes |
 
+## Scanning labels with a camera
+
+**Scan** (menu) opens the device's camera. Point it at the 2D code on a tube
+label and the tube's page opens; tick *stay on this page* to scan several
+tubes into a list instead. The code holds only the sample ID, never a web
+address, so a phone camera on its own shows nothing more than the ID, and the
+page it leads to needs a LIMS login. Codes that are not IGI tube IDs (reagent
+lots, catalogue numbers) are shown but not followed. USB/Bluetooth barcode
+scanners keep working in the search box at the top of every page.
+
+It works in Chrome on Android, Safari on iPad and iPhone, and Chrome or Edge
+with a webcam, over https. Browsers without a built-in Data Matrix reader load
+a WebAssembly reader (`barcode-detector`, MIT licence, version pinned in
+`BARCODE_READER_URL`) from the jsDelivr CDN.
+
 ## Label printing (Brady M611)
 
 Labels are printed through a queue, so nobody needs the printer on their own
