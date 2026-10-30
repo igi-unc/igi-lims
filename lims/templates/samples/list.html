@@ -15,17 +15,18 @@
 </form>
 {% if coll %}<p>Showing collection <a href="{{ url_for('collections.detail', collection_id=coll.collection_id) }}">{{ coll.received_date|yymmmdd }} {{ coll.specimen_code }} (#{{ coll.collection_id }})</a> of {{ coll.participant_id }} (<a href="{{ url_for('collections.tree', collection_id=coll.collection_id) }}">tree view</a>)</p>{% endif %}
 <table>
-<thead><tr><th>Sample ID</th><th>Parent</th><th>Status / location</th><th>Qty</th><th>Processed</th><th>By</th></tr></thead>
+<thead><tr><th>No.</th><th>Sample ID</th><th>Parent</th><th>Status / location</th><th>Qty</th><th>Processed</th><th>By</th></tr></thead>
 <tbody>
 {% for s in rows %}
 <tr class="{% if s.deleted_at %}del{% endif %}">
+  <td class="muted"><code>{{ s.serial|serial7 }}</code></td>
   <td><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a>{% if s.deleted_at %} <span class="muted">(deleted)</span>{% endif %}</td>
   <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id|short_id }}</code></a>{% else %}<a class="muted" href="{{ url_for('collections.detail', collection_id=s.collection_id) }}">collection #{{ s.collection_id }}</a>{% endif %}</td>
   <td>{{ status_loc(s) }}</td>
   <td class="num">{% if s.quantity is not none %}{{ s.quantity }} {{ s.unit or '' }}{% endif %}</td>
   <td>{{ s.created_datetime or '' }}</td><td>{{ s.created_by or '' }}</td>
 </tr>
-{% else %}<tr><td colspan="6" class="muted">No samples match.</td></tr>{% endfor %}
+{% else %}<tr><td colspan="7" class="muted">No samples match.</td></tr>{% endfor %}
 </tbody></table>
 <p>{% if page > 1 %}<a href="{{ url_for('samples.list_samples', page=page-1, **f) }}">← previous</a>{% endif %}
    {% if has_more %}<a href="{{ url_for('samples.list_samples', page=page+1, **f) }}">next →</a>{% endif %}</p>

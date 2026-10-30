@@ -21,7 +21,12 @@ def api_auth(view):
 
 
 def _row(r):
-    return {k: r[k] for k in r.keys()} if r is not None else None
+    if r is None:
+        return None
+    d = {k: r[k] for k in r.keys()}
+    if "serial" in d:                       # the LIMS number as printed: always seven digits
+        d["lims_number"] = f"{d['serial']:07d}" if d["serial"] is not None else None
+    return d
 
 
 @bp.route("/pattern")

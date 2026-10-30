@@ -85,6 +85,13 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
+* LIMS numbers (2026-10-30, Steven's request): `sample.serial`, 0-9999999,
+  issued from `id_counter` ('sample_serial') with UPDATE-then-SELECT inside the
+  registration transaction (row/write lock; rollback returns the numbers),
+  unique index as backstop; printed under the Data Matrix (module size
+  unchanged). Tested with eight simultaneous registrations on SQLite and
+  Postgres. Collections, participants and print jobs are not numbered this
+  way; say if they should be.
 * Camera scanning (2026-10-30): /scan reads the Data Matrix (sample ID only;
   Steven chose to keep the code an ID rather than a URL) with the native
   BarcodeDetector where it reads Data Matrix, else the barcode-detector

@@ -86,6 +86,16 @@ http://127.0.0.1:5000 on the laptop.
   collection_id, so "all tubes from this collection" is one query. A collection
   with no tubes can be deleted.
 * **Operators** are account initials: 2 or 3 uppercase letters, unique.
+* **LIMS numbers.** Every tube also gets a seven-digit number, 0000000 to
+  9999999, issued by the LIMS when it is registered and printed under the 2D
+  code on its label (the code itself still holds only the sample ID). Numbers
+  come from a counter in the database: assigning them updates the counter
+  first, which takes the database's write lock, so simultaneous registrations
+  queue up and can never share a number; a refused or failed registration
+  gives its numbers back, so there are no gaps. A unique index on the column is
+  the second safeguard, and the LIMS refuses to go past 9999999. Tubes that
+  existed before numbering were numbered in the order they were created. Type
+  a number (with or without leading zeros) in the search box to open its tube.
 * **Code lists** (cohort, specimen, fraction, material, status, assay, biobank
   source, site, unit, SOP) live in one table and are edited under *Codes*.
   Codes are retired, never deleted or repurposed.

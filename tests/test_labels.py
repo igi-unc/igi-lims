@@ -12,8 +12,8 @@ def test_label_svg(app, alice, client):
     body = r.data.decode()
     assert body.startswith("<svg") and "<path" in body
     rows = re.findall(r"<text [^>]*>([^<]*)</text>", body)
-    assert rows == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-KEN-26SEP29"]
-    assert "-".join(rows) == s and all(len(x) <= 18 for x in rows)
+    assert rows == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-KEN-26SEP29", "0000000"]   # + LIMS number
+    assert "-".join(rows[:3]) == s and all(len(x) <= 18 for x in rows)
     assert alice.get(f"/samples/{s}").data.count(b"label.svg") == 1
     assert alice.get("/samples/IGI-XX-NOPE/label.svg").status_code == 404
     login(client, "vic")

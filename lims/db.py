@@ -26,7 +26,7 @@ SERIAL_KEYS = {"label_print": "id", "print_job": "id", "collection": "collection
                "audit_log": "id", "attribute_definition": "id", "attachment": "id"}
 SERIAL_TABLES = tuple(SERIAL_KEYS)
 # Every table, in dependency order, for reset_db.
-ALL_TABLES = ("label_print", "print_job", "sample_correction", "sample_attribute", "attachment", "audit_log", "data_file", "custody_event", "sample", "collection", "participant",
+ALL_TABLES = ("label_print", "print_job", "sample_correction", "sample_attribute", "attachment", "audit_log", "data_file", "custody_event", "sample", "collection", "participant", "id_counter",
               "account", "attribute_definition", "derivation_rule", "code_list", "approval_request")
 
 
@@ -205,6 +205,8 @@ ROLES = ("admin", "user", "viewer", "printer")
 
 def _migrate(conn):
     """Small in-place migrations for databases created by earlier versions."""
+    if _table_exists(conn, "sample") and not _has_column(conn, "sample", "serial"):
+        conn.execute("ALTER TABLE sample ADD COLUMN serial INTEGER")
     if _table_exists(conn, "print_job") and not _has_column(conn, "print_job", "reprint_reason"):
         conn.execute("ALTER TABLE print_job ADD COLUMN reprint_reason TEXT")
     if is_postgres(conn):
@@ -266,12 +268,29 @@ def _lock_down_postgres(conn):
         conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {roles}")
 
 
+SERIAL_MAX = 9_999_999
+
+
+def _number_unnumbered_samples(conn):
+    """Give tubes from before LIMS numbers existed a number, in the order they were created, and set the counter."""
+    conn.execute("INSERT OR IGNORE INTO id_counter(name, value) VALUES ('sample_serial', -1)")
+    rows = conn.execute("SELECT sample_id FROM sample WHERE serial IS NULL ORDER BY record_created_at, sample_id").fetchall()
+    if rows:
+        conn.execute("UPDATE id_counter SET value = (SELECT COALESCE(MAX(serial), -1) FROM sample) "
+                     "WHERE name='sample_serial' AND value < (SELECT COALESCE(MAX(serial), -1) FROM sample)")
+        for r in rows:
+            conn.execute("UPDATE id_counter SET value = value + 1 WHERE name='sample_serial'")
+            n = conn.execute("SELECT value FROM id_counter WHERE name='sample_serial'").fetchone()[0]
+            conn.execute("UPDATE sample SET serial=? WHERE sample_id=?", (n, r["sample_id"]))
+
+
 def init_db(conn=None):
     conn = conn or get_db()
     _migrate(conn)
     with current_app.open_resource("schema.sql") as f:
         conn.executescript(f.read().decode("utf8"))
     seed_module.seed(conn)
+    _number_unnumbered_samples(conn)
     seed_attributes.seed(conn)
     if is_postgres(conn):
         _lock_down_postgres(conn)

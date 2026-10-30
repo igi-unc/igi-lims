@@ -170,9 +170,10 @@ def job_csv(job_id):
         abort(404)
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["barcode", "line1", "line2", "line3"])
+    w.writerow(["barcode", "line1", "line2", "line3", "number"])
     for sid in json.loads(job["sample_ids"]):
-        w.writerow([sid] + svc.label_rows({"sample_id": sid}))
+        s = svc.get_sample(conn, sid)
+        w.writerow([sid] + svc.label_rows({"sample_id": sid}) + [f"{s['serial']:07d}" if s and s["serial"] is not None else ""])
     resp = current_app.response_class(buf.getvalue(), mimetype="text/csv")
     resp.headers["Content-Disposition"] = f'attachment; filename="print_job_{job_id}.csv"'
     return resp

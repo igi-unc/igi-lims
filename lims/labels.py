@@ -40,13 +40,18 @@ def label_svg(sample):
     quiet = 2 * module                          # quiet zone around the symbol
     code = len(matrix) * module
     font, line = 13, 17
+    serial = sample["serial"] if "serial" in sample.keys() else None
+    num_h = 14 if serial is not None else 0
     text_x = quiet * 2 + code + 8
     text_w = max(len(r) for r in rows) * font * 0.62
     width = int(text_x + text_w + 10)
-    height = int(max(code + 2 * quiet, len(rows) * line + 12))
-    code_y = (height - code) / 2
+    height = int(max(code + 2 * quiet + num_h, len(rows) * line + 12))
+    code_y = (height - code - num_h) / 2
     text_y0 = (height - len(rows) * line) / 2 + font
     texts = "".join(f'<text x="{text_x:g}" y="{text_y0 + i * line:g}">{escape(r)}</text>' for i, r in enumerate(rows))
+    if serial is not None:
+        texts += (f'<text x="{quiet * 1.5 + code / 2:g}" y="{code_y + code + num_h - 1:g}" text-anchor="middle" '
+                  f'font-weight="700">{serial:07d}</text>')
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
             f'role="img" aria-label="Label for {escape(sample["sample_id"])}">'
             f'<rect x="0.5" y="0.5" width="{width - 1}" height="{height - 1}" rx="6" fill="#fff" stroke="#9aa3ad" stroke-dasharray="4 3"/>'
@@ -91,12 +96,24 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
     margin = max(2, round(0.035 * dpi))          # ~0.9 mm white edge: tolerates the printer's placement error
     matrix = barcode_matrix(sample["sample_id"])
     n = len(matrix)
-    module = max(2, (H - 2 * margin) // (n + 2))          # +2: one-module quiet zone each side
+    serial = sample["serial"] if "serial" in sample.keys() else None
+    num_h = round(0.073 * dpi) if serial is not None else 0   # 7-digit LIMS number under the code (~1.9 mm band)
+    # module size as before (one-module quiet zone each side); the number band only uses the spare height
+    module = max(2, (H - 2 * margin) // (n + 2))
+    if num_h:
+        module = min(module, max(2, (H - 2 * margin - num_h) // (n + 1)))
     code = n * module
-    cx, cy = margin + module, (H - code) // 2
+    cx = margin + module
+    cy = margin + (0 if num_h else (H - 2 * margin - code) // 2)
     tx = margin + (n + 2) * module + round(0.015 * dpi)
     rows = svc.label_rows(sample)
     text = _fit_rows(rows, tx, W - tx - margin, margin, H - 2 * margin, max_font=0.11 * dpi)
+    if num_h:
+        fs = num_h
+        digits = f"{serial:07d}"
+        length = min(len(digits) * fs * 0.6, code)
+        text += (f'<text x="{cx:.1f}" y="{cy + code + module + fs * 0.8:.1f}" font-size="{fs:.1f}" '
+                 f'textLength="{length:.1f}" lengthAdjust="spacingAndGlyphs">{digits}</text>')
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
             f'shape-rendering="crispEdges" data-dpi="{dpi}">'
             f'<rect width="{W}" height="{H}" fill="#fff"/>'

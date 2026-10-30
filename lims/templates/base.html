@@ -27,7 +27,7 @@
     {% endif %}
   </nav>
   <form class="jump" action="{{ url_for('main.go') }}" method="get">
-    <input type="text" name="q" placeholder="Scan or type a sample / participant ID" autocomplete="off">
+    <input type="text" name="q" placeholder="Scan or type a sample ID, LIMS number or participant" autocomplete="off">
   </form>
   <span class="who">{{ g.user.display_name }} ({{ g.user.role }}) · <a href="{{ url_for('auth.change_password') }}">password</a> · <a href="{{ url_for('auth.logout') }}">log out</a></span>
   {% endif %}

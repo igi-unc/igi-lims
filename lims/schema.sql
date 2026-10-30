@@ -71,8 +71,16 @@ CREATE TABLE IF NOT EXISTS collection (
 );
 CREATE INDEX IF NOT EXISTS idx_collection_participant ON collection(participant_id, received_date);
 
+-- Counters the LIMS issues numbers from. Allocation updates the row first, which takes the database's write lock,
+-- so concurrent registrations queue up; a rolled-back registration gives its numbers back (no gaps, no duplicates).
+CREATE TABLE IF NOT EXISTS id_counter (
+    name    TEXT PRIMARY KEY,
+    value   INTEGER NOT NULL                     -- last number issued (-1 = none yet)
+);
+
 CREATE TABLE IF NOT EXISTS sample (
     sample_id           TEXT PRIMARY KEY,         -- full ID, validated against the pattern in config.py
+    serial              INTEGER,                  -- LIMS number 0000000-9999999, unique, printed under the 2D code
     -- parsed components (kept in sync with sample_id)
     project_code        TEXT NOT NULL,
     cohort_code         TEXT NOT NULL,
@@ -111,6 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_sample_parent ON sample(parent_id);
 CREATE INDEX IF NOT EXISTS idx_sample_root ON sample(root_id);
 CREATE INDEX IF NOT EXISTS idx_sample_participant ON sample(participant_id, received_date);
 CREATE INDEX IF NOT EXISTS idx_sample_collection ON sample(collection_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sample_serial ON sample(serial);
 CREATE INDEX IF NOT EXISTS idx_sample_status ON sample(status);
 
 -- Append-only: one row per hand-off.

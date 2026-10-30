@@ -149,6 +149,18 @@ def preview(conn, payload):
     return ids.prefix_without_aliquot(comp), _violations(conn, parent, coll, comp)
 
 
+def allocate_serials(conn, n):
+    """Issue n consecutive LIMS numbers. The UPDATE runs first so it holds the write lock on the counter row until
+    the registration commits or rolls back: two registrations can never get the same number."""
+    from .db import SERIAL_MAX
+    conn.execute("INSERT OR IGNORE INTO id_counter(name, value) VALUES ('sample_serial', -1)")
+    conn.execute("UPDATE id_counter SET value = value + ? WHERE name='sample_serial'", (n,))
+    last = conn.execute("SELECT value FROM id_counter WHERE name='sample_serial'").fetchone()[0]
+    if last > SERIAL_MAX:
+        raise ValueError(f"LIMS numbers are exhausted (the last is {SERIAL_MAX:07d})")
+    return list(range(last - n + 1, last + 1))
+
+
 def create_samples(conn, payload, force=False, reason=None):
     """Create `count` aliquots. Returns (created_ids, violations).
     If violations exist and force is False, nothing is written."""
@@ -166,10 +178,11 @@ def create_samples(conn, payload, force=False, reason=None):
     attrs = attributes.validate_dict(conn, p.get("attributes") or {}, comp["fraction"], comp["material"])
     attrs = {k: v for k, v in attrs.items() if v is not None}
     created = []
-    for _ in range(p["count"]):
+    serials = allocate_serials(conn, p["count"])
+    for serial in serials:
         comp["aliquot"] = ids.next_aliquot(conn, comp)
         sid = ids.compose(comp)
-        row = {"sample_id": sid}
+        row = {"sample_id": sid, "serial": serial}
         for seg, col in SEGMENT_COLUMNS.items():
             row[col] = comp[seg]
         row.update({

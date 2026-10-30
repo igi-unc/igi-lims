@@ -26,6 +26,11 @@ def create_app(test_config=None):
         except (ValueError, TypeError):
             return value
 
+    @app.template_filter("serial7")
+    def serial7(n):
+        """LIMS number as printed: seven digits, zero-padded."""
+        return f"{int(n):07d}" if n is not None else ""
+
     @app.template_filter("short_id")
     def short_id(sample_id):
         """Fraction-material-aliquot part of a sample ID (what distinguishes tubes within a collection)."""
