@@ -88,7 +88,7 @@ def test_station_account_sees_nothing_else(app, alice, client):
     assert "LAYOUT C" in client.get("/print/station/align.svg?tag=c").data.decode()
     assert client.get("/print/station/align.svg").status_code == 200 and ">TOP<" in client.get("/print/station/align.svg").data.decode()
     js = client.get("/static/station.js").data.decode()
-    assert "rotate(-90deg)" in js and "@page { size: ${pw}in ${ph}in" in js
+    assert "rotate(-90deg)" in js and "@page lay-${o} { size: ${r.pw}in ${r.ph}in" in js and "page: lay-${o}" in js
     assert "<nav>" not in page                                  # the station account gets no menu
     assert client.get("/print/station/test.svg").status_code == 200
 
