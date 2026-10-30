@@ -27,7 +27,7 @@ def check_initials(conn, initials, own_username=None):
 
 
 # The only pages a print-station account (role 'printer') can reach.
-PRINTER_ENDPOINTS = {"printing.station", "printing.claim", "printing.done", "printing.header_svg", "printing.test_svg", "samples.label_svg",
+PRINTER_ENDPOINTS = {"printing.station", "printing.claim", "printing.done", "printing.header_svg", "printing.test_svg", "printing.align_svg", "samples.label_svg",
                      "auth.login", "auth.logout", "auth.change_password", "static", None}
 
 

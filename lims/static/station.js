@@ -29,21 +29,22 @@ document.querySelectorAll("[data-mode]").forEach(a => a.addEventListener("click"
 function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 
 // ---------------------------------------------------------------- Windows printer (driver + kiosk printing)
-// Brady's driver presents the 1 x 0.5 in label as an upright 0.5 x 1 in page and lays it across the label, so the
-// label image is printed onto an upright page turned a quarter turn (default "portrait"). "landscape" prints it as
-// drawn, for a driver set to landscape.
-let orient = localStorage.getItem("stationOrient") || "portrait";
+// The page must match the label size set in the Brady driver. With the driver set to the stock as it sits on the roll
+// (1 in across x 0.5 in along), the label prints as drawn ("landscape", the default). The "portrait" layouts are for a
+// driver whose label size is 0.5 across x 1 along: they turn the label a quarter turn onto an upright page.
+let orient = localStorage.getItem("stationLayout") || "landscape";
 function pageCss(o) {
-  const W = S.stock.width_in, H = S.stock.height_in, upright = o !== "landscape";
+  const W = S.stock.width_in, H = S.stock.height_in, upright = o.startsWith("portrait");
   const pw = upright ? H : W, ph = upright ? W : H;
   let img = `width:${W}in;height:${H}in;`;
+  if (o === "landscape-flip") img += `position:absolute;left:0;top:0;transform-origin:50% 50%;transform:rotate(180deg);`;
   if (o === "portrait") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateY(${W}in) rotate(-90deg);`;
   if (o === "portrait-right") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${H}in) rotate(90deg);`;
   return `@media print { @page { size: ${pw}in ${ph}in; margin: 0; }
     #print-area .pl { width:${pw}in; height:${ph}in; } #print-area img { ${img} } }`;
 }
 function applyOrient(o) {
-  orient = o; localStorage.setItem("stationOrient", o);
+  orient = o; localStorage.setItem("stationLayout", o);
   let st = document.getElementById("print-page-style");
   if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
   st.textContent = pageCss(o);
@@ -78,6 +79,10 @@ $("st-start").addEventListener("click", () => {
   $("st-start").textContent = windowsRunning ? "Stop printing" : "Start printing";
   addLog(windowsRunning ? "printing through the Windows printer" : "stopped");
   showStatus();
+});
+$("st-walign").addEventListener("click", async () => {
+  try { await printWindows([S.alignUrl]); addLog("alignment label sent to the Windows printer"); }
+  catch (e) { addLog("alignment label failed: " + (e.message || e), "error"); }
 });
 $("st-wtest").addEventListener("click", async () => {
   try { await printWindows([S.testUrl]); addLog("test label sent to the Windows printer"); }

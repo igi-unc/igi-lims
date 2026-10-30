@@ -13,7 +13,8 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
   <div id="pane-windows" hidden>
     <p class="small">Prints through the Brady driver installed on this computer. Set it up once:</p>
     <ol class="small">
-      <li>Install Brady's M611 driver, plug the printer in by USB, and make <b>BradyPrinter M611</b> the default printer (Windows Settings, Printers &amp; scanners; turn off "Let Windows manage my default printer"). In the printer's preferences, choose the {{ stock.part }} label size and no margins.</li>
+      <li>Install Brady's M611 driver, plug the printer in by USB, and make <b>BradyPrinter M611</b> the default printer (Windows Settings, Printers &amp; scanners; turn off "Let Windows manage my default printer").</li>
+      <li>In the printer's <b>Printing preferences</b>, set the label (paper) size to <b>{{ stock.width_in }} in wide × {{ stock.height_in }} in long</b>, the {{ stock.part }} stock: labels leave the printer with the notch on the left and the long ({{ stock.width_in }} in) edge at the top, so {{ stock.width_in }} in runs across the roll and {{ stock.height_in }} in along it. Orientation portrait, no margins. If the driver offers the size only as {{ stock.height_in }} × {{ stock.width_in }}, that is the wrong way round: a label then prints sideways or across two labels.</li>
       <li>Start Chrome from a shortcut with silent printing switched on, pointing at this page:<br>
         <code class="wrap" id="st-shortcut">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing --app={{ request.url_root.rstrip('/') }}{{ url_for('printing.station') }}</code><br>
         Put the shortcut in the Startup folder (Win+R, <code>shell:startup</code>) so it opens after a restart. Close every other Chrome window before the first start, or the switch is ignored.</li>
@@ -21,12 +22,15 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
     </ol>
     <p><label class="small"><span class="lbl">Page layout (match how the driver feeds the label)</span>
       <select id="st-orient">
-        <option value="portrait">Upright page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (Brady driver default)</option>
-        <option value="portrait-right">Upright page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right (use if labels print upside down)</option>
-        <option value="landscape">Sideways page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn (if the driver is set to landscape)</option>
+        <option value="landscape">Page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn (driver label size {{ stock.width_in }} wide × {{ stock.height_in }} long)</option>
+        <option value="landscape-flip">Page {{ stock.width_in }} × {{ stock.height_in }} in, turned upside down (if the label comes out upside down)</option>
+        <option value="portrait">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (driver label size {{ stock.height_in }} wide × {{ stock.width_in }} long)</option>
+        <option value="portrait-right">Page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right (as above, if it prints upside down)</option>
       </select></label></p>
     <p><button type="button" id="st-start">Start printing</button>
-       <button type="button" id="st-wtest" class="secondary">Test print</button></p>
+       <button type="button" id="st-wtest" class="secondary">Test print</button>
+       <button type="button" id="st-walign" class="secondary">Alignment test</button></p>
+    <p class="muted small">Alignment test prints one label with a border and TOP / LEFT / RIGHT / BOTTOM marks. If it comes out wrong, photograph it still attached to the roll, as it leaves the printer.</p>
   </div>
   <div id="pane-bluetooth" hidden>
     <p id="st-browser" class="muted"></p>
@@ -65,6 +69,7 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
 <script>
 window.STATION = {sdkUrl: {{ sdk_url|tojson }}, claimUrl: {{ url_for('printing.claim')|tojson }},
                   doneUrl: {{ url_for('printing.done', job_id=0)|tojson }}, testUrl: {{ url_for('printing.test_svg')|tojson }},
+                  alignUrl: {{ url_for('printing.align_svg')|tojson }},
                   stock: {{ stock|tojson }}};
 </script>
 <script type="module" src="{{ url_for('static', filename='station.js') }}"></script>

@@ -114,3 +114,21 @@ def header_print_svg(lines, width_in=None, height_in=None, dpi=None):
             f'<rect x="{margin / 2}" y="{margin / 2}" width="{W - margin}" height="{H - margin}" fill="none" stroke="#000" '
             f'stroke-width="{max(2, dpi // 100)}" stroke-dasharray="{dpi // 25} {dpi // 50}"/>'
             f'<g font-family="{_MONO}" font-weight="700" fill="#000">{text}</g></svg>')
+
+
+def alignment_print_svg(width_in=None, height_in=None, dpi=None, caption=""):
+    """Calibration label: a border one dot inside the edge, TOP / LEFT / RIGHT / BOTTOM marks and an arrow, so a
+    photo of a test print shows exactly how the driver places and turns the page."""
+    W, H, dpi = _stock(width_in, height_in, dpi)
+    t = max(2, dpi // 100)
+    f = round(0.075 * dpi)
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" data-dpi="{dpi}">'
+            f'<rect width="{W}" height="{H}" fill="#fff"/>'
+            f'<rect x="{t / 2}" y="{t / 2}" width="{W - t}" height="{H - t}" fill="none" stroke="#000" stroke-width="{t}"/>'
+            f'<g font-family="{_MONO}" font-weight="700" fill="#000" text-anchor="middle">'
+            f'<text x="{W / 2}" y="{f + 2 * t}" font-size="{f}">TOP</text>'
+            f'<text x="{W / 2}" y="{H - 3 * t}" font-size="{f}">BOTTOM</text>'
+            f'<text x="{3 * t}" y="{H / 2 + f / 3}" font-size="{f}" text-anchor="start">LEFT</text>'
+            f'<text x="{W - 3 * t}" y="{H / 2 + f / 3}" font-size="{f}" text-anchor="end">RIGHT</text>'
+            f'<text x="{W / 2}" y="{H * 0.72}" font-size="{f * 0.8:.0f}">{escape(caption)}</text></g>'
+            f'<path d="M{W / 2} {H * 0.36} l{-f / 2} {f * 0.6} h{f} z" fill="#000"/></svg>')

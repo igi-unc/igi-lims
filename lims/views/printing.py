@@ -183,6 +183,14 @@ def job_csv(job_id):
 TEST_ID = "IGI-MP-P101-UNC316-26SEP29-PF-TUM-HMD-01-KEN-26OCT06"   # the nomenclature's own example; not a real tube
 
 
+@bp.route("/station/align.svg")
+@station_required
+def align_svg():
+    st = current_app.config["LABEL_STOCK"]
+    return current_app.response_class(labels.alignment_print_svg(caption=f'{st["width_in"]:g} x {st["height_in"]:g} IN'),
+                                      mimetype="image/svg+xml")
+
+
 @bp.route("/station/test.svg")
 @station_required
 def test_svg():
