@@ -88,7 +88,7 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
     1.0 x 0.5 in at 300 dpi = 300 x 150). Barcode modules are whole dots so the symbol prints crisply."""
     from . import samples as svc
     W, H, dpi = _stock(width_in, height_in, dpi)
-    margin = max(2, round(0.02 * dpi))
+    margin = max(2, round(0.035 * dpi))          # ~0.9 mm white edge: tolerates the printer's placement error
     matrix = barcode_matrix(sample["sample_id"])
     n = len(matrix)
     module = max(2, (H - 2 * margin) // (n + 2))          # +2: one-module quiet zone each side

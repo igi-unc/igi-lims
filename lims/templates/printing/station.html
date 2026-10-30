@@ -27,6 +27,11 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
         <option value="landscape">A: page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn</option>
         <option value="landscape-flip">B: page {{ stock.width_in }} × {{ stock.height_in }} in, upside down</option>
       </select></label></p>
+    <p class="small"><span class="lbl">Fine position (mm; moves everything on the label)</span>
+      shift right <input type="number" id="st-dx" step="0.1" min="-3" max="3" style="width:5em">
+      shift down <input type="number" id="st-dy" step="0.1" min="-3" max="3" style="width:5em">
+      <button type="button" id="st-dreset" class="secondary small">site default</button>
+      <span class="muted">Use Alignment test: if the border runs off the left edge, increase "shift right"; off the top, increase "shift down".</span></p>
     <p><button type="button" id="st-start">Start printing</button>
        <button type="button" id="st-wtest" class="secondary">Test print</button>
        <button type="button" id="st-walign" class="secondary">Alignment test</button>
@@ -103,7 +108,7 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
 <script>
 window.STATION = {sdkUrl: {{ sdk_url|tojson }}, claimUrl: {{ url_for('printing.claim')|tojson }},
                   doneUrl: {{ url_for('printing.done', job_id=0)|tojson }}, testUrl: {{ url_for('printing.test_svg')|tojson }},
-                  alignUrl: {{ url_for('printing.align_svg')|tojson }}, defaultLayout: {{ default_layout|tojson }},
+                  alignUrl: {{ url_for('printing.align_svg')|tojson }}, defaultLayout: {{ default_layout|tojson }}, defaultOffset: {{ default_offset|tojson }},
                   stock: {{ stock|tojson }}};
 </script>
 <script type="module" src="{{ url_for('static', filename='station.js') }}"></script>

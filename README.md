@@ -221,6 +221,10 @@ computer:
      For another printer or driver, **Calibrate** prints the alignment label in
      all four layouts (A to D) as one four-page print; choose the letter that
      comes out on one label, complete and upright, under *Page layout*.
+     **Fine position** (mm, shift right / down) corrects the printer's own
+     placement; the default (0.6 mm right, 0.1 mm down, `LABEL_PRINT_OFFSET_MM`)
+     comes from an alignment print on the lab's M611. Printed tube labels keep
+     a ~0.9 mm white edge so a small remaining offset cannot clip the barcode.
      If a print dialog ever appears (Chrome was not started with the switch),
      the station stops and marks the job failed rather than claiming it
      printed. "Printed" means Windows accepted the job for the printer.

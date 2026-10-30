@@ -37,15 +37,31 @@ let orient = localStorage.getItem("stationLayoutChoice") || S.defaultLayout || "
 const LAYOUTS = ["landscape", "landscape-flip", "portrait", "portrait-right"];
 // Every layout is a CSS named page, so one print can mix them (the calibration print). The chosen layout is also the
 // default @page for printers or browsers that ignore named pages.
+// fine position (mm, label terms: + = right / down), the printer's own placement error
+let offset = (JSON.parse(localStorage.getItem("stationOffsetMm") || "null")) || S.defaultOffset || [0, 0];
 function layoutRules(o) {
   const W = S.stock.width_in, H = S.stock.height_in, upright = o.startsWith("portrait");
   const pw = upright ? H : W, ph = upright ? W : H;
-  let img = `width:${W}in;height:${H}in;`;
-  if (o === "landscape-flip") img += `position:absolute;left:0;top:0;transform-origin:50% 50%;transform:rotate(180deg);`;
-  if (o === "portrait") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateY(${W}in) rotate(-90deg);`;
-  if (o === "portrait-right") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${H}in) rotate(90deg);`;
+  const nudge = ` translate(${Number(offset[0]) || 0}mm, ${Number(offset[1]) || 0}mm)`;   // applied first, in label terms
+  let img = `width:${W}in;height:${H}in;position:absolute;left:0;top:0;`;
+  if (o === "landscape") img += `transform-origin:0 0;transform:${nudge};`;
+  if (o === "landscape-flip") img += `transform-origin:50% 50%;transform:rotate(180deg)${nudge};`;
+  if (o === "portrait") img += `transform-origin:0 0;transform:translateY(${W}in) rotate(-90deg)${nudge};`;
+  if (o === "portrait-right") img += `transform-origin:0 0;transform:translateX(${H}in) rotate(90deg)${nudge};`;
   return {pw, ph, img};
 }
+function showOffset() { $("st-dx").value = Number(offset[0]).toFixed(1); $("st-dy").value = Number(offset[1]).toFixed(1); }
+function setOffset(o, save) {
+  offset = o;
+  if (save) localStorage.setItem("stationOffsetMm", JSON.stringify(o)); else localStorage.removeItem("stationOffsetMm");
+  showOffset(); applyOrient(orient);
+}
+["st-dx", "st-dy"].forEach(id => $(id).addEventListener("change", () => {
+  setOffset([parseFloat($("st-dx").value) || 0, parseFloat($("st-dy").value) || 0], true);
+  addLog(`fine position: ${offset[0]} mm right, ${offset[1]} mm down`);
+}));
+$("st-dreset").addEventListener("click", () => { setOffset(S.defaultOffset || [0, 0], false); addLog("fine position reset to the site default"); });
+showOffset();
 function pageCss(current) {
   const cur = layoutRules(current);
   let css = `@media print { @page { size: ${cur.pw}in ${cur.ph}in; margin: 0; }\n`;

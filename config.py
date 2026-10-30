@@ -52,6 +52,9 @@ LABEL_STOCK = {"part": os.environ.get("LIMS_LABEL_PART", "M6-17-492"),
 # left) is what Brady's M611 driver needs for M6-17-492, confirmed with a test print on 2026-10-30. Other values:
 # "landscape" (A), "landscape-flip" (B), "portrait-right" (D).
 LABEL_PRINT_LAYOUT = os.environ.get("LIMS_LABEL_PRINT_LAYOUT", "portrait")
+# Nudge for the printer's mechanical offset, in mm, in label terms (positive = right / down). Measured from a layout C
+# alignment print on the lab's M611 (2026-10-30): the print sat about 0.6 mm left and slightly high.
+LABEL_PRINT_OFFSET_MM = [float(v) for v in os.environ.get("LIMS_LABEL_PRINT_OFFSET_MM", "0.6,0.1").split(",")]
 BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
                                "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
 PRINT_JOB_MAX_LABELS = 200

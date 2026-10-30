@@ -205,7 +205,8 @@ def station():
     st = current_app.config["LABEL_STOCK"]
     queued = get_db().execute("SELECT count(*) FROM print_job WHERE status='queued'").fetchone()[0]
     return render_template("printing/station.html", stock=st, queued=queued, sdk_url=current_app.config["BRADY_SDK_URL"],
-                           default_layout=current_app.config["LABEL_PRINT_LAYOUT"])
+                           default_layout=current_app.config["LABEL_PRINT_LAYOUT"],
+                           default_offset=current_app.config["LABEL_PRINT_OFFSET_MM"])
 
 
 @bp.route("/station/claim", methods=("POST",))
