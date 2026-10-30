@@ -19,6 +19,12 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
         Put the shortcut in the Startup folder (Win+R, <code>shell:startup</code>) so it opens after a restart. Close every other Chrome window before the first start, or the switch is ignored.</li>
       <li>Click <b>Test print</b>. If a print dialog appears, Chrome was not started with the switch.</li>
     </ol>
+    <p><label class="small"><span class="lbl">Page layout (match how the driver feeds the label)</span>
+      <select id="st-orient">
+        <option value="portrait">Upright page {{ stock.height_in }} × {{ stock.width_in }} in, label turned left (Brady driver default)</option>
+        <option value="portrait-right">Upright page {{ stock.height_in }} × {{ stock.width_in }} in, label turned right (use if labels print upside down)</option>
+        <option value="landscape">Sideways page {{ stock.width_in }} × {{ stock.height_in }} in, as drawn (if the driver is set to landscape)</option>
+      </select></label></p>
     <p><button type="button" id="st-start">Start printing</button>
        <button type="button" id="st-wtest" class="secondary">Test print</button></p>
   </div>
@@ -46,15 +52,15 @@ Labels are drawn for {{ stock.part }}: {{ stock.width_in }} × {{ stock.height_i
 <style>
   #print-area { display:none; }
   @media print {
-    @page { size: {{ stock.width_in }}in {{ stock.height_in }}in; margin: 0; }
     html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
     body > header, .no-print, .flash, .demo-banner { display:none !important; }
     main { padding:0 !important; margin:0 !important; max-width:none !important; }
     #print-area { display:block; }
-    #print-area .pl { width:{{ stock.width_in }}in; height:{{ stock.height_in }}in; overflow:hidden; break-after:page; page-break-after:always; }
+    #print-area .pl { position:relative; overflow:hidden; break-after:page; page-break-after:always; }
     #print-area .pl:last-child { break-after:auto; page-break-after:auto; }
-    #print-area img { display:block; width:{{ stock.width_in }}in; height:{{ stock.height_in }}in; }
+    #print-area img { display:block; }
   }
+  /* page size and label rotation: set by station.js from the "Page layout" choice */
 </style>
 <script>
 window.STATION = {sdkUrl: {{ sdk_url|tojson }}, claimUrl: {{ url_for('printing.claim')|tojson }},

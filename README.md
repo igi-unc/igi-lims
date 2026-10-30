@@ -199,7 +199,11 @@ computer:
      started from a shortcut with silent printing switched on:
      `chrome.exe --kiosk-printing --app=https://<lims>/print/station`
      (the station page shows the exact line; put the shortcut in
-     `shell:startup`). Press **Start printing** once; the station then prints
+     `shell:startup`). Brady's driver presents the 1 x 0.5 in label as an
+     upright 0.5 x 1 in page, so by default the station prints an upright page
+     with the label turned a quarter turn; the *Page layout* menu offers the
+     opposite turn (if labels come out upside down) and a sideways page (if the
+     driver is set to landscape). Press **Start printing** once; the station then prints
      each job as label-sized pages, and starts again by itself after a restart.
      If a print dialog ever appears (Chrome was not started with the switch),
      the station stops and marks the job failed rather than claiming it

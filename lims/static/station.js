@@ -29,6 +29,28 @@ document.querySelectorAll("[data-mode]").forEach(a => a.addEventListener("click"
 function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 
 // ---------------------------------------------------------------- Windows printer (driver + kiosk printing)
+// Brady's driver presents the 1 x 0.5 in label as an upright 0.5 x 1 in page and lays it across the label, so the
+// label image is printed onto an upright page turned a quarter turn (default "portrait"). "landscape" prints it as
+// drawn, for a driver set to landscape.
+let orient = localStorage.getItem("stationOrient") || "portrait";
+function pageCss(o) {
+  const W = S.stock.width_in, H = S.stock.height_in, upright = o !== "landscape";
+  const pw = upright ? H : W, ph = upright ? W : H;
+  let img = `width:${W}in;height:${H}in;`;
+  if (o === "portrait") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateY(${W}in) rotate(-90deg);`;
+  if (o === "portrait-right") img += `position:absolute;left:0;top:0;transform-origin:0 0;transform:translateX(${H}in) rotate(90deg);`;
+  return `@media print { @page { size: ${pw}in ${ph}in; margin: 0; }
+    #print-area .pl { width:${pw}in; height:${ph}in; } #print-area img { ${img} } }`;
+}
+function applyOrient(o) {
+  orient = o; localStorage.setItem("stationOrient", o);
+  let st = document.getElementById("print-page-style");
+  if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
+  st.textContent = pageCss(o);
+  $("st-orient").value = o;
+}
+$("st-orient").addEventListener("change", e => { applyOrient(e.target.value); addLog("page layout: " + e.target.selectedOptions[0].text); });
+applyOrient(orient);
 function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("could not load " + url)); i.src = url; });
 }
