@@ -44,8 +44,7 @@ function ready() { return mode === "windows" ? windowsRunning : btConnected(); }
 // the layout a person chose on this station, else the site default (LABEL_PRINT_LAYOUT; "portrait" = calibration C)
 let orient = localStorage.getItem("stationLayoutChoice") || S.defaultLayout || "portrait";
 const LAYOUTS = ["landscape", "landscape-flip", "portrait", "portrait-right"];
-// Every layout is a CSS named page, so one print can mix them (the calibration print). The chosen layout is also the
-// default @page for printers or browsers that ignore named pages.
+// One plain @page per print (no CSS named pages: Chrome on Windows added an empty page after them).
 // fine position (mm, label terms: + = right / down), the printer's own placement error
 let offset = (JSON.parse(localStorage.getItem("stationOffsetMm") || "null")) || S.defaultOffset || [0, 0];
 function layoutRules(o) {
@@ -71,22 +70,20 @@ function setOffset(o, save) {
 }));
 $("st-dreset").addEventListener("click", () => { setOffset(S.defaultOffset || [0, 0], false); addLog("fine position reset to the site default"); });
 showOffset();
-function pageCss(current) {
-  const cur = layoutRules(current);
-  let css = `@media print { @page { size: ${cur.pw}in ${cur.ph}in; margin: 0; }\n`;
-  for (const o of LAYOUTS) {
-    const r = layoutRules(o);
-    css += `  @page lay-${o} { size: ${r.pw}in ${r.ph}in; margin: 0; }
-  #print-area .pl.lay-${o} { page: lay-${o}; width:${r.pw}in; height:calc(${r.ph}in - 0.005in); }
-  #print-area .pl.lay-${o} img { ${r.img} }\n`;
-  }
-  return css + "}";
+function pageCss(layout) {
+  const r = layoutRules(layout);
+  return `@media print { @page { size: ${r.pw}in ${r.ph}in; margin: 0; }
+  #print-area .pl { width:${r.pw}in; height:calc(${r.ph}in - 0.005in); }
+  #print-area .pl img { ${r.img} } }`;
+}
+function setPrintStyle(layout) {
+  let st = document.getElementById("print-page-style");
+  if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
+  st.textContent = pageCss(layout);
 }
 function applyOrient(o) {
   orient = o;
-  let st = document.getElementById("print-page-style");
-  if (!st) { st = document.createElement("style"); st.id = "print-page-style"; document.head.appendChild(st); }
-  st.textContent = pageCss(o);
+  setPrintStyle(o);
   $("st-orient").value = o;
   wstate();
 
@@ -100,19 +97,20 @@ function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("could not load " + url)); i.src = url; });
 }
 
-// pages: list of URLs, or of [url, layout] pairs; queue jobs (checkDialog) stop the station if a print dialog appeared
-async function printWindows(pages, checkDialog = false) {
+// urls are printed as one job in `layout` (default: the station's layout); queue jobs (checkDialog) stop the station
+// if a print dialog appeared
+async function printWindows(urls, checkDialog = false, layout = orient) {
   const area = $("print-area");
   area.innerHTML = "";
-  const items = pages.map(p => Array.isArray(p) ? p : [p, orient]);
-  const imgs = await Promise.all(items.map(([u]) => loadImg(u)));     // all labels loaded before printing
-  imgs.forEach((img, i) => { const d = document.createElement("div"); d.className = "pl lay-" + items[i][1]; d.appendChild(img); area.appendChild(d); });
-  showPreview(items.map(([u]) => u));
+  const imgs = await Promise.all(urls.map(loadImg));          // all labels loaded before printing
+  imgs.forEach(img => { const d = document.createElement("div"); d.className = "pl"; d.appendChild(img); area.appendChild(d); });
+  showPreview(urls);
+  setPrintStyle(layout);
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const t0 = performance.now();
-  window.print();                                             // with --kiosk-printing: straight to the default printer
+  try { window.print(); }                                     // with --kiosk-printing: straight to the default printer
+  finally { area.innerHTML = ""; setPrintStyle(orient); }
   const waited = performance.now() - t0;
-  area.innerHTML = "";
   if (checkDialog && waited > 2500) {                         // a print dialog was open: not in silent-printing mode
     stopWindows("A print dialog appeared, so Chrome is not in silent-printing mode (start it from the --kiosk-printing shortcut). Printing stopped.");
     throw new Error("print dialog shown instead of silent printing; check whether the labels came out before requeueing");
@@ -128,10 +126,12 @@ $("st-start").addEventListener("click", () => {
   showStatus();
 });
 $("st-wcal").addEventListener("click", async () => {
-  const pages = [["landscape", "A"], ["landscape-flip", "B"], ["portrait", "C"], ["portrait-right", "D"]]
-    .map(([o, tag]) => [S.alignUrl + "?tag=" + tag, o]);
-  try { await printWindows(pages); addLog("calibration: printed LAYOUT A to D as one 4-page print; choose the one that came out right"); }
-  catch (e) { addLog("calibration failed: " + (e.message || e), "error"); }
+  // four separate one-page prints, one per layout
+  try {
+    for (const [o, tag] of [["landscape", "A"], ["landscape-flip", "B"], ["portrait", "C"], ["portrait-right", "D"]])
+      await printWindows([S.alignUrl + "?tag=" + tag], false, o);
+    addLog("calibration: printed LAYOUT A to D; choose the one that came out right");
+  } catch (e) { addLog("calibration failed: " + (e.message || e), "error"); }
 });
 $("st-walign").addEventListener("click", async () => {
   try { await printWindows([S.alignUrl]); addLog("alignment label sent to the Windows printer"); }
