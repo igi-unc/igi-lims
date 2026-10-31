@@ -268,7 +268,17 @@ def _lock_down_postgres(conn):
         conn.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {roles}")
 
 
-SERIAL_MAX = 9_999_999
+def serial_digits():
+    return int(current_app.config.get("LIMS_NUMBER_DIGITS", 9))
+
+
+def serial_max():
+    return 10 ** serial_digits() - 1
+
+
+def format_serial(n):
+    """The LIMS number as printed: zero-padded to LIMS_NUMBER_DIGITS."""
+    return f"{int(n):0{serial_digits()}d}" if n is not None else ""
 
 
 def _number_unnumbered_samples(conn):

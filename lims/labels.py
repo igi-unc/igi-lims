@@ -9,6 +9,7 @@ from xml.sax.saxutils import escape
 from ppf.datamatrix import DataMatrix
 
 from . import samples as svc
+from .db import format_serial
 
 
 def barcode_matrix(text):
@@ -51,7 +52,7 @@ def label_svg(sample):
     texts = "".join(f'<text x="{text_x:g}" y="{text_y0 + i * line:g}">{escape(r)}</text>' for i, r in enumerate(rows))
     if serial is not None:
         texts += (f'<text x="{quiet * 1.5 + code / 2:g}" y="{code_y + code + num_h - 1:g}" text-anchor="middle" '
-                  f'font-weight="700">{serial:07d}</text>')
+                  f'font-weight="700">{format_serial(serial)}</text>')
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
             f'role="img" aria-label="Label for {escape(sample["sample_id"])}">'
             f'<rect x="0.5" y="0.5" width="{width - 1}" height="{height - 1}" rx="6" fill="#fff" stroke="#9aa3ad" stroke-dasharray="4 3"/>'
@@ -97,20 +98,21 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
     matrix = barcode_matrix(sample["sample_id"])
     n = len(matrix)
     serial = sample["serial"] if "serial" in sample.keys() else None
-    num_h = round(0.073 * dpi) if serial is not None else 0   # 7-digit LIMS number under the code (~1.9 mm band)
-    # module size as before (one-module quiet zone each side); the number band only uses the spare height
+    # The code's module size is fixed first, exactly as without a number (one-module quiet zone each side); the
+    # LIMS number then takes whatever height is left under the code, so adding it never shrinks the code.
     module = max(2, (H - 2 * margin) // (n + 2))
-    if num_h:
-        module = min(module, max(2, (H - 2 * margin - num_h) // (n + 1)))
     code = n * module
+    num_h = 0
+    if serial is not None:
+        num_h = min(round(0.073 * dpi), H - 2 * margin - code - module)   # band below the code, after a 1-module gap
     cx = margin + module
-    cy = margin + (0 if num_h else (H - 2 * margin - code) // 2)
+    cy = margin + (0 if num_h > 0 else (H - 2 * margin - code) // 2)
     tx = margin + (n + 2) * module + round(0.015 * dpi)
     rows = svc.label_rows(sample)
     text = _fit_rows(rows, tx, W - tx - margin, margin, H - 2 * margin, max_font=0.11 * dpi)
-    if num_h:
+    if num_h > 0:
         fs = num_h
-        digits = f"{serial:07d}"
+        digits = format_serial(serial)
         length = min(len(digits) * fs * 0.6, code)
         text += (f'<text x="{cx:.1f}" y="{cy + code + module + fs * 0.8:.1f}" font-size="{fs:.1f}" '
                  f'textLength="{length:.1f}" lengthAdjust="spacingAndGlyphs">{digits}</text>')

@@ -85,7 +85,7 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
-* LIMS numbers (2026-10-30, Steven's request): `sample.serial`, 0-9999999,
+* LIMS numbers (2026-10-30, Steven's request): `sample.serial`, 0-999999999 (9 digits since 2026-10-31; was 7),
   issued from `id_counter` ('sample_serial') with UPDATE-then-SELECT inside the
   registration transaction (row/write lock; rollback returns the numbers),
   unique index as backstop; printed under the Data Matrix (module size

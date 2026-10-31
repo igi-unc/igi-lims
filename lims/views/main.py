@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, g, redirect, url_for, request
+from flask import Blueprint, render_template, g, redirect, url_for, request, current_app
 
 from ..auth import login_required
 from ..db import get_db
@@ -39,7 +39,7 @@ def go():
     conn = get_db()
     if conn.execute("SELECT 1 FROM sample WHERE sample_id=?", (q,)).fetchone():
         return redirect(url_for("samples.detail", sample_id=q))
-    if q.isdigit() and len(q) <= 7:                       # LIMS number, typed with or without leading zeros
+    if q.isdigit() and len(q) <= current_app.config["LIMS_NUMBER_DIGITS"]:   # LIMS number, with or without leading zeros
         row = conn.execute("SELECT sample_id FROM sample WHERE serial=?", (int(q),)).fetchone()
         if row:
             return redirect(url_for("samples.detail", sample_id=row["sample_id"]))

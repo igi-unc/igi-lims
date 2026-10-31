@@ -152,12 +152,12 @@ def preview(conn, payload):
 def allocate_serials(conn, n):
     """Issue n consecutive LIMS numbers. The UPDATE runs first so it holds the write lock on the counter row until
     the registration commits or rolls back: two registrations can never get the same number."""
-    from .db import SERIAL_MAX
+    from .db import serial_max, format_serial
     conn.execute("INSERT OR IGNORE INTO id_counter(name, value) VALUES ('sample_serial', -1)")
     conn.execute("UPDATE id_counter SET value = value + ? WHERE name='sample_serial'", (n,))
     last = conn.execute("SELECT value FROM id_counter WHERE name='sample_serial'").fetchone()[0]
-    if last > SERIAL_MAX:
-        raise ValueError(f"LIMS numbers are exhausted (the last is {SERIAL_MAX:07d})")
+    if last > serial_max():
+        raise ValueError(f"LIMS numbers are exhausted (the last is {format_serial(serial_max())})")
     return list(range(last - n + 1, last + 1))
 
 

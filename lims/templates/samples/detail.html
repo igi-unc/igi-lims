@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}{{ s.sample_id }} · IGI LIMS{% endblock %}{% block content %}
-<h1><code>{{ s.sample_id }}</code>{% if s.serial is not none %} <span class="muted" title="LIMS number">No. {{ s.serial|serial7 }}</span>{% endif %} <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}
+<h1><code>{{ s.sample_id }}</code>{% if s.serial is not none %} <span class="muted" title="LIMS number">No. {{ s.serial|lims_number }}</span>{% endif %} <span class="status {{ s.status }}">{{ s.status }}</span>{% if s.deleted_at %} <span class="status">DELETED {{ s.deleted_at }}</span>{% endif %}
 {% if flags.edits %} <a class="tag" href="#history" title="This record has been changed since it was created; see Record history">edited ×{{ flags.edits }}</a>{% endif %}
 {% if flags.corrections %} <a class="tag warn" href="#corrections" title="A value printed on the label has been corrected; the label and ID are unchanged">corrected</a>{% endif %}
 {% if flags.overrides %} <a class="tag warn" href="#history" title="Created against a derivation rule; see Record history for the justification">rule override</a>{% endif %}</h1>
@@ -28,7 +28,7 @@
 <div class="card">
 <h2>Tube</h2>
 <table class="compact"><tbody>
-<tr><th>LIMS number</th><td><code>{{ s.serial|serial7 }}</code></td></tr>
+<tr><th>LIMS number</th><td><code>{{ s.serial|lims_number }}</code></td></tr>
 <tr><th>Participant</th><td><a href="{{ url_for('participants.detail', participant_id=s.participant_id) }}">{{ s.participant_id }}</a> · {{ s.unc_id }} · cohort {{ s.cohort_code }} ({{ meanings.cohort.get(s.cohort_code,'') }})</td></tr>
 <tr><th>Received</th><td>{{ s.received_date }} <span class="muted">({{ s.received_date|yymmmdd }}, collection <a href="{{ url_for('collections.detail', collection_id=s.collection_id) }}">#{{ s.collection_id }}</a>)</span>{% if 'received_date' in effective %} <a class="tag warn" href="#corrections">corrected to {{ effective.received_date }}</a>{% endif %}</td></tr>
 <tr><th>Specimen</th><td>{{ s.specimen_code }} – {{ meanings.specimen.get(s.specimen_code,'') }}</td></tr>

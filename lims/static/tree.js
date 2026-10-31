@@ -188,7 +188,7 @@
   const attrRows = s => Object.entries(ATTRS[s.sample_id] || {}).map(([k, v]) => `<tr><th>${esc(AL[k] || k)}</th><td>${esc(v)}</td></tr>`).join("");
   const loc = s => [s.freezer, s.rack, s.box, s.position].filter(v => v && v !== "NA").join(" / ") || "—";
   function summary(s) {
-    return `<div class="t"><code>${esc(s.sample_id)}</code>${s.serial != null ? ` <span class="muted">No. ${String(s.serial).padStart(7, "0")}</span>` : ""}</div>` +
+    return `<div class="t"><code>${esc(s.sample_id)}</code>${s.serial != null ? ` <span class="muted">No. ${String(s.serial).padStart(window.LIMS_DIGITS || 9, "0")}</span>` : ""}</div>` +
       `<div><span class="status ${esc(s.status)}">${esc(s.status)}</span>${s.deleted_at ? " <b>deleted</b>" : ""}</div>` +
       `<div>${esc(meaning("fraction", s.fraction_code))}</div><div>${esc(meaning("material", s.material_code))}</div>` +
       `<div>${s.quantity != null ? esc(s.quantity) + " " + esc(s.unit || "") : "—"} · ${esc(loc(s))}</div>` +
@@ -203,7 +203,7 @@
       `<div class="muted">click to ${collapsed.has(g.key) ? "show each tube" : "stack them again"}</div>`;
   }
   function detail(s) {
-    const rows = [["LIMS number", s.serial != null ? String(s.serial).padStart(7, "0") : ""], ["Specimen", meaning("specimen", s.specimen_code)], ["Fraction", meaning("fraction", s.fraction_code)],
+    const rows = [["LIMS number", s.serial != null ? String(s.serial).padStart(window.LIMS_DIGITS || 9, "0") : ""], ["Specimen", meaning("specimen", s.specimen_code)], ["Fraction", meaning("fraction", s.fraction_code)],
       ["Material", meaning("material", s.material_code)], ["Received", s.received_date], ["Parent", s.parent_id || "none (first generation)"],
       ["Status", s.status], ["Quantity", s.quantity != null ? s.quantity + " " + (s.unit || "") : ""], ["Location", loc(s)],
       ["Processed", (s.created_datetime || "") + " " + (s.created_by || "") + (s.sop_code ? " · " + s.sop_code : "")],

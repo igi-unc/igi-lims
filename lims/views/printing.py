@@ -11,7 +11,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, abort, jsonify, current_app
 
 from ..auth import login_required, role_required, writer_required
-from ..db import get_db
+from ..db import get_db, format_serial
 from .. import audit, samples as svc, labels
 
 bp = Blueprint("printing", __name__, url_prefix="/print")
@@ -173,7 +173,7 @@ def job_csv(job_id):
     w.writerow(["barcode", "line1", "line2", "line3", "number"])
     for sid in json.loads(job["sample_ids"]):
         s = svc.get_sample(conn, sid)
-        w.writerow([sid] + svc.label_rows({"sample_id": sid}) + [f"{s['serial']:07d}" if s and s["serial"] is not None else ""])
+        w.writerow([sid] + svc.label_rows({"sample_id": sid}) + [format_serial(s["serial"]) if s else ""])
     resp = current_app.response_class(buf.getvalue(), mimetype="text/csv")
     resp.headers["Content-Disposition"] = f'attachment; filename="print_job_{job_id}.csv"'
     return resp

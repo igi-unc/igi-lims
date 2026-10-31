@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}IGI LIMS{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script>window.LIMS_DIGITS = {{ config.LIMS_NUMBER_DIGITS }};</script>
 </head>
 <body>
 <header class="top">

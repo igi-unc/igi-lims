@@ -72,7 +72,7 @@ def test_worked_example(app, alice):
     # label: three rows of at most 18 characters, broken at hyphens
     rows = re.findall(r"<text [^>]*>([^<]*)</text>", alice.get(f"/samples/{hmd}/label.svg").data.decode())
     assert rows[:3] == ["IGI-MP-P101-UNC316", "26SEP29-PF-TUM-HMD", "01-KEN-26OCT06"] and max(map(len, rows)) <= 18
-    assert len(rows) == 4 and re.fullmatch(r"\d{7}", rows[3])                    # the LIMS number, seven digits
+    assert len(rows) == 4 and re.fullmatch(r"\d{9}", rows[3])                    # the LIMS number, nine digits
 
 
 def test_aliquots_never_reused_and_counted_within_segments_1_to_8(app, alice):

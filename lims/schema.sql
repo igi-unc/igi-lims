@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS id_counter (
 
 CREATE TABLE IF NOT EXISTS sample (
     sample_id           TEXT PRIMARY KEY,         -- full ID, validated against the pattern in config.py
-    serial              INTEGER,                  -- LIMS number 0000000-9999999, unique, printed under the 2D code
+    serial              INTEGER,                  -- LIMS number (LIMS_NUMBER_DIGITS, default 9 digits), unique, under the 2D code
     -- parsed components (kept in sync with sample_id)
     project_code        TEXT NOT NULL,
     cohort_code         TEXT NOT NULL,

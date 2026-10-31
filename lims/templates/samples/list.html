@@ -19,7 +19,7 @@
 <tbody>
 {% for s in rows %}
 <tr class="{% if s.deleted_at %}del{% endif %}">
-  <td class="muted"><code>{{ s.serial|serial7 }}</code></td>
+  <td class="muted"><code>{{ s.serial|lims_number }}</code></td>
   <td><a href="{{ url_for('samples.detail', sample_id=s.sample_id) }}"><code>{{ s.sample_id }}</code></a>{% if s.deleted_at %} <span class="muted">(deleted)</span>{% endif %}</td>
   <td>{% if s.parent_id %}<a href="{{ url_for('samples.detail', sample_id=s.parent_id) }}"><code>{{ s.parent_id|short_id }}</code></a>{% else %}<a class="muted" href="{{ url_for('collections.detail', collection_id=s.collection_id) }}">collection #{{ s.collection_id }}</a>{% endif %}</td>
   <td>{{ status_loc(s) }}</td>

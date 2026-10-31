@@ -58,6 +58,9 @@ LABEL_PRINT_OFFSET_MM = [float(v) for v in os.environ.get("LIMS_LABEL_PRINT_OFFS
 BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
                                "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
 PRINT_JOB_MAX_LABELS = 200
+# LIMS number: every tube gets one, issued at registration, always shown zero-padded to this many digits
+# (000000000-999999999 for 9).
+LIMS_NUMBER_DIGITS = 9
 # Camera scanning: browsers without a built-in Data Matrix reader (Safari on iPad/iPhone, Chrome on Windows) load
 # this BarcodeDetector ponyfill (ZXing-C++ in WebAssembly, MIT licence), version pinned.
 BARCODE_READER_URL = os.environ.get("LIMS_BARCODE_READER_URL",
