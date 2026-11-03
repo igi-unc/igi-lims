@@ -189,7 +189,7 @@ def _resolve_tube(conn, key):
 
 # The registry's vocabulary (igi-data-librarian registry/service.py). Anything without a clean mapping is null.
 _ANALYTE = {"DNA": "dna", "HMD": "dna", "CFD": "dna", "RNA": "rna", "HMR": "rna"}
-_PLATFORM = {"ILM": "illumina", "ONT": "ont"}            # 10X here means a 10x library read on Illumina: no registry term
+_PLATFORM = {"ILM": "illumina", "ONT": "ont", "PAC": "pacbio"}   # 10X here means a 10x library read on Illumina: no registry term
 _LIBRARY = {"WGS": "wgs", "WES": "wes"}                  # RSQ: poly-A vs rRNA depletion is not recorded, so no guess
 _NORMAL_SPECIMEN = {"PB": "normal-blood", "NM": "normal-tissue"}
 
@@ -217,6 +217,8 @@ def registry_fields_for(conn, s):
     platforms = {r["platform_code"] for r in files if r["platform_code"]}
     assays = {r["assay_code"] for r in files if r["assay_code"]}
     platform = _PLATFORM.get(next(iter(platforms))) if len(platforms) == 1 else None
+    if platform == "ont" and assays == {"SCR"}:
+        platform = "10x-ont"                              # single-cell on nanopore = a 10x library read long
     if platform is None:
         why["platform"] = ("no data file with a platform yet" if not platforms else
                            "several platforms on this tube" if len(platforms) > 1 else f"no registry term for {next(iter(platforms))}")

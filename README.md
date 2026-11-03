@@ -34,7 +34,13 @@ pellets, Ken's HMW DNA and RNA, a culture and a peptide eluate, plus the matched
 blood collection. It has data files named the way section 6 asks, custody
 events, two audited edits (one by a second account) and one correction. Three
 smaller participants follow (P102 AML, P103 TNBC, P104 NUT carcinoma, one of
-whose collections has no tubes yet), 63 tubes in all. Operator accounts MF and
+whose collections has no tubes yet), 63 tubes in all. Two synthetic patients
+in cohort SY follow: P105 = IGI-SYN-SEQ-01 and P106 = IGI-SYN-SEQ-02 (the
+external ID). Each has a tumour and a matched blood collection, 8 tubes, and
+the 22 files of its LENS manifest (WES, WGS, bulk RNA, 10x GEX/TCR, ONT, PacBio
+HiFi and Kinnex) linked to the extract each library came from. The paths are
+the real simulated reads under `raft/inputs` on the cluster; the tube history is
+invented. Operator accounts MF and
 KEN are created if missing. Re-running skips participants that already exist.
 The data is built with the same service functions as the forms, so it obeys the
 rules.

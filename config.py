@@ -86,7 +86,7 @@ COLLECTION_FIELDS = ["received_date"]
 # Data file names: <sample ID>_<source>_<assay label>_<platform label> (nomenclature section 3).
 ASSAY_LABELS = {"WES": "DNA_WES", "WGS": "DNA_WGS", "RSQ": "bulkRNA", "SCR": "scRNA", "VDJ": "scVDJ",
                 "TCR": "bulkTCR", "IPX": "immunopeptidome"}
-PLATFORM_LABELS = {"ILM": "Illumina", "ONT": "ONT", "10X": "10XGEX", "MS": "MS"}
+PLATFORM_LABELS = {"ILM": "Illumina", "ONT": "ONT", "10X": "10XGEX", "PAC": "PacBio", "MS": "MS"}
 TUMOR_SPECIMENS = ["PF", "TU", "LN", "BM"]       # source "tumor"; anything else is "normal"
 TCELL_FRACTIONS = ["TTC", "CD4", "CD8"]          # adds "_Tcell" to the source
 

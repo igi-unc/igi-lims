@@ -95,3 +95,23 @@ def test_existing_database_gains_registry_columns(app, alice):
         if cols is not None:
             assert {"registry_id", "registry_instance"} <= cols
         assert get_db().execute("SELECT COUNT(*) FROM sample").fetchone()[0] == 2
+
+
+def test_registry_platform_pacbio_and_10x_ont(app, alice, monkeypatch):
+    cid = new_collection(alice)
+    add_tubes(alice, cid)
+    derive(alice, sid("PF", "PFM", "CPU", 1), fraction="TUM", material="SCS")
+    scs = sid("PF", "TUM", "SCS", 1)
+    monkeypatch.setenv("LIMS_API_TOKEN", "bot-read")
+    c = app.test_client()
+    with app.app_context():
+        db = get_db()
+        db.execute("INSERT INTO data_file(sample_id, uri, assay_code, platform_code, recorded_by) VALUES (?,?,?,?,?)",
+                   (scs, "/data/sc_ont.fastq.gz", "SCR", "ONT", "alice"))
+        db.commit()
+    assert c.get(f"/api/samples/{scs}/registry-fields", headers=READ).get_json()["fields"]["platform"] == "10x-ont"
+    with app.app_context():
+        db = get_db()
+        db.execute("UPDATE data_file SET platform_code='PAC' WHERE sample_id=?", (scs,))
+        db.commit()
+    assert c.get(f"/api/samples/{scs}/registry-fields", headers=READ).get_json()["fields"]["platform"] == "pacbio"

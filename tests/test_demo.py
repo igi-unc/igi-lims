@@ -54,10 +54,10 @@ def test_demo_reset_and_cron_endpoint(app, client):
         conn = get_db()
         users = sorted(r[0] for r in conn.execute("SELECT username FROM account"))
         assert users == ["demo", "ken", "mf", "reviewer", "station", "viewer"]     # the fixture's accounts are gone; operators MF and KEN added
-        assert conn.execute("SELECT count(*) FROM participant").fetchone()[0] == 4   # main + three smaller ones
+        assert conn.execute("SELECT count(*) FROM participant").fetchone()[0] == 6   # main + three smaller + two synthetic
         cohorts = sorted(r[0] for r in conn.execute("SELECT cohort_code FROM participant"))
-        assert cohorts == ["AM", "MP", "NC", "TN"]
-        assert sorted(r[0] for r in conn.execute("SELECT participant_id FROM participant")) == ["P101", "P102", "P103", "P104"]
+        assert cohorts == ["AM", "MP", "NC", "SY", "SY", "TN"]
+        assert sorted(r[0] for r in conn.execute("SELECT participant_id FROM participant")) == ["P101", "P102", "P103", "P104", "P105", "P106"]
         # a collection with no tubes yet (P104's blood)
         assert conn.execute("SELECT count(*) FROM collection c WHERE NOT EXISTS (SELECT 1 FROM sample s WHERE s.collection_id=c.collection_id)").fetchone()[0] == 1
         statuses = {r[0] for r in conn.execute("SELECT DISTINCT status FROM sample")}
@@ -156,4 +156,24 @@ def test_v2_database_is_rebuilt_in_demo_mode(app, client):
     app.extensions.pop("igi_schema_ok", None)
     assert client.get("/login").status_code == 200
     with app.app_context():
-        assert get_db().execute("SELECT count(*) FROM participant").fetchone()[0] == 4
+        assert get_db().execute("SELECT count(*) FROM participant").fetchone()[0] == 6
+
+
+def test_synthetic_participants_link_every_library(app, client):
+    """IGI-SYN-SEQ-01/02: every library in the LENS manifests is a data file on the extract it came from."""
+    import os
+    from lims.demo import seed_synthetic_participants, SYN_ROOT, SYN_LIBRARIES
+    with app.app_context():
+        conn = get_db()
+        out = seed_synthetic_participants(conn, "bob")
+        conn.commit()
+        assert out == {"P105": 8, "P106": 8}
+        ext = dict(conn.execute("SELECT participant_id, external_participant_id FROM participant WHERE cohort_code='SY'").fetchall())
+        assert ext == {"P105": "IGI-SYN-SEQ-01", "P106": "IGI-SYN-SEQ-02"}
+        n_files = sum(len(f) for _, _, f, _, _ in SYN_LIBRARIES)
+        rows = conn.execute("SELECT d.uri, s.material_code, s.fraction_code FROM data_file d JOIN sample s USING(sample_id) "
+                            "WHERE s.participant_id IN ('P105','P106')").fetchall()
+        assert len(rows) == 2 * n_files
+        assert {r["material_code"] for r in rows} == {"DNA", "HMD", "RNA", "SCS"}
+        if os.path.isdir(SYN_ROOT):                       # on the cluster: the linked files really exist
+            assert all(os.path.exists(r["uri"]) for r in rows)

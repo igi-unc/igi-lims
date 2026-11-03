@@ -66,6 +66,7 @@ CODES = {
         ("ILM", "Illumina short-read"),
         ("ONT", "Oxford Nanopore long-read"),
         ("10X", "10x Genomics library, sequenced short-read"),
+        ("PAC", "PacBio long-read (HiFi, Kinnex)"),
         ("MS", "Mass spectrometry"),
     ],
     "biobank_source": [

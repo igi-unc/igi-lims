@@ -354,8 +354,8 @@ def create_user_command(username, name, initials, role, password):
 @click.command("seed-demo")
 @click.option("--user", "username", default=None, help="Account the demo records are attributed to (default: first active user)")
 def seed_demo_command(username):
-    """Add the demonstration participants: P101 (the v2.1 worked example) and three smaller ones in other cohorts."""
-    from .demo import seed_demo, seed_extra_participants, EXTRA_PARTICIPANTS
+    """Add the demonstration participants: P101 (the v2.1 worked example), three smaller ones in other cohorts, and the synthetic P105/P106."""
+    from .demo import seed_demo, seed_extra_participants, seed_synthetic_participants, EXTRA_PARTICIPANTS
     conn = get_db()
     if username is None:
         row = conn.execute("SELECT username FROM account WHERE active=1 AND role IN ('admin','user') ORDER BY CASE role WHEN 'user' THEN 0 ELSE 1 END, username").fetchone()
@@ -380,11 +380,19 @@ def seed_demo_command(username):
     except ValueError as e:
         conn.rollback()
         raise click.ClickException(f"Extra demo participants not added: {e}")
+    try:
+        syn = seed_synthetic_participants(conn, username)
+        conn.commit()
+        for pid, n in syn.items():
+            click.echo(f"Synthetic participant {pid}: {n} tubes, with data files")
+    except ValueError as e:
+        conn.rollback()
+        raise click.ClickException(f"Synthetic participants not added: {e}")
 
 
 @click.command("demo-reset")
 def demo_reset_command():
-    """Wipe the database and rebuild the public demo (accounts demo / reviewer / viewer, operators MF and KEN, four participants)."""
+    """Wipe the database and rebuild the public demo (accounts demo / reviewer / viewer, operators MF and KEN, six participants)."""
     from .demo import reset_demo, DEMO_USERS
     info = reset_demo(get_db(), current_app.config["DEMO_PASSWORD"])
     click.echo(f"Demo rebuilt on {describe()}: participant {info['participant']}, {info['tubes']} tubes")

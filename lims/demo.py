@@ -53,6 +53,9 @@ LIST_ENTRIES = [
     ("party", "CLINIC", "Clinic / OR (collection site)"),
     ("party", "MSCORE", "UNC Proteomics core"),
     ("party", "COLLAB", "Collaborating laboratory (external)"),
+    ("cohort", "SY", "Synthetic sequencing test data (not a real participant)"),
+    ("submission", "HTSF-26-0501", "HTSF submission 26-0501 (synthetic IGI-SYN-SEQ libraries)"),
+    ("instrument", "REVIO", "PacBio Revio"),
 ]
 
 # Bench staff named in the nomenclature's worked example (display names are placeholders).
@@ -382,6 +385,81 @@ def seed_extra_participants(conn, username):
     return out
 
 
+# Synthetic patients whose reads are real files on the cluster (RAFT/LENS test inputs). The tubes, dates and
+# lab details are invented; the file paths are the full-release files listed in each dataset's LENS manifest.
+SYN_ROOT = "/datastore/nextgenout5/share/labs/Vincent_Lab/members/spvensko/raft/inputs"
+SYN_PARTICIPANTS = [("P105", "901", "IGI-SYN-SEQ-01", "2026-10-20"), ("P106", "902", "IGI-SYN-SEQ-02", "2026-10-21")]
+# (extract, manifest run name, file names with {ds}, assay, platform)
+SYN_LIBRARIES = [
+    ("tum_dna", "ad-wes-tumor", ["fastqs/{ds}/full/{ds}_tumor_wes_R1.fastq.gz", "fastqs/{ds}/full/{ds}_tumor_wes_R2.fastq.gz"], "WES", "ILM"),
+    ("tum_dna", "ad-wgs-tumor", ["fastqs/{ds}/full/{ds}_tumor_wgs_R1.fastq.gz", "fastqs/{ds}/full/{ds}_tumor_wgs_R2.fastq.gz"], "WGS", "ILM"),
+    ("nrm_dna", "nd-wes-normal", ["fastqs/{ds}/full/{ds}_normal_wes_R1.fastq.gz", "fastqs/{ds}/full/{ds}_normal_wes_R2.fastq.gz"], "WES", "ILM"),
+    ("nrm_dna", "nd-wgs-normal", ["fastqs/{ds}/full/{ds}_normal_wgs_R1.fastq.gz", "fastqs/{ds}/full/{ds}_normal_wgs_R2.fastq.gz"], "WGS", "ILM"),
+    ("tum_hmd", "ad-ont-wgs-tumor", ["fastqs/{ds}/full/{ds}_tumor_ont_wgs.fastq.gz"], "WGS", "ONT"),
+    ("tum_hmd", "ad-hifi-wgs-tumor", ["bams/{ds}/full/{ds}_tumor_hifi.bam"], "WGS", "PAC"),
+    ("nrm_hmd", "nd-ont-wgs-normal", ["fastqs/{ds}/full/{ds}_normal_ont_wgs.fastq.gz"], "WGS", "ONT"),
+    ("nrm_hmd", "nd-hifi-wgs-normal", ["bams/{ds}/full/{ds}_normal_hifi.bam"], "WGS", "PAC"),
+    ("tum_rna", "ar-rna-tumor", ["fastqs/{ds}/full/{ds}_full_rna_R1.fastq.gz", "fastqs/{ds}/full/{ds}_full_rna_R2.fastq.gz"], "RSQ", "ILM"),
+    ("tum_rna", "ar-ont-bulk-rna", ["fastqs/{ds}/full/{ds}_full_ont_bulk_rna.fastq.gz"], "RSQ", "ONT"),
+    ("tum_rna", "ar-kinnex-bulk", ["bams/{ds}/full/{ds}_full_kinnex_bulk_segmented.bam"], "RSQ", "PAC"),
+    ("tum_scs", "ar-gex-tumor", ["fastqs/{ds}/full/{ds}-GEX_S1_L001_R1_001.fastq.gz", "fastqs/{ds}/full/{ds}-GEX_S1_L001_R2_001.fastq.gz"], "SCR", "10X"),
+    ("tum_scs", "ar-tcr-tumor", ["fastqs/{ds}/full/{ds}-TCR_S1_L001_R1_001.fastq.gz", "fastqs/{ds}/full/{ds}-TCR_S1_L001_R2_001.fastq.gz"], "VDJ", "10X"),
+    ("tum_scs", "ar-ont-sc-rna", ["fastqs/{ds}/full/{ds}_full_ont_sc_rna.fastq.gz"], "SCR", "ONT"),
+    ("tum_scs", "ar-kinnex-sc", ["bams/{ds}/full/{ds}_full_kinnex_sc_segmented.bam"], "SCR", "PAC"),
+]
+_SYN_RUN = {"ILM": "NX-261027-0501", "10X": "NX-261027-0501", "ONT": "PAW90501-261028", "PAC": "r84501_261029"}
+
+
+def seed_synthetic_participants(conn, username):
+    """P105 / P106: synthetic patients IGI-SYN-SEQ-01 and -02 (tumour + matched blood), with every library in
+    their LENS manifests linked to the extract it was made from. Returns {participant_id: tube_count}."""
+    _as(conn, username)
+    _lists(conn)
+    _ensure_operators(conn)
+    out = {}
+    for pid, unc, ds, day in SYN_PARTICIPANTS:
+        S = _Seeder(conn, username)
+        S.participant(pid, unc, "SY", f"Synthetic patient {ds}: invented tube history; the reads are the simulated "
+                                      f"RAFT/LENS test inputs on the cluster (inputs/fastqs/{ds}, inputs/bams/{ds}).")
+        conn.execute("UPDATE participant SET external_participant_id=? WHERE participant_id=?", (ds, pid))
+        tu = S.collection(pid, "TU", day, received_by="MF", time_collected=f"{day}T09:00", time_received=f"{day}T09:45",
+                          container_type="PLAIN", transport_temp="ice", quantity=500, unit="mg",
+                          notes=f"Synthetic resection for {ds}; dissociated on arrival.")
+        [cells] = S.tube(tu, op="MF", when=f"{day}T13:00", sop="SOP-004", qty=1, unit="mL", fraction="TUM", material="CPU",
+                         loc=("LN2-1", "R4", "B01", "A1"), notes="Dissociated tumour cells, cryopreserved.",
+                         attrs={"enrichment_method": "NONE", "cell_count": 20000000, "viability_pct": 90, "count_method": "Countess",
+                                "cells_per_vial": 20000000, **CPU_ATTRS})
+        pb = S.collection(pid, "PB", day, received_by="MF", time_collected=f"{day}T08:40", time_received=f"{day}T09:45",
+                          container_type="EDTA", appearance="clear", quantity=10, unit="mL", notes="Matched normal blood.")
+        [pbmc] = S.tube(pb, op="MF", when=f"{day}T15:00", sop="SOP-002", qty=1, unit="mL", fraction="PBM", material="CPU",
+                        loc=("LN2-1", "R4", "B01", "B1"), notes="PBMC, germline comparator.",
+                        attrs={"isolation_method": "SEPMATE", "cell_count": 10000000, "viability_pct": 95, "count_method": "Countess",
+                               "cells_per_vial": 10000000, **CPU_ATTRS})
+        ext = {}
+        for key, parent, frac, mat, unit, qty, when in (
+                ("tum_dna", cells, "TUM", "DNA", "uL", 60, "T10:00"), ("tum_hmd", cells, "TUM", "HMD", "uL", 50, "T10:30"),
+                ("tum_rna", cells, "TUM", "RNA", "uL", 40, "T11:00"), ("tum_scs", cells, "TUM", "SCS", "uL", 50, "T09:30"),
+                ("nrm_dna", pbmc, "PBM", "DNA", "uL", 60, "T13:00"), ("nrm_hmd", pbmc, "PBM", "HMD", "uL", 50, "T13:30")):
+            next_day = f"{day[:8]}{int(day[8:]) + 2:02d}"
+            [ext[key]] = S.tube(parent, op="KEN", when=next_day + when, sop="SOP-003" if mat == "SCS" else "SOP-005",
+                                qty=qty, unit=unit, fraction=frac, material=mat, loc=("FRZ-A", "R4", "B04", "NA"),
+                                notes="10x 5' single-cell suspension; GEX and TCR libraries, cDNA also read on ONT and Kinnex."
+                                if mat == "SCS" else "Extract for the synthetic library set.")
+        for key, run_name, files, assay, platform in SYN_LIBRARIES:
+            for f in files:
+                uri = f"{SYN_ROOT}/{f.format(ds=ds)}"
+                cur = conn.execute(
+                    "INSERT INTO data_file(sample_id, uri, assay_code, platform_code, run_id, notes, recorded_by) VALUES (?,?,?,?,?,?,?)",
+                    (ext[key], uri, assay, platform, _SYN_RUN[platform], f"Synthetic reads; LENS manifest run {run_name} ({ds}).", username))
+                audit.log(conn, "data_file", cur.lastrowid, "insert", after={"sample_id": ext[key], "uri": uri, "assay_code": assay,
+                                                                              "platform_code": platform})
+        for key in ext:
+            S.custody(ext[key], f"{day[:8]}{int(day[8:]) + 5:02d}T09:00", "KEN", "HTSF", "SEQ",
+                      notes="Library prep and sequencing (HTSF-26-0501).", initials="KEN")
+        out[pid] = len(S.tubes)
+    return out
+
+
 # ---------------------------------------------------------------- public demonstration instance
 
 DEMO_USERS = [  # username, display name, initials, role
@@ -393,7 +471,7 @@ DEMO_USERS = [  # username, display name, initials, role
 
 
 def reset_demo(conn, password):
-    """Wipe the database and rebuild it with the demo accounts, the worked-example participant and three smaller ones."""
+    """Wipe the database and rebuild it with the demo accounts, the worked-example participant, three smaller ones and the two synthetic ones."""
     from .db import reset_db
     reset_db(conn)
     for username, name, initials, role in DEMO_USERS:
@@ -401,5 +479,6 @@ def reset_demo(conn, password):
     _ensure_operators(conn, password)
     info = seed_demo(conn, "demo", second="reviewer")
     info["extra"] = seed_extra_participants(conn, "demo")
+    info["extra"].update(seed_synthetic_participants(conn, "demo"))
     conn.commit()
     return info
