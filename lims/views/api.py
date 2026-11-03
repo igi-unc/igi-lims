@@ -321,3 +321,154 @@ def post_files(key):
     return jsonify({"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), "registry_id": reg,
                     "created": len(created), "already_linked": len(existing), "file_ids": created + existing}), \
         (201 if created else 200)
+
+
+# ------------------------------------------------------------------ sequencing QC (written by the QC workflow)
+
+QC_STATUSES = ("pass", "warn", "fail", "not_assessed")
+QC_INT_METRICS = ("total_reads", "total_bases")
+QC_PCT_METRICS = ("pct_q30", "pct_gc", "pct_duplication", "pct_adapter", "pct_mapped", "pct_target_20x")
+QC_REAL_METRICS = ("mean_read_length", "read_n50", "mean_quality", "mean_coverage", "median_insert_size") + QC_PCT_METRICS
+QC_METRICS = QC_INT_METRICS + QC_REAL_METRICS
+_QC_TEXT = ("registry_id", "workflow_version", "scheduler_job_id")
+
+
+def _qc_row(r):
+    import json
+    d = _row(r)
+    d["metrics"] = json.loads(d.pop("metrics_json") or "{}")
+    d.pop("lims_number", None)
+    return d
+
+
+@bp.route("/samples/<key>/qc")
+@api_auth
+def get_qc(key):
+    """QC results for a tube, newest first, each with the file it is about (null = whole dataset)."""
+    conn = get_db()
+    s = _resolve_tube(conn, key)
+    if s is None:
+        return jsonify({"query": key, "exists": False}), 404
+    rows = conn.execute("SELECT q.*, f.uri FROM seq_qc q LEFT JOIN data_file f ON f.id = q.data_file_id "
+                        "WHERE q.sample_id=? ORDER BY q.recorded_at DESC, q.id DESC", (s["sample_id"],)).fetchall()
+    from ..db import format_serial
+    return jsonify({"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), "results": [_qc_row(r) for r in rows]})
+
+
+def _check_qc_result(conn, s, r, problems, i):
+    """Validate one entry of `results`; returns the column values or None."""
+    import json, math
+    where = f"results[{i}]"
+    if not isinstance(r, dict):
+        problems.append(f"{where} must be an object"); return None
+    status = str(r.get("qc_status") or "").strip().lower()
+    if status not in QC_STATUSES:
+        problems.append(f"{where}.qc_status must be one of {', '.join(QC_STATUSES)}")
+    out = {"qc_status": status, "status_reason": (str(r["status_reason"])[:500] if r.get("status_reason") else None),
+           "report_uri": (str(r["report_uri"])[:1000] if r.get("report_uri") else None), "data_file_id": None, "uri": None}
+    md5 = str(r.get("md5") or "").strip().lower() or None
+    if md5 and not re.fullmatch(r"[0-9a-f]{32}", md5):
+        problems.append(f"{where}.md5 is not a 32-character hex md5")
+    out["md5_observed"] = md5
+    if r.get("path"):
+        f = conn.execute("SELECT id, uri, checksum_md5 FROM data_file WHERE sample_id=? AND uri=? AND deleted_at IS NULL",
+                         (s["sample_id"], str(r["path"]).strip())).fetchone()
+        if f is None:
+            problems.append(f"{where}.path is not a data file of tube {s['sample_id']} (link it first with POST .../files)")
+        else:
+            out["data_file_id"], out["uri"], out["recorded_md5"] = f["id"], f["uri"], f["checksum_md5"]
+    elif md5:
+        problems.append(f"{where}.md5 needs a path")
+    metrics = r.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        problems.append(f"{where}.metrics must be an object"); metrics = {}
+    extra = {}
+    for k, v in metrics.items():
+        if k in QC_METRICS:
+            if v is None:
+                out[k] = None; continue
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)) or v < 0:
+                problems.append(f"{where}.metrics.{k} must be a non-negative number"); continue
+            if k in QC_PCT_METRICS and v > 100:
+                problems.append(f"{where}.metrics.{k} is a percentage (0-100)"); continue
+            if k in QC_INT_METRICS and v != int(v):
+                problems.append(f"{where}.metrics.{k} must be a whole number"); continue
+            out[k] = int(v) if k in QC_INT_METRICS else float(v)
+        elif re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(k)) and (v is None or isinstance(v, (str, int, float, bool))):
+            extra[k] = v[:500] if isinstance(v, str) else v
+        else:
+            problems.append(f"{where}.metrics.{k}: extra metrics need a short name and a plain value")
+    out["metrics_json"] = json.dumps(extra, sort_keys=True) if extra else None
+    if len(out["metrics_json"] or "") > 20000:
+        problems.append(f"{where}.metrics is too large")
+    return out
+
+
+@bp.route("/samples/<key>/qc", methods=("POST",))
+@api_write_auth
+def post_qc(key):
+    """Record QC results from one workflow run for one tube. Write token. Re-posting the same
+    (workflow_run_id, tube, path) replaces that result, so a scraper can safely run twice.
+    JSON: {workflow_id, workflow_run_id, workflow_version?, scheduler_job_id?, registry_id?, instance?,
+           results: [{path?, qc_status, status_reason?, metrics: {...}, md5?, report_uri?}, ...]}"""
+    from .. import audit
+    conn = get_db()
+    s = _resolve_tube(conn, key)
+    if s is None:
+        return jsonify({"error": f"no tube {key}"}), 404
+    d = request.get_json(silent=True) or {}
+    problems = []
+    wf, run = str(d.get("workflow_id") or "").strip(), str(d.get("workflow_run_id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", wf):
+        problems.append("workflow_id is required (letters, digits, _ . : -)")
+    if not run or len(run) > 200:
+        problems.append("workflow_run_id is required (at most 200 characters)")
+    inst = str(d.get("instance") or "igi").strip().lower()
+    if not re.fullmatch(r"[a-z0-9_-]{1,32}", inst):
+        problems.append("instance must look like 'igi'")
+    common = {k: (str(d[k]).strip()[:200] if d.get(k) else None) for k in _QC_TEXT}
+    results = d.get("results")
+    if not isinstance(results, list) or not 1 <= len(results) <= 200:
+        problems.append("results must be a list of 1 to 200 entries")
+        results = []
+    checked = [_check_qc_result(conn, s, r, problems, i) for i, r in enumerate(results)]
+    keys = [c["data_file_id"] for c in checked if c]
+    if len(keys) != len(set(keys)):
+        problems.append("results repeats a path (or has two whole-dataset entries)")
+    if problems:
+        return jsonify({"error": "invalid request", "problems": problems}), 400
+    user = f"bot:{inst}"
+    cols = ["registry_id", "workflow_id", "workflow_version", "workflow_run_id", "scheduler_job_id", "qc_status", "status_reason",
+            *QC_METRICS, "md5_observed", "report_uri", "metrics_json"]
+    created = updated = 0
+    mismatches = []
+    for c in checked:
+        vals = {**common, "workflow_id": wf, "workflow_run_id": run, **{k: c.get(k) for k in cols if k in c}}
+        vals = {k: vals.get(k) for k in cols}
+        old = conn.execute("SELECT * FROM seq_qc WHERE workflow_run_id=? AND sample_id=? AND "
+                           + ("data_file_id=?" if c["data_file_id"] is not None else "data_file_id IS NULL"),
+                           (run, s["sample_id"]) + ((c["data_file_id"],) if c["data_file_id"] is not None else ())).fetchone()
+        if old:
+            conn.execute(f"UPDATE seq_qc SET {', '.join(k + '=?' for k in cols)}, recorded_by=?, "
+                         "recorded_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?", (*vals.values(), user, old["id"]))
+            audit.log(conn, "seq_qc", old["id"], "update", username=user, before={k: old[k] for k in ("qc_status", "workflow_run_id")},
+                      after={"qc_status": vals["qc_status"], "workflow_run_id": run}, reason="QC re-posted by the workflow")
+            updated += 1
+        else:
+            cur = conn.execute(f"INSERT INTO seq_qc(sample_id, data_file_id, {', '.join(cols)}, recorded_by) "
+                               f"VALUES (?, ?, {', '.join('?' for _ in cols)}, ?)", (s["sample_id"], c["data_file_id"], *vals.values(), user))
+            audit.log(conn, "seq_qc", cur.lastrowid, "insert", username=user,
+                      after={"sample_id": s["sample_id"], "uri": c["uri"], "workflow_id": wf, "workflow_run_id": run, "qc_status": vals["qc_status"]})
+            created += 1
+        md5 = c.get("md5_observed")
+        if md5 and c["data_file_id"] is not None:
+            if not c.get("recorded_md5"):
+                conn.execute("UPDATE data_file SET checksum_md5=? WHERE id=?", (md5, c["data_file_id"]))
+                audit.log(conn, "data_file", c["data_file_id"], "update", username=user, before={"checksum_md5": None},
+                          after={"checksum_md5": md5}, reason=f"md5 computed by QC run {run}")
+            elif c["recorded_md5"].lower() != md5:
+                mismatches.append(c["uri"])
+    conn.commit()
+    from ..db import format_serial
+    return jsonify({"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), "workflow_run_id": run,
+                    "created": created, "updated": updated, "md5_mismatches": mismatches}), (201 if created else 200)

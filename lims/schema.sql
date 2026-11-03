@@ -171,6 +171,43 @@ CREATE TABLE IF NOT EXISTS data_file (
 );
 CREATE INDEX IF NOT EXISTS idx_file_sample ON data_file(sample_id);
 CREATE INDEX IF NOT EXISTS idx_file_registry ON data_file(sample_id, registry_id);
+
+-- Sequencing QC results, written by the QC workflow (via the data librarian) through POST /api/samples/<key>/qc.
+-- One row per (workflow run, tube, file); a row without a file is a whole-dataset result (e.g. MultiQC general
+-- stats for a library). Re-posting the same run/tube/file replaces the values. Common metrics are columns;
+-- anything else the workflow reports goes in metrics_json, so new tools need no schema change.
+CREATE TABLE IF NOT EXISTS seq_qc (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    sample_id          TEXT NOT NULL REFERENCES sample(sample_id),
+    data_file_id       INTEGER REFERENCES data_file(id),
+    registry_id        TEXT,                         -- data-librarian dataset, if any
+    workflow_id        TEXT NOT NULL,                -- e.g. igi_qc
+    workflow_version   TEXT,
+    workflow_run_id    TEXT NOT NULL,                -- the librarian's run ID
+    scheduler_job_id   TEXT,
+    qc_status          TEXT NOT NULL CHECK (qc_status IN ('pass','warn','fail','not_assessed')),
+    status_reason      TEXT,                         -- which threshold failed, as the workflow states it
+    total_reads        BIGINT,
+    total_bases        BIGINT,
+    mean_read_length   REAL,
+    read_n50           REAL,                         -- long reads
+    mean_quality       REAL,                         -- mean Phred
+    pct_q30            REAL,
+    pct_gc             REAL,
+    pct_duplication    REAL,
+    pct_adapter        REAL,
+    pct_mapped         REAL,
+    mean_coverage      REAL,
+    pct_target_20x     REAL,                         -- WES: target bases at >= 20x
+    median_insert_size REAL,
+    md5_observed       TEXT,                         -- md5 the workflow computed for the file
+    report_uri         TEXT,                         -- MultiQC / NanoPlot HTML etc.
+    metrics_json       TEXT,                         -- every other metric, as JSON
+    recorded_by        TEXT NOT NULL,
+    recorded_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_qc_sample ON seq_qc(sample_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_key ON seq_qc(workflow_run_id, sample_id, COALESCE(data_file_id, 0));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_file_uri ON data_file(uri) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS audit_log (

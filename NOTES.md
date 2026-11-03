@@ -151,3 +151,8 @@
   (canine) has no registry species. The write-back has its own token and is off until
   `LIMS_API_WRITE_TOKEN` is set. Only fictional data (the Vercel demo) until Steven clears
   Slack/Anthropic for real IDs.
+
+* Sequencing QC (2026-11-03): `seq_qc` table + `POST/GET /api/samples/<key>/qc`. The QC workflow
+  is not written yet, so the table has typed columns only for metrics every platform shares and a
+  JSON field for the rest; pass/warn/fail is decided by the workflow, not the LIMS. A computed md5
+  fills an empty checksum but never overwrites one (a mismatch is flagged instead).

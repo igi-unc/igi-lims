@@ -176,6 +176,21 @@
 })();
 </script></details>
 {% endif %}
+
+<h2 id="seq-qc">Sequencing QC</h2>
+{% if seq_qc %}
+<table class="compact"><thead><tr><th>Result</th><th>File</th><th>Reads · bases</th><th>Quality</th><th>Other</th><th>Workflow</th></tr></thead><tbody>
+{% for q in seq_qc %}<tr>
+<td><span class="tag qc-{{ q.qc_status }}">{{ q.qc_status|replace('_', ' ') }}</span>{% if q.status_reason %}<br><span class="muted">{{ q.status_reason }}</span>{% endif %}</td>
+<td>{% if q.uri %}<code class="wrap">{{ q.uri.rsplit('/', 1)[-1] }}</code>{% else %}<span class="muted">whole dataset</span>{% endif %}
+  {% if q.md5_observed and q.checksum_md5 and q.md5_observed|lower != q.checksum_md5|lower %}<br><span class="tag warn">md5 differs from the recorded value</span>{% endif %}</td>
+<td>{% if q.total_reads is not none %}{{ '{:,}'.format(q.total_reads) }} reads{% endif %}{% if q.total_bases is not none %}<br>{{ '%.2f'|format(q.total_bases / 1e9) }} Gb{% endif %}</td>
+<td>{% if q.pct_q30 is not none %}Q30 {{ '%.1f'|format(q.pct_q30) }}%<br>{% endif %}{% if q.mean_quality is not none %}mean Q{{ '%.1f'|format(q.mean_quality) }}<br>{% endif %}{% if q.read_n50 is not none %}N50 {{ '{:,}'.format(q.read_n50|int) }} bp{% endif %}</td>
+<td class="muted">{% for k, lbl, unit in (('mean_coverage','coverage','x'), ('pct_target_20x','target ≥20x','%'), ('pct_mapped','mapped','%'), ('pct_duplication','duplicates','%'), ('pct_gc','GC','%'), ('pct_adapter','adapter','%'), ('median_insert_size','insert','bp'), ('mean_read_length','mean length','bp')) %}{% if q[k] is not none %}{{ lbl }} {{ '%.1f'|format(q[k]) }}{{ unit }}<br>{% endif %}{% endfor %}{% if q.report_uri %}<code class="wrap">{{ q.report_uri }}</code>{% endif %}</td>
+<td>{{ q.workflow_id }} {{ q.workflow_version or '' }}<br><span class="muted">run {{ q.workflow_run_id }}{% if q.scheduler_job_id %} · job {{ q.scheduler_job_id }}{% endif %}<br>{{ q.recorded_at }} · {{ q.recorded_by }}</span></td>
+</tr>{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No QC results yet. The QC workflow posts them here when it finishes (see the README, <code>POST /api/samples/&lt;key&gt;/qc</code>).</p>{% endif %}
 </div>
 </div>
 

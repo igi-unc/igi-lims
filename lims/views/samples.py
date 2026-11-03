@@ -70,6 +70,8 @@ def detail(sample_id):
     children = conn.execute("SELECT * FROM sample WHERE parent_id=? ORDER BY sample_id", (sample_id,)).fetchall()
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime, id", (sample_id,)).fetchall()
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL ORDER BY uri", (sample_id,)).fetchall()
+    seq_qc = conn.execute("SELECT q.*, f.uri, f.checksum_md5 FROM seq_qc q LEFT JOIN data_file f ON f.id = q.data_file_id "
+                          "WHERE q.sample_id=? ORDER BY q.recorded_at DESC, q.id DESC", (sample_id,)).fetchall()
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
     coll = svc.get_collection(conn, s["collection_id"])
@@ -83,7 +85,7 @@ def detail(sample_id):
              "overrides": sum(1 for h in history if h["action"] == "insert" and (h["reason"] or "").startswith("Rule override"))}
     participant = conn.execute("SELECT * FROM participant WHERE participant_id=?", (s["participant_id"],)).fetchone()
     return render_template("samples/detail.html", s=s, children=children, ancestors=svc.ancestors(conn, sample_id),
-                           custody=custody, files=files, history=history, flags=flags, participant=participant,
+                           custody=custody, files=files, seq_qc=seq_qc, history=history, flags=flags, participant=participant,
                            attrs=attributes.get_labelled(conn, s), attachments=attachments.for_sample(conn, sample_id),
                            users=_users(), parties=codes("party"), purposes=codes("custody_purpose"),
                            label=svc.label_rows(s), meanings=code_meaning_map(), assays=codes("assay"), platforms=codes("platform"),

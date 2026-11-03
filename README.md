@@ -204,6 +204,37 @@ retry is harmless: a path already linked to the same tube and registry ID is rep
 linked to a different tube is refused (409). Rows are recorded and audited as `bot:<instance>`,
 with the Slack user IDs in the notes and the audit entry.
 
+### Sequencing QC
+
+`seq_qc` holds the results of the QC workflow: the data librarian runs it on each accessioned
+dataset and posts the scraped outputs to `POST /api/samples/<key>/qc` (write token). One
+row per workflow run, tube and file; an entry without `path` is a whole-dataset result (e.g.
+MultiQC general statistics). Re-posting the same `workflow_run_id`, tube and path replaces
+that row, so a scraper can safely run twice; a new run adds rows beside the old ones.
+
+```json
+{"workflow_id": "igi_qc", "workflow_version": "0.1.0", "workflow_run_id": "<librarian run id>",
+ "scheduler_job_id": "12345", "registry_id": "igi_...",
+ "results": [
+   {"path": "/proj/.../x_R1.fastq.gz", "qc_status": "pass", "md5": "<32 hex>",
+    "metrics": {"total_reads": 1000000, "total_bases": 150000000, "pct_q30": 93.2, "my_tool_metric": 4}},
+   {"qc_status": "warn", "status_reason": "duplication 31% > 25%",
+    "metrics": {"mean_coverage": 31.5, "pct_duplication": 31.0}, "report_uri": "/proj/.../multiqc_report.html"}]}
+```
+
+* `qc_status`: `pass`, `warn`, `fail` or `not_assessed`. The workflow decides it (thresholds
+  live in the workflow, not the LIMS); `status_reason` says why.
+* Metrics with their own column: `total_reads`, `total_bases`, `mean_read_length`, `read_n50`,
+  `mean_quality`, `pct_q30`, `pct_gc`, `pct_duplication`, `pct_adapter`, `pct_mapped`,
+  `mean_coverage`, `pct_target_20x`, `median_insert_size` (percentages are 0-100). Any
+  other key is kept as-is in `metrics_json`, so new tools need no schema change.
+* `path` must already be a data file of that tube (`POST .../files` first). An `md5` fills an
+  empty checksum on the file; one that differs from the recorded checksum is reported in
+  `md5_mismatches` and flagged on the tube page, and the recorded value is kept.
+* The whole request is checked first; any problem returns 400 with a list and writes nothing.
+* `GET /api/samples/<key>/qc` (read token) returns the results, newest first. The tube page
+  shows them under **Sequencing QC**.
+
 ## Scanning labels with a camera
 
 **Scan** (menu) opens the device's camera. Point it at the 2D code on a tube
