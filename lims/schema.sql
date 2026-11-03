@@ -163,11 +163,14 @@ CREATE TABLE IF NOT EXISTS data_file (
     pipeline         TEXT,
     pipeline_version TEXT,
     notes            TEXT,
+    registry_id      TEXT,                         -- dataset ID in the data-librarian registry (Slack bot), if any
+    registry_instance TEXT,                        -- which librarian instance, e.g. igi
     recorded_by      TEXT NOT NULL,
     recorded_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     deleted_at       TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_file_sample ON data_file(sample_id);
+CREATE INDEX IF NOT EXISTS idx_file_registry ON data_file(sample_id, registry_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_file_uri ON data_file(uri) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS audit_log (

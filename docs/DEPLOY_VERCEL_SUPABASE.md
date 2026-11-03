@@ -56,6 +56,8 @@ first upload; nothing to do in the Storage tab.
    | `LIMS_SECRET_KEY` | output of `python3 -c 'import secrets;print(secrets.token_hex(32))'` |
    | `LIMS_DEMO_MODE` | `1` |
    | `LIMS_DEMO_PASSWORD` | the password for the three demo accounts; share it with testers yourself, the site never displays it |
+   | `LIMS_API_TOKEN` | optional: read token for scripts and the Slack data librarian (`IGI_LIMS_READ_TOKEN` in the bot's `.env`) |
+   | `LIMS_API_WRITE_TOKEN` | optional: lets the bot link datasets to tubes (`IGI_LIMS_WRITE_TOKEN` in the bot's `.env`); a different value from the read token. Unset = API writes off |
    | `CRON_SECRET` | another `secrets.token_hex(32)` value |
 
 3. **Deploy**. The first build takes two or three minutes (allotropy pulls in

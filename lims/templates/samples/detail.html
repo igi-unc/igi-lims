@@ -147,7 +147,7 @@
 
 <h2>Data files</h2>
 <table class="compact"><thead><tr><th>URI</th><th>Assay · platform</th><th>Run</th><th>Pipeline</th><th></th></tr></thead><tbody>
-{% for f in files %}<tr><td><code class="wrap">{{ f.uri }}</code>{% if f.checksum_md5 %}<br><span class="muted">md5 {{ f.checksum_md5 }}</span>{% endif %}</td><td>{{ f.assay_code or '' }}{% if f.platform_code %} · {{ f.platform_code }}{% endif %}</td><td>{{ f.run_id or '' }}</td><td>{{ f.pipeline or '' }} {{ f.pipeline_version or '' }}</td>
+{% for f in files %}<tr><td><code class="wrap">{{ f.uri }}</code>{% if f.checksum_md5 %}<br><span class="muted">md5 {{ f.checksum_md5 }}</span>{% endif %}{% if f.registry_id %}<br><span class="muted">registry ({{ f.registry_instance or '' }}): <code>{{ f.registry_id }}</code></span>{% endif %}</td><td>{{ f.assay_code or '' }}{% if f.platform_code %} · {{ f.platform_code }}{% endif %}</td><td>{{ f.run_id or '' }}</td><td>{{ f.pipeline or '' }} {{ f.pipeline_version or '' }}</td>
 <td>{% if g.user.role != 'viewer' %}<form class="inline" method="post" action="{{ url_for('samples.delete_file', sample_id=s.sample_id, file_id=f.id) }}" onsubmit="return confirm('Remove this file record?')"><button class="small secondary">remove</button></form>{% endif %}</td></tr>
 {% else %}<tr><td colspan="5" class="muted">No files linked.</td></tr>{% endfor %}
 </tbody></table>

@@ -143,3 +143,11 @@
   documents and drops region tables (cfDNA %, average size, molarity).
 * Project now needs Python 3.10+ (allotropy). The cluster venv uses miniconda's
   3.10.
+* Slack data-librarian integration (2026-11-03, coordinated in the bot repo's CHANNELS.md):
+  `/api/search`, `/api/samples/<key>/registry-fields` and `POST /api/samples/<key>/files`.
+  `<key>` accepts a LIMS number, which is the stable key if v2.2 renames tubes. Registry fields
+  return `null` rather than guess: PB in the AM (leukaemia) cohort is not called normal blood,
+  RSQ is not called poly-A (the enrichment isn't recorded), 10X has no registry platform, DG
+  (canine) has no registry species. The write-back has its own token and is off until
+  `LIMS_API_WRITE_TOKEN` is set. Only fictional data (the Vercel demo) until Steven clears
+  Slack/Anthropic for real IDs.

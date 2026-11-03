@@ -161,10 +161,11 @@ http://127.0.0.1:5000 on the laptop.
 
 Roles: `admin` (everything), `user` (create, derive, edit), `viewer` (read only).
 
-## JSON API (read only)
+## JSON API
 
-Authenticate with a browser session or the `X-Api-Token` header matching
-`LIMS_API_TOKEN` in the environment.
+Reads: authenticate with a browser session or the `X-Api-Token` header matching
+`LIMS_API_TOKEN` in the environment. `/api/pattern` is public (it holds no data).
+Wherever `<key>` appears, it may be a sample ID or a LIMS number (`42` or `000000042`).
 
 | Endpoint | Purpose |
 |---|---|
@@ -177,6 +178,25 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 | `/api/collections/<collection_id>` | collection record, its tree and corrections |
 | `/api/search?q=` | one lookup: sample ID, LIMS number, P number, UNC ID or part of an ID; compact results with page links |
 | `/api/files?assay=&participant=` | data files joined to tubes |
+| `/api/samples/<key>/registry-fields` | prefill for the Slack data librarian, in its own vocabulary (`sample_type`, `analyte`, `platform`, `library_type`, `species`); `null` plus a reason where there is no clean mapping |
+
+### Write-back from the data librarian
+
+`POST /api/samples/<key>/files` records that a registry dataset holds this tube's data, so the
+tube page lists it under Data files. It takes a **separate** token, `LIMS_API_WRITE_TOKEN`
+(header `X-Api-Token`); while that variable is unset, writes are switched off (403). Neither
+the read token nor a browser session can write.
+
+```json
+{"registry_id": "igi_p101_...", "instance": "igi", "paths": ["/proj/.../a.bam"],
+ "accessioned_by": "U0123", "approved_by": "U0456", "assay_code": "WGS", "platform_code": "ONT"}
+```
+
+`assay_code`, `platform_code` and `notes` are optional (codes must be in the LIMS lists). A
+retry is harmless: a path already linked to the same tube and registry ID is reported as
+`already_linked`, not added again (201 if anything was added, 200 if not). A path already
+linked to a different tube is refused (409). Rows are recorded and audited as `bot:<instance>`,
+with the Slack user IDs in the notes and the audit entry.
 
 ## Scanning labels with a camera
 
@@ -288,7 +308,8 @@ uses Postgres instead of SQLite; nothing else changes.
 ```bash
 export LIMS_SECRET_KEY="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
 export LIMS_DATABASE=/var/lib/igi-lims/lims.db
-export LIMS_API_TOKEN="..."            # optional, for pipeline scripts
+export LIMS_API_TOKEN="..."            # optional, for pipeline scripts and the Slack bot (read)
+export LIMS_API_WRITE_TOKEN="..."      # optional, lets the Slack bot link datasets to tubes
 export LIMS_ATTACHMENT_DIR=/mnt/igi-lims-files   # e.g. a gcsfuse mount of the lab bucket
 .venv/bin/flask --app app init-db
 .venv/bin/gunicorn -w 4 -b 127.0.0.1:8000 app:app

@@ -207,6 +207,9 @@ def _migrate(conn):
     """Small in-place migrations for databases created by earlier versions."""
     if _table_exists(conn, "sample") and not _has_column(conn, "sample", "serial"):
         conn.execute("ALTER TABLE sample ADD COLUMN serial INTEGER")
+    for col in ("registry_id", "registry_instance"):
+        if _table_exists(conn, "data_file") and not _has_column(conn, "data_file", col):
+            conn.execute(f"ALTER TABLE data_file ADD COLUMN {col} TEXT")
     if _table_exists(conn, "print_job") and not _has_column(conn, "print_job", "reprint_reason"):
         conn.execute("ALTER TABLE print_job ADD COLUMN reprint_reason TEXT")
     if is_postgres(conn):
@@ -402,6 +405,11 @@ def set_password_command(username, password):
     click.echo(f"Password updated for {username}")
 
 
+# Columns added to existing tables by later versions: their absence makes the first request run init_db,
+# whose _migrate adds them (tables are covered by ALL_TABLES).
+REQUIRED_COLUMNS = [("sample", "serial"), ("print_job", "reprint_reason"), ("data_file", "registry_id")]
+
+
 def _table_exists(conn, table):
     if is_postgres(conn):
         return conn.execute("SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=?", (table,)).fetchone() is not None
@@ -439,6 +447,9 @@ def ensure_schema():
                 app.logger.error("Database is on nomenclature v2. Back it up and rebuild it (flask init-db on an empty file), "
                                  "or run the v2-final tag of the code.")
                 return
+        elif "account" in existing and any(t in existing and not _has_column(conn, t, c) for t, c in REQUIRED_COLUMNS):
+            app.logger.warning("Adding columns introduced by a newer version")
+            init_db(conn)
         elif missing and "account" in existing:
             app.logger.warning("Creating missing tables: %s", ", ".join(missing))
             init_db(conn)
