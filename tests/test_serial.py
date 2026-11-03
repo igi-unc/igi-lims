@@ -105,3 +105,24 @@ def test_existing_tubes_are_numbered_in_creation_order(app, alice):
     assert got[sid("PF", "PFM", "CPU", 3)] == 0 and sorted(got.values()) == [0, 1, 2]
     add_tubes(alice, cid)
     assert _serials(app) == [0, 1, 2, 3]
+
+
+def test_api_search(app, alice, client, monkeypatch):
+    """One lookup endpoint for the Slack bot and scripts: sample ID, LIMS number, P number, UNC ID or partial ID."""
+    cid = new_collection(alice)
+    add_tubes(alice, cid, count="2")
+    t1 = sid("PF", "PFM", "CPU", 1)
+    monkeypatch.setenv("LIMS_API_TOKEN", "bot-read-token")
+    other = app.test_client()
+    assert other.get("/api/search?q=P101").status_code == 401                       # token required
+    assert other.get("/api/search?q=P101", headers={"X-Api-Token": "wrong"}).status_code == 401
+    get = lambda q: other.get(f"/api/search?q={q}", headers={"X-Api-Token": "bot-read-token"}).get_json()
+    j = get(t1)
+    assert j["kind"] == "sample_id" and j["results"][0]["lims_number"] == "000000000" and j["results"][0]["url"].endswith(t1)
+    assert get("1")["results"][0]["sample_id"] == sid("PF", "PFM", "CPU", 2) and get("000000001")["kind"] == "lims_number"
+    p = get("p101")["results"][0]
+    assert p["type"] == "participant" and p["unc_id"] == "UNC316" and p["tubes"] == 2 and p["collections"] == 1
+    assert get("UNC316")["results"][0]["participant_id"] == "P101"
+    part = get("PFM-CPU")
+    assert part["kind"] == "partial" and len(part["results"]) == 2 and not part["truncated"]
+    assert get("NOPE")["results"] == [] and other.get("/api/search", headers={"X-Api-Token": "bot-read-token"}).status_code == 400

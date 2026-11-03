@@ -1,6 +1,8 @@
 """Read-only JSON API for pipeline scripts. Authenticate with a login session or
 the X-Api-Token header (set LIMS_API_TOKEN in the environment)."""
 import os
+import re
+import hmac
 import functools
 from flask import Blueprint, jsonify, request, g, abort, current_app
 
@@ -14,7 +16,8 @@ def api_auth(view):
     @functools.wraps(view)
     def wrapped(**kw):
         token = os.environ.get("LIMS_API_TOKEN")
-        if g.user is None and not (token and request.headers.get("X-Api-Token") == token):
+        given = request.headers.get("X-Api-Token") or ""
+        if g.user is None and not (token and hmac.compare_digest(given.encode(), token.encode())):
             return jsonify({"error": "unauthorised"}), 401
         return view(**kw)
     return wrapped
@@ -125,3 +128,50 @@ def files():
     rows = conn.execute("SELECT f.*, s.participant_id, s.collection_id, s.root_id FROM data_file f JOIN sample s USING(sample_id) WHERE "
                         + " AND ".join(where) + " ORDER BY f.uri", params)
     return jsonify([_row(r) for r in rows])
+
+
+def _tube_hit(r):
+    from ..db import format_serial
+    return {"type": "tube", "sample_id": r["sample_id"], "lims_number": format_serial(r["serial"]),
+            "participant_id": r["participant_id"], "fraction": r["fraction_code"], "material": r["material_code"],
+            "status": r["status"], "deleted": bool(r["deleted_at"]),
+            "url": request.url_root.rstrip("/") + f"/samples/{r['sample_id']}"}
+
+
+def _participant_hit(conn, p):
+    n_tubes = conn.execute("SELECT count(*) FROM sample WHERE participant_id=? AND deleted_at IS NULL",
+                           (p["participant_id"],)).fetchone()[0]
+    n_coll = conn.execute("SELECT count(*) FROM collection WHERE participant_id=? AND deleted_at IS NULL",
+                          (p["participant_id"],)).fetchone()[0]
+    return {"type": "participant", "participant_id": p["participant_id"], "unc_id": f"UNC{p['unc_number']}" if p["unc_number"] else None,
+            "cohort": p["cohort_code"], "collections": n_coll, "tubes": n_tubes,
+            "url": request.url_root.rstrip("/") + f"/participants/{p['participant_id']}"}
+
+
+@bp.route("/search")
+@api_auth
+def search():
+    """One lookup for chat tools and scripts. q may be a full sample ID, a LIMS number (with or without leading
+    zeros), an IGI patient ID (P101), a UNC ID (UNC316), or part of a sample ID (up to 20 tube matches)."""
+    conn = get_db()
+    q = (request.args.get("q") or "").strip().upper()
+    if not q:
+        return jsonify({"error": "q is required"}), 400
+    digits = current_app.config["LIMS_NUMBER_DIGITS"]
+    kind, hits = "none", []
+    row = conn.execute("SELECT * FROM sample WHERE sample_id=?", (q,)).fetchone()
+    if row:
+        kind, hits = "sample_id", [_tube_hit(row)]
+    elif q.isdigit() and len(q) <= digits:
+        row = conn.execute("SELECT * FROM sample WHERE serial=?", (int(q),)).fetchone()
+        kind, hits = "lims_number", [_tube_hit(row)] if row else []
+    elif re.fullmatch(r"P\d{3}", q) or re.fullmatch(r"UNC\d{3}", q):
+        col, val = ("participant_id", q) if q.startswith("P") else ("unc_number", q[3:])
+        p = conn.execute(f"SELECT * FROM participant WHERE {col}=? AND deleted_at IS NULL", (val,)).fetchone()
+        kind, hits = ("participant" if q.startswith("P") else "unc_id"), [_participant_hit(conn, p)] if p else []
+    else:
+        rows = conn.execute("SELECT * FROM sample WHERE sample_id LIKE ? AND deleted_at IS NULL ORDER BY sample_id LIMIT 21",
+                            (f"%{q}%",)).fetchall()
+        kind, hits = "partial", [_tube_hit(r) for r in rows[:20]]
+        return jsonify({"query": q, "kind": kind, "results": hits, "truncated": len(rows) > 20})
+    return jsonify({"query": q, "kind": kind, "results": hits, "truncated": False})

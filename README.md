@@ -175,6 +175,7 @@ Authenticate with a browser session or the `X-Api-Token` header matching
 | `/api/samples/<id>/lineage` | ancestors (first generation first) and all descendants |
 | `/api/tree/<id>` | nested tree of the collection a tube belongs to |
 | `/api/collections/<collection_id>` | collection record, its tree and corrections |
+| `/api/search?q=` | one lookup: sample ID, LIMS number, P number, UNC ID or part of an ID; compact results with page links |
 | `/api/files?assay=&participant=` | data files joined to tubes |
 
 ## Scanning labels with a camera
