@@ -110,8 +110,12 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
         # as tall as fits under the code, and no wider than the column (6 digits of a monospace font, 0.6 em each)
         num_h = min(round(0.09 * dpi), H - 2 * margin - code - module, col / (len(format_serial(serial)) * 0.6))
     cx = margin + module
-    cy = margin + (0 if num_h > 0 else (H - 2 * margin - code) // 2)
-    tx = margin + (n + 2) * module + round(0.015 * dpi)
+    block = code + (module + num_h if num_h > 0 else 0)          # the code and the number under it, as one block
+    cy = margin + (H - 2 * margin - block) // 2                  # centred on the text rows beside it
+    # a thin vertical rule between the code column and the text, with a small gap on each side
+    gap, rule = max(2, round(0.012 * dpi)), max(2, dpi // 150)
+    rx = margin + col + gap
+    tx = rx + rule + gap
     rows = svc.label_rows(sample)
     text = _fit_rows(rows, tx, W - tx - margin, margin, H - 2 * margin, max_font=0.11 * dpi)
     if num_h > 0:
@@ -124,6 +128,7 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
             f'shape-rendering="crispEdges" data-dpi="{dpi}">'
             f'<rect width="{W}" height="{H}" fill="#fff"/>'
             f'<path fill="#000" d="{_modules_path(matrix, cx, cy, module)}"/>'
+            f'<rect x="{rx}" y="{margin}" width="{rule}" height="{H - 2 * margin}" fill="#000"/>'
             f'<g font-family="{_MONO}" font-weight="700" fill="#000" text-rendering="geometricPrecision">{text}</g></svg>')
 
 
