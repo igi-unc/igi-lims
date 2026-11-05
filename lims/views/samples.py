@@ -319,8 +319,11 @@ def label_svg(sample_id):
         abort(404)
     body = labels.label_print_svg(s) if request.args.get("print") else labels.label_svg(s)
     resp = current_app.response_class(body, mimetype="image/svg+xml")
-    resp.headers["Cache-Control"] = "private, max-age=3600"   # the label never changes once the tube exists
-    return resp
+    # The layout can change with a deploy (number width, code size), so browsers - above all the print station -
+    # must revalidate every time; the ETag makes an unchanged label a cheap 304 instead of a fresh download.
+    resp.headers["Cache-Control"] = "private, no-cache"
+    resp.add_etag()
+    return resp.make_conditional(request)
 
 
 @bp.route("/<sample_id>/correct", methods=("POST",))

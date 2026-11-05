@@ -71,3 +71,13 @@ def test_page_preview_is_the_printed_label(app, alice):
     printed = alice.get(f"/samples/{s}/label.svg?print=1").data.decode()
     strip = lambda svg: re.sub(r'<rect x="0.5"[^>]*stroke-dasharray[^>]*/>', "", re.sub(r' role="img" aria-label="[^"]*"', "", svg))
     assert strip(shown) == printed and "stroke-dasharray" in shown
+
+
+def test_label_images_are_revalidated(app, alice):
+    """A deploy can change the layout, so browsers (and the print station) must not reuse an old label image."""
+    make_root(alice, created_by="KEN")
+    s = sid("PF", "PFM", "CPU", op="KEN")
+    r = alice.get(f"/samples/{s}/label.svg?print=1")
+    assert "no-cache" in r.headers["Cache-Control"] and r.headers.get("ETag")
+    again = alice.get(f"/samples/{s}/label.svg?print=1", headers={"If-None-Match": r.headers["ETag"]})
+    assert again.status_code == 304
