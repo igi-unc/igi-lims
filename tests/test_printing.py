@@ -219,3 +219,10 @@ def test_no_header_label_by_default(app, alice, client):
     login(client, "station")
     job = client.post("/print/station/claim").get_json()["job"]
     assert [i["kind"] for i in job["images"]] == ["label", "label"]
+
+
+def test_station_test_print_shows_a_lims_number(app, client):
+    _station(app)
+    login(client, "station")
+    svg = client.get("/print/station/test.svg").data.decode()
+    assert re.findall(r">([^<]+)</text>", svg)[-1] == "999999"

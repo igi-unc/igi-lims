@@ -198,8 +198,12 @@ def align_svg():
 @bp.route("/station/test.svg")
 @station_required
 def test_svg():
-    """A calibration label for the example ID, so alignment can be checked without touching real tubes."""
-    return current_app.response_class(labels.label_print_svg({"sample_id": TEST_ID}), mimetype="image/svg+xml")
+    """A calibration label for the example ID, so alignment can be checked without touching real tubes. It carries
+    a LIMS number like a real label (the last one the LIMS would ever issue, so it is never mistaken for an early
+    tube), so the test shows the full layout."""
+    from ..db import serial_max
+    return current_app.response_class(labels.label_print_svg({"sample_id": TEST_ID, "serial": serial_max()}),
+                                      mimetype="image/svg+xml")
 
 
 @bp.route("/station")
