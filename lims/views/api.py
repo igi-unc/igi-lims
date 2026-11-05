@@ -162,7 +162,7 @@ def search():
     row = conn.execute("SELECT * FROM sample WHERE sample_id=?", (q,)).fetchone()
     if row:
         kind, hits = "sample_id", [_tube_hit(row)]
-    elif q.isdigit() and len(q) <= digits:
+    elif q.isdigit() and len(q.lstrip("0")) <= digits:
         row = conn.execute("SELECT * FROM sample WHERE serial=?", (int(q),)).fetchone()
         kind, hits = "lims_number", [_tube_hit(row)] if row else []
     elif re.fullmatch(r"P\d{3}", q) or re.fullmatch(r"UNC\d{3}", q):
@@ -182,7 +182,7 @@ def search():
 def _resolve_tube(conn, key):
     """A tube by full sample ID or by LIMS number (the stable key across ID-format changes)."""
     key = (key or "").strip().upper()
-    if key.isdigit() and len(key) <= current_app.config["LIMS_NUMBER_DIGITS"]:
+    if key.isdigit() and len(key.lstrip("0")) <= current_app.config["LIMS_NUMBER_DIGITS"]:
         return conn.execute("SELECT * FROM sample WHERE serial=?", (int(key),)).fetchone()
     return conn.execute("SELECT * FROM sample WHERE sample_id=?", (key,)).fetchone()
 

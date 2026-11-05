@@ -12,7 +12,7 @@ def test_label_svg(app, alice, client):
     body = r.data.decode()
     assert body.startswith("<svg") and "<path" in body
     rows = re.findall(r"<text [^>]*>([^<]*)</text>", body)
-    assert rows == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-KEN-26SEP29", "000000000"]   # + LIMS number
+    assert rows == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-KEN-26SEP29", "000000"]   # + LIMS number
     assert "-".join(rows[:3]) == s and all(len(x) <= 18 for x in rows)
     assert alice.get(f"/samples/{s}").data.count(b"label.svg") == 1
     assert alice.get("/samples/IGI-XX-NOPE/label.svg").status_code == 404
@@ -53,8 +53,11 @@ def test_lims_number_never_shrinks_the_code(app):
         return max(ys) - min(ys)
     with app.app_context():
         plain = label_print_svg({"sample_id": sid_, "serial": None})
-        numbered = label_print_svg({"sample_id": sid_, "serial": 123456789})
-    assert code_box(plain) == code_box(numbered) == 100          # 26 modules x 4 dots, top of first to top of last row
+        numbered = label_print_svg({"sample_id": sid_, "serial": 123456})
+        app.config["LABEL_MODULE_DOTS"] = 4
+        bigger = label_print_svg({"sample_id": sid_, "serial": 123456})
+    assert code_box(plain) == code_box(numbered) == 75           # 26 modules x 3 dots, top of first to top of last row
+    assert code_box(bigger) == 100                               # LIMS_LABEL_MODULE_DOTS=4 brings back the old size
     m = re.search(r'<text x="[\d.]+" y="([\d.]+)" font-size="([\d.]+)" textLength="([\d.]+)"[^>]*>(\d+)</text>', numbered)
     y, fs, length, digits = float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4)
-    assert digits == "123456789" and fs >= 18 and length <= 104 + 0.1 and y <= 150 - 10
+    assert digits == "123456" and fs >= 20 and length <= 84 + 0.1 and y <= 150 - 10   # within the code's column

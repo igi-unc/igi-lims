@@ -101,7 +101,7 @@
 {% elif g.user.role in ('admin', 'user') and not s.deleted_at %}<form method="post" action="{{ url_for('printing.create') }}" class="inline">
   <input type="hidden" name="sample_id" value="{{ s.sample_id }}"><input type="hidden" name="next" value="{{ request.path }}">
   <button type="submit" class="secondary small">Send this label to the printer</button>
-  <label class="small"><input type="checkbox" name="header" value="0"> no header label</label>
+  {% if config.PRINT_JOB_HEADER %}<label class="small"><input type="checkbox" name="header" value="0"> no header label</label>{% endif %}
 </form>{% else %}<p class="small muted">Label not printed yet.</p>{% endif %}
 {% if label_prints %}<details><summary class="small">Label print history ({{ label_prints|length }})</summary><table class="compact small"><thead><tr><th>Printed</th><th>Job</th><th>Station</th><th>Reprint reason</th></tr></thead><tbody>
 {% for lp in label_prints %}<tr class="{% if lp.reprint_reason %}flag{% endif %}"><td>{{ lp.printed_at }}</td><td>#{{ lp.job_id }}</td><td>{{ lp.station or '' }}</td><td>{{ lp.reprint_reason or '' }}</td></tr>{% endfor %}

@@ -92,14 +92,15 @@ http://127.0.0.1:5000 on the laptop.
   collection_id, so "all tubes from this collection" is one query. A collection
   with no tubes can be deleted.
 * **Operators** are account initials: 2 or 3 uppercase letters, unique.
-* **LIMS numbers.** Every tube also gets a nine-digit number, 000000000 to
-  999999999 (`LIMS_NUMBER_DIGITS`), issued by the LIMS when it is registered and printed under the 2D
+* **LIMS numbers.** Every tube also gets a six-digit number, 000000 to
+  999999 (`LIMS_NUMBER_DIGITS`), issued by the LIMS when it is registered and printed under the 2D
   code on its label (the code itself still holds only the sample ID). Numbers
   come from a counter in the database: assigning them updates the counter
   first, which takes the database's write lock, so simultaneous registrations
   queue up and can never share a number; a refused or failed registration
   gives its numbers back, so there are no gaps. A unique index on the column is
-  the second safeguard, and the LIMS refuses to go past 999999999. Tubes that
+  the second safeguard, and the LIMS refuses to go past 999999. Lookups ignore
+  extra leading zeros, so labels printed while numbers had nine digits still scan. Tubes that
   existed before numbering were numbered in the order they were created. Type
   a number (with or without leading zeros) in the search box to open its tube.
 * **Code lists** (cohort, specimen, fraction, material, status, assay, biobank
@@ -171,7 +172,7 @@ Roles: `admin` (everything), `user` (create, derive, edit), `viewer` (read only)
 
 Reads: authenticate with a browser session or the `X-Api-Token` header matching
 `LIMS_API_TOKEN` in the environment. `/api/pattern` is public (it holds no data).
-Wherever `<key>` appears, it may be a sample ID or a LIMS number (`42` or `000000042`).
+Wherever `<key>` appears, it may be a sample ID or a LIMS number (`42` or `000042`).
 
 | Endpoint | Purpose |
 |---|---|
@@ -300,9 +301,10 @@ computer:
      pinned in `BRADY_SDK_URL`) over Web Bluetooth, in Chrome or Edge on a
      computer or Android tablet. Click **Connect printer** once per page load.
      iPads cannot do this in Safari or Chrome.
-   Each job prints a header label ("PRINT JOB #12 / FOR JD / 6 LABELS FOLLOW";
-   on by default, skippable per job from the tube page) and one label per
-   tube, in aliquot order. *Test print* prints the nomenclature's example ID.
+   Each job prints one label per tube, in aliquot order. A header label before
+   each job ("PRINT JOB #12 / FOR JD / 6 LABELS FOLLOW") is off by default;
+   set `LIMS_PRINT_JOB_HEADER=1` to bring it back (it can then be skipped per
+   job from the tube page). *Test print* prints the nomenclature's example ID.
 
 Labels are drawn for the stock in `LABEL_STOCK` (default M6-17-492,
 1.0 x 0.5 in, 300 dpi; override with `LIMS_LABEL_PART`, `LIMS_LABEL_WIDTH_IN`,

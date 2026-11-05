@@ -272,7 +272,7 @@ def _lock_down_postgres(conn):
 
 
 def serial_digits():
-    return int(current_app.config.get("LIMS_NUMBER_DIGITS", 9))
+    return int(current_app.config.get("LIMS_NUMBER_DIGITS", 6))
 
 
 def serial_max():

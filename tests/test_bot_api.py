@@ -19,7 +19,7 @@ def test_registry_fields(app, alice, monkeypatch):
     c = app.test_client()
     assert c.get(f"/api/samples/{dna}/registry-fields").status_code == 401
     j = c.get(f"/api/samples/{dna}/registry-fields", headers=READ).get_json()
-    assert j["lims_number"] == "000000001" and j["participant_id"] == "P101" and j["exists"] and not j["deleted"]
+    assert j["lims_number"] == "000001" and j["participant_id"] == "P101" and j["exists"] and not j["deleted"]
     assert j["fields"] == {"sample_type": "tumor", "analyte": "dna", "platform": None, "library_type": None, "species": "human"}
     assert set(j["unmapped_reasons"]) == {"platform", "library_type"}
     # by LIMS number, with or without zeros, gives the same answer

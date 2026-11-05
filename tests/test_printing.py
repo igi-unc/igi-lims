@@ -15,6 +15,7 @@ def _station(app):
 
 def test_queue_claim_and_finish(app, alice, client):
     _station(app)
+    app.config["PRINT_JOB_HEADER"] = True              # the optional separator label (off by default)
     cid = new_collection(alice)
     r = add_tubes(alice, cid, count="3")
     tubes = [sid("PF", "PFM", "CPU", i) for i in (1, 2, 3)]
@@ -38,7 +39,7 @@ def test_queue_claim_and_finish(app, alice, client):
     # it can fetch exactly the images it prints
     svg = client.get(job["images"][1]["url"]).data.decode()
     assert 'width="300" height="150"' in svg and "<path" in svg
-    assert re.findall(r">([^<]+)</text>", svg) == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-AA-26SEP29", "000000000"]
+    assert re.findall(r">([^<]+)</text>", svg) == ["IGI-MP-P101-UNC316", "26SEP29-PF-PFM-CPU", "01-AA-26SEP29", "000000"]
     assert "PRINT JOB #1" in client.get(job["images"][0]["url"]).data.decode()
     # the wrong token is refused; the right one finishes the job
     assert client.post("/print/station/1/done", json={"token": "nope", "ok": True}).status_code == 409
@@ -54,7 +55,7 @@ def test_queue_claim_and_finish(app, alice, client):
     login(client, "alice")
     csv_text = client.get("/print/jobs/1.csv").data.decode().splitlines()
     assert csv_text[0] == "barcode,line1,line2,line3,number"
-    assert csv_text[1] == f"{tubes[0]},IGI-MP-P101-UNC316,26SEP29-PF-PFM-CPU,01-AA-26SEP29,000000000" and len(csv_text) == 4
+    assert csv_text[1] == f"{tubes[0]},IGI-MP-P101-UNC316,26SEP29-PF-PFM-CPU,01-AA-26SEP29,000000" and len(csv_text) == 4
     # the requester can requeue the failed job
     login(client, "alice")
     r = client.post("/print/jobs/2/requeue", follow_redirects=True)
@@ -205,3 +206,16 @@ def test_upgrade_from_first_printing_release(app, alice):
     assert b"Sent 1 label(s)" in r.data
     with app.app_context():
         assert get_db().execute("SELECT count(*) FROM label_print").fetchone()[0] == 0
+
+
+def test_no_header_label_by_default(app, alice, client):
+    _station(app)
+    assert app.config["PRINT_JOB_HEADER"] is False
+    cid = new_collection(alice)
+    add_tubes(alice, cid, count="2")
+    tubes = [sid("PF", "PFM", "CPU", i) for i in (1, 2)]
+    assert b"no header label" not in alice.get(f"/samples/{tubes[0]}").data
+    alice.post("/print/jobs", data={"sample_id": tubes})
+    login(client, "station")
+    job = client.post("/print/station/claim").get_json()["job"]
+    assert [i["kind"] for i in job["images"]] == ["label", "label"]

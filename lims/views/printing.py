@@ -41,10 +41,12 @@ def printed_ids(conn, sample_ids):
     return out
 
 
-def queue_job(conn, sample_ids, header=True, reprint_reason=None):
+def queue_job(conn, sample_ids, header=None, reprint_reason=None):
     """Queue labels for these tubes (in this order). Returns the job id. Raises ValueError.
     Each tube's label is printed once: a tube that already has a printed label needs a reprint reason, and a tube
     already waiting in the queue cannot be queued twice."""
+    if header is None:
+        header = current_app.config["PRINT_JOB_HEADER"]
     seen, ids = set(), []
     for sid in sample_ids:
         sid = (sid or "").strip().upper()
@@ -88,7 +90,7 @@ def queue_job(conn, sample_ids, header=True, reprint_reason=None):
 def create():
     conn = get_db()
     try:
-        jid = queue_job(conn, request.form.getlist("sample_id"), header=request.form.get("header", "1") == "1",
+        jid = queue_job(conn, request.form.getlist("sample_id"), header=None if current_app.config["PRINT_JOB_HEADER"] and request.form.get("header") != "0" else False,
                         reprint_reason=request.form.get("reprint_reason"))
         conn.commit()
         n = conn.execute("SELECT n_labels FROM print_job WHERE id=?", (jid,)).fetchone()[0]

@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Print station · IGI LIMS{% endblock %}{% block content %}
 <div class="no-print">
 <h1>Print station</h1>
-<p class="muted">Keep this page open on the computer next to the label printer. It prints queued labels in order, each job after a header label naming who asked for it.</p>
+<p class="muted">Keep this page open on the computer next to the label printer. It prints queued labels in order{% if config.PRINT_JOB_HEADER %}, each job after a header label naming who asked for it{% endif %}.</p>
 <div class="cols">
 <div class="card">
   <h2>Printer</h2>

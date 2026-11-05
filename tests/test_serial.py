@@ -1,4 +1,4 @@
-"""LIMS numbers: 000000000-999999999 (9 digits), issued by the LIMS at registration, unique, assigned under a lock."""
+"""LIMS numbers: 000000-999999 (6 digits), issued by the LIMS at registration, unique, assigned under a lock."""
 import threading
 from flask import g
 from lims.db import get_db
@@ -25,14 +25,14 @@ def test_numbers_start_at_zero_and_are_consecutive(app, alice):
     assert _serials(app) == [0, 1, 2, 3, 4, 5]
     # shown on the tube page and the list, found by the search box with or without zeros
     page = alice.get(f"/samples/{sid('PF', 'PFM', 'CPU', 1)}").data.decode()
-    assert "No. 000000000" in page and "LIMS number" in page
-    assert "<code>000000004</code>" in alice.get("/samples/").data.decode()
-    for q in ("000000004", "0000004", "4"):
+    assert "No. 000000" in page and "LIMS number" in page
+    assert "<code>000004</code>" in alice.get("/samples/").data.decode()
+    for q in ("000004", "0004", "4", "000000004"):   # extra leading zeros (labels printed while numbers had 9 digits) still work
         assert alice.get(f"/go?q={q}").headers["Location"].endswith(sid("PF", "TUM", "CPU", 2))
     # the API gives the padded form too
-    assert alice.get(f"/api/samples/{sid('PF', 'PFM', 'CPU', 1)}").get_json()["sample"]["lims_number"] == "000000000"
-    # printed under the 2D code, nine digits
-    assert ">000000000</text>" in alice.get(f"/samples/{sid('PF', 'PFM', 'CPU', 1)}/label.svg?print=1").data.decode()
+    assert alice.get(f"/api/samples/{sid('PF', 'PFM', 'CPU', 1)}").get_json()["sample"]["lims_number"] == "000000"
+    # printed under the 2D code, six digits
+    assert ">000000</text>" in alice.get(f"/samples/{sid('PF', 'PFM', 'CPU', 1)}/label.svg?print=1").data.decode()
 
 
 def test_concurrent_registrations_never_share_a_number(app, alice):
@@ -69,20 +69,20 @@ def test_ceiling_and_unique_backstop(app, alice):
     cid = new_collection(alice)
     with app.app_context():
         conn = get_db()
-        conn.execute("UPDATE id_counter SET value=999999998 WHERE name='sample_serial'")
+        conn.execute("UPDATE id_counter SET value=999998 WHERE name='sample_serial'")
         conn.commit()
     add_tubes(alice, cid)
-    assert _serials(app) == [999999999]
+    assert _serials(app) == [999999]
     r = add_tubes(alice, cid)
-    assert b"LIMS numbers are exhausted" in r.data and _serials(app) == [999999999]
+    assert b"LIMS numbers are exhausted" in r.data and _serials(app) == [999999]
     # the database itself refuses a duplicate even if code went wrong
     with app.app_context():
         conn = get_db()
         try:
-            conn.execute("UPDATE sample SET serial=999999999 WHERE serial IS NULL OR serial<>999999999")
+            conn.execute("UPDATE sample SET serial=999999 WHERE serial IS NULL OR serial<>999999")
             conn.execute("INSERT INTO sample(sample_id, serial, project_code, cohort_code, participant_id, unc_id, received_date, "
                          "specimen_code, fraction_code, material_code, aliquot, processing_date, collection_id, root_id) "
-                         "SELECT 'X', 999999999, project_code, cohort_code, participant_id, unc_id, received_date, specimen_code, "
+                         "SELECT 'X', 999999, project_code, cohort_code, participant_id, unc_id, received_date, specimen_code, "
                          "fraction_code, material_code, 99, processing_date, collection_id, root_id FROM sample")
             assert False, "duplicate number accepted"
         except Exception as e:
@@ -118,8 +118,8 @@ def test_api_search(app, alice, client, monkeypatch):
     assert other.get("/api/search?q=P101", headers={"X-Api-Token": "wrong"}).status_code == 401
     get = lambda q: other.get(f"/api/search?q={q}", headers={"X-Api-Token": "bot-read-token"}).get_json()
     j = get(t1)
-    assert j["kind"] == "sample_id" and j["results"][0]["lims_number"] == "000000000" and j["results"][0]["url"].endswith(t1)
-    assert get("1")["results"][0]["sample_id"] == sid("PF", "PFM", "CPU", 2) and get("000000001")["kind"] == "lims_number"
+    assert j["kind"] == "sample_id" and j["results"][0]["lims_number"] == "000000" and j["results"][0]["url"].endswith(t1)
+    assert get("1")["results"][0]["sample_id"] == sid("PF", "PFM", "CPU", 2) and get("000001")["kind"] == "lims_number"
     p = get("p101")["results"][0]
     assert p["type"] == "participant" and p["unc_id"] == "UNC316" and p["tubes"] == 2 and p["collections"] == 1
     assert get("UNC316")["results"][0]["participant_id"] == "P101"

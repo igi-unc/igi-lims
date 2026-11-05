@@ -85,7 +85,7 @@
   processing date in the ID. Corrections never rewrite the stored value, so
   lists, searches and trees still show what was printed; the tube page and the
   API show the corrected value beside it.
-* LIMS numbers (2026-10-30, Steven's request): `sample.serial`, 0-999999999 (9 digits since 2026-10-31; was 7),
+* LIMS numbers (2026-10-30, Steven's request): `sample.serial`, 0-999999 (6 digits since 2026-11-05; 9 from 2026-10-31, 7 before),
   issued from `id_counter` ('sample_serial') with UPDATE-then-SELECT inside the
   registration transaction (row/write lock; rollback returns the numbers),
   unique index as backstop; printed under the Data Matrix (module size
@@ -156,3 +156,9 @@
   is not written yet, so the table has typed columns only for metrics every platform shares and a
   JSON field for the rest; pass/warn/fail is decided by the workflow, not the LIMS. A computed md5
   fills an empty checksum but never overwrites one (a mismatch is flagged instead).
+* Labels (2026-11-05, after printer testing): the job header label is off
+  (`LIMS_PRINT_JOB_HEADER=1` restores it), and the Data Matrix module went from
+  4 to 3 printer dots (0.34 -> 0.25 mm; `LIMS_LABEL_MODULE_DOTS`), which gives the
+  text about 17% more width. The code still holds the full sample ID. Encoding
+  only the LIMS number would shrink it to 10x10 modules, but needs Steven's
+  decision: a camera without the LIMS would then read only a number.

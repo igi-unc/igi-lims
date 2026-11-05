@@ -100,11 +100,15 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
     serial = sample["serial"] if "serial" in sample.keys() else None
     # The code's module size is fixed first, exactly as without a number (one-module quiet zone each side); the
     # LIMS number then takes whatever height is left under the code, so adding it never shrinks the code.
-    module = max(2, (H - 2 * margin) // (n + 2))
+    from flask import current_app
+    wanted = current_app.config.get("LABEL_MODULE_DOTS", 3) if current_app else 3
+    module = max(2, min(wanted, (H - 2 * margin) // (n + 2)))
     code = n * module
+    col = (n + 2) * module                     # left column: the code and its quiet zone
     num_h = 0
     if serial is not None:
-        num_h = min(round(0.073 * dpi), H - 2 * margin - code - module)   # band below the code, after a 1-module gap
+        # as tall as fits under the code, and no wider than the column (6 digits of a monospace font, 0.6 em each)
+        num_h = min(round(0.09 * dpi), H - 2 * margin - code - module, col / (len(format_serial(serial)) * 0.6))
     cx = margin + module
     cy = margin + (0 if num_h > 0 else (H - 2 * margin - code) // 2)
     tx = margin + (n + 2) * module + round(0.015 * dpi)
@@ -113,8 +117,8 @@ def label_print_svg(sample, width_in=None, height_in=None, dpi=None):
     if num_h > 0:
         fs = num_h
         digits = format_serial(serial)
-        length = min(len(digits) * fs * 0.6, code)
-        text += (f'<text x="{cx:.1f}" y="{cy + code + module + fs * 0.8:.1f}" font-size="{fs:.1f}" '
+        length = min(len(digits) * fs * 0.6, col)
+        text += (f'<text x="{margin:.1f}" y="{cy + code + module + fs * 0.8:.1f}" font-size="{fs:.1f}" '
                  f'textLength="{length:.1f}" lengthAdjust="spacingAndGlyphs">{digits}</text>')
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
             f'shape-rendering="crispEdges" data-dpi="{dpi}">'
