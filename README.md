@@ -235,6 +235,30 @@ that row, so a scraper can safely run twice; a new run adds rows beside the old 
 * The whole request is checked first; any problem returns 400 with a list and writes nothing.
 * `GET /api/samples/<key>/qc` (read token) returns the results, newest first. The tube page
   shows them under **Sequencing QC**.
+* **quick-qc libraries and checks.** Give each result a `library` (quick-qc's `Run_Name`) and a
+  `path` (any one of that library's files, so the result inherits its assay and platform);
+  several libraries per tube are fine. `checks` is a list of
+  `{"check": "reads.coverage", "status": "PASS|WARN|FAIL|NA", "observed", "expected", "reason"}`,
+  one per quick-qc check; `qc_status` also accepts PASS/WARN/FAIL/NA. Put every field of the
+  library's `*.metrics.json` in `metrics`: unknown names are kept and can be charted.
+
+**Sequencing QC** (menu) charts the results across libraries: verdicts per check, the
+distribution of any numeric metric by assay / platform / participant / cohort, a scatter of
+any two metrics, and a worst-first table. Filters narrow by participant, cohort, assay,
+platform and workflow; points link to the tube. The page draws plain SVG (no chart library)
+and reads `/seq-qc/data.json`. The demo has fictional quick-qc results ("demo values").
+
+## Scanning kit and reagent boxes
+
+On the registration forms (**Add tubes**, **Derive**), **Scan kit / reagent** reads a kit or
+reagent box with the camera, a USB scanner or typed text, and fills the metadata below:
+the kit (`kit`, `extraction_kit`, `ip_antibody`, `dissociation_method`; set in
+`REAGENT_FIELDS`) and its lot. GS1 codes, the usual Data Matrix on reagent boxes, give the
+product number (GTIN), lot and expiry; an expired box is flagged. The first scan of a
+product asks which list entry it is and remembers it (**Codes › Reagent barcodes**,
+`/reagents/`); a lot that is not in its list yet can be added from the scan. Nothing is
+saved until the tubes are registered. The demo has four fictional test codes on
+`/reagents/`.
 
 ## Scanning labels with a camera
 

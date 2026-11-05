@@ -124,6 +124,7 @@ tr.flag td:first-child { border-left: 3px solid var(--warn); }
 #sq-table table { min-width:640px; }
 
 /* reagent scan on registration forms */
+.rg-bar[hidden] { display:none; }
 .rg-bar { display:flex; align-items:center; gap:10px; margin:8px 0 0; }
 .rg-dialog { max-width:520px; width:calc(100% - 32px); border:1px solid var(--line); border-radius:10px; padding:16px; }
 .rg-dialog::backdrop { background:rgba(15,23,42,.45); }

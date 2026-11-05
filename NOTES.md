@@ -162,3 +162,12 @@
   text about 17% more width. The code still holds the full sample ID. Encoding
   only the LIMS number would shrink it to 10x10 modules, but needs Steven's
   decision: a camera without the LIMS would then read only a number.
+* Sequencing QC charts and quick-qc (2026-11-05): per-check verdicts in `seq_qc_check`,
+  `seq_qc.library_name` (several libraries per tube), page /seq-qc/ (plain SVG, no CDN).
+  Built from the quick-qc output description (`~/quick-qc-outputs.md`), no real outputs yet:
+  metric names are not hard-coded, so whatever `metrics.json` holds can be charted. The
+  scraper (bot side) maps quick-qc tables to the POST body.
+* Reagent scanning (2026-11-05): GS1 parser `lims/gs1.py`; products learned in
+  `reagent_barcode`; writers may add lot entries from a scan (audited). Interpreted "an
+  assay's data matrix" as the kit/reagent box code; say if something else was meant (e.g. a
+  plate or instrument code).

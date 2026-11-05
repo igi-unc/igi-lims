@@ -76,7 +76,7 @@
   function render(r) {
     const filled = [];
     r.matches.forEach(m => { if (choose(m.field, m.code, m.meaning)) filled.push(`${labelOf(m.field)} = ${m.code}`); });
-    let html = `<p class="small">Scanned <code class="wrap">${esc(r.raw)}</code>${r.gs1 ? "" : " <span class=\\"muted\\">(not a GS1 code)</span>"}</p>`;
+    let html = `<p class="small">Scanned <code class="wrap">${esc(r.raw)}</code>${r.gs1 ? "" : ' <span class="muted">(not a GS1 code)</span>'}</p>`;
     if (r.gs1) html += `<p class="small">Product <code>${esc(r.product_key || "–")}</code>` + (r.lot ? ` · lot <code>${esc(r.lot)}</code>` : "") +
                        (r.expiry ? ` · expires ${esc(r.expiry)}` : "") + (r.gtin_valid === false ? ` <span class="error">(check digit wrong)</span>` : "") + `</p>`;
     if (r.expired) html += `<p class="flash warn">This box expired on ${esc(r.expiry)}. Check before using it.</p>`;
@@ -94,7 +94,7 @@
     }
     if (filled.length) html += `<p class="flash ok">Filled: ${filled.map(esc).join(", ")}.</p>`;
     out.innerHTML = html;
-    $("rg-msg").textContent = filled.length ? "Filled from the scan: " + filled.join(", ") + "." : "";
+    if (filled.length) $("rg-msg").textContent = "Filled from the scan: " + filled.join(", ") + ".";
     status(filled.length ? "Done. Scan another box or close." : "Scanned.");
     const fsel = $("rg-field");
     if (fsel) {
