@@ -61,3 +61,13 @@ def test_lims_number_never_shrinks_the_code(app):
     m = re.search(r'<text x="[\d.]+" y="([\d.]+)" font-size="([\d.]+)" textLength="([\d.]+)"[^>]*>(\d+)</text>', numbered)
     y, fs, length, digits = float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4)
     assert digits == "123456" and fs >= 20 and length <= 84 + 0.1 and y <= 150 - 10   # within the code's column
+
+
+def test_page_preview_is_the_printed_label(app, alice):
+    """The label shown on the tube page and in the tree is the print layout itself, plus a dashed outline."""
+    make_root(alice, created_by="KEN")
+    s = sid("PF", "PFM", "CPU", op="KEN")
+    shown = alice.get(f"/samples/{s}/label.svg").data.decode()
+    printed = alice.get(f"/samples/{s}/label.svg?print=1").data.decode()
+    strip = lambda svg: re.sub(r'<rect x="0.5"[^>]*stroke-dasharray[^>]*/>', "", re.sub(r' role="img" aria-label="[^"]*"', "", svg))
+    assert strip(shown) == printed and "stroke-dasharray" in shown

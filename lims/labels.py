@@ -4,6 +4,7 @@ This is a preview of what the printer should produce, drawn as SVG so it is cris
 Data Matrix is the usual 2D code on cryotube labels; any phone or lab scanner that reads QR
 codes generally reads it too. The barcode encodes exactly the sample ID, nothing else.
 """
+import re
 from xml.sax.saxutils import escape
 
 from ppf.datamatrix import DataMatrix
@@ -34,30 +35,14 @@ def _modules_path(matrix, x0, y0, size):
 
 
 def label_svg(sample):
-    """SVG of the whole label: barcode on the left, text rows on the right."""
-    rows = svc.label_rows(sample)
-    matrix = barcode_matrix(sample["sample_id"])
-    module = 3                                  # px per module in the preview
-    quiet = 2 * module                          # quiet zone around the symbol
-    code = len(matrix) * module
-    font, line = 13, 17
-    serial = sample["serial"] if "serial" in sample.keys() else None
-    num_h = 14 if serial is not None else 0
-    text_x = quiet * 2 + code + 8
-    text_w = max(len(r) for r in rows) * font * 0.62
-    width = int(text_x + text_w + 10)
-    height = int(max(code + 2 * quiet + num_h, len(rows) * line + 12))
-    code_y = (height - code - num_h) / 2
-    text_y0 = (height - len(rows) * line) / 2 + font
-    texts = "".join(f'<text x="{text_x:g}" y="{text_y0 + i * line:g}">{escape(r)}</text>' for i, r in enumerate(rows))
-    if serial is not None:
-        texts += (f'<text x="{quiet * 1.5 + code / 2:g}" y="{code_y + code + num_h - 1:g}" text-anchor="middle" '
-                  f'font-weight="700">{format_serial(serial)}</text>')
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
-            f'role="img" aria-label="Label for {escape(sample["sample_id"])}">'
-            f'<rect x="0.5" y="0.5" width="{width - 1}" height="{height - 1}" rx="6" fill="#fff" stroke="#9aa3ad" stroke-dasharray="4 3"/>'
-            f'<path fill="#000" d="{_modules_path(matrix, quiet * 1.5, code_y, module)}"/>'
-            f'<g font-family="ui-monospace, Menlo, Consolas, monospace" font-size="{font}" fill="#000">{texts}</g></svg>')
+    """On-screen preview: exactly the printed label (label_print_svg), with a dashed outline for the label's edge."""
+    svg = label_print_svg(sample)
+    m = re.search(r'width="(\d+)" height="(\d+)"', svg)
+    w, h = int(m.group(1)), int(m.group(2))
+    outline = (f'<rect x="0.5" y="0.5" width="{w - 1}" height="{h - 1}" rx="{h // 20}" fill="none" stroke="#9aa3ad" '
+               f'stroke-width="1.5" stroke-dasharray="6 4"/>')
+    svg = svg.replace("<svg ", f'<svg role="img" aria-label="Label for {escape(sample["sample_id"])}" ', 1)
+    return svg[:-len("</svg>")] + outline + "</svg>"
 
 
 # ------------------------------------------------------------------ print layout (exact label stock size)
