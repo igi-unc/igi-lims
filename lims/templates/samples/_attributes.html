@@ -1,5 +1,22 @@
 {# Dynamic metadata fields for create forms. Needs attr_defs_json and p (payload with optional p.attributes). #}
+<div class="wide rg-bar" id="rg-bar" hidden>
+  <button type="button" class="secondary small" id="rg-open">Scan kit / reagent</button>
+  <span class="small muted" id="rg-msg">Scan a kit or reagent box to fill its kit and lot below.</span>
+</div>
 <div class="wide" id="attr-fields"></div>
+<dialog id="rg-dialog" class="rg-dialog" aria-labelledby="rg-title">
+  <h3 id="rg-title">Scan kit / reagent</h3>
+  <video id="rg-video" playsinline muted></video>
+  <p id="rg-status" class="small muted">Starting the camera…</p>
+  <label class="small">Or scan with a USB scanner / type the code
+    <input type="text" id="rg-text" autocomplete="off" placeholder="(01)…(17)…(10)… or the raw code"></label>
+  <div id="rg-result"></div>
+  <p><button type="button" class="secondary small" id="rg-close">Close</button>
+     <a class="small" href="{{ url_for('reagents.index') }}" target="_blank">known products</a></p>
+</dialog>
+<script>window.RGSCAN = {fields: {{ config.REAGENT_FIELDS|tojson }}, readerUrl: {{ config.BARCODE_READER_URL|tojson }},
+  lookup: {{ url_for('reagents.lookup')|tojson }}, remember: {{ url_for('reagents.remember')|tojson }}, lot: {{ url_for('reagents.add_lot')|tojson }}};</script>
+<script src="{{ url_for('static', filename='reagentscan.js') }}" defer></script>
 <script>
 (function () {
   const DEFS = {{ attr_defs_json|safe }};
@@ -34,6 +51,7 @@
     const add = arr => (arr || []).forEach(d => { if (!seen.has(d.key)) { seen.add(d.key); list.push(d); } });
     add(fr ? DEFS.fraction[fr.value] : null); add(mat ? DEFS.material[mat.value] : null); add(DEFS.all);
     box.innerHTML = list.length ? `<h3>Metadata for ${esc(fr ? fr.value : "")}-${esc(mat ? mat.value : "")}</h3><div class="grid">` + list.map(field).join("") + `</div>` : "";
+    box.dispatchEvent(new CustomEvent("attrs-rendered", {bubbles: true}));
   }
   if (fr) fr.addEventListener("change", render); if (mat) mat.addEventListener("change", render);
   render();

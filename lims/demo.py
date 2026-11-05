@@ -460,6 +460,139 @@ def seed_synthetic_participants(conn, username):
     return out
 
 
+# Fictional reagent boxes for trying "Scan kit / reagent" on the demo. GTINs use GS1's restricted-circulation prefix
+# 02 (never a real product). (gtin, field, code it is known as or None = not learned yet, lot, expiry YYMMDD, label)
+DEMO_REAGENTS = [
+    ("02000000100012", "kit", "EPCAM_MACS", "E2611A", "271130", "EpCAM MicroBeads (known product, new lot)"),
+    ("02000000100029", "extraction_kit", "DNEASY", "LOT-DN2206", "270630", "DNeasy kit (known product and lot)"),
+    ("02000000100036", "extraction_kit", "RNEASY", "7A099", "260131", "RNeasy kit (expired)"),
+    ("02000000100043", None, None, "CF1104", "280228", "ccfDNA kit (not learned yet)"),
+]
+
+
+def seed_demo_reagents(conn, username):
+    from . import audit
+    for gtin, field, code, *_ in DEMO_REAGENTS:
+        if field and code:
+            cur = conn.execute("INSERT OR IGNORE INTO reagent_barcode(product_key, field_key, code, created_by) VALUES (?,?,?,?)",
+                               (gtin, field, code, username))
+            if cur.rowcount:
+                audit.log(conn, "reagent_barcode", cur.lastrowid, "insert", after={"product_key": gtin, "field": field, "code": code})
+
+
+# Fictional quick-qc results so the Sequencing QC page has something to show on the demo. Values are invented
+# (seeded, so every reset gives the same numbers) and marked "demo values" in the workflow version.
+QC_CHECKS_ALL = ["inputs.resolved", "inputs.integrity", "inputs.mate_names", "reads.depth", "reads.quality", "species",
+                 "assay.molecule", "assay.capture", "assay.receptor", "reads.type", "reads.platform", "singlecell.barcodes",
+                 "singlecell.chemistry", "manifest.consistency", "identity.patient", "identity.cross_patient", "identity.sex",
+                 "identity.contamination", "identity.tumor_normal", "reads.coverage", "reads.duplication"]
+# (participant, library) -> (check, status, observed, expected, reason): the few results that are not clean
+_QC_SURPRISES = {
+    ("P106", "ad-wgs-tumor"): ("reads.coverage", "warn", "14.2x", ">= 20x", "projected mean depth below the WGS warn threshold"),
+    ("P106", "nd-wes-normal"): ("identity.contamination", "warn", "3.1%", "< 2%", "other-allele reads at homozygous sites"),
+    ("P106", "nd-ont-wgs-normal"): ("identity.tumor_normal", "fail", "imbalance on 3 arms", "declared normal: none",
+                                     "declared normal shows tumour-like allele imbalance; likely swap partner ad-ont-wgs-tumor"),
+    ("P105", "ar-ont-sc-rna"): ("singlecell.barcodes", "warn", "61% on whitelist", ">= 70%", "low 10x barcode rate"),
+    ("P101", "rnaseq"): ("reads.duplication", "warn", "47%", "< 40%", "information only for RNA"),
+}
+
+
+def _qc_values(rng, assay, platform, normal):
+    """Plausible-looking invented metrics for one library."""
+    u = rng.uniform
+    m, x = {}, {}
+    if platform in ("ILM", "10X"):
+        reads = {"WGS": u(6e8, 9e8), "WES": u(8e7, 1.2e8), "RSQ": u(4e7, 7e7), "SCR": u(2e8, 4e8), "VDJ": u(2e7, 4e7)}.get(assay, u(5e7, 1e8))
+        m.update(total_reads=int(reads), mean_read_length=round(u(146, 150), 1), mean_quality=round(u(34.5, 36.8), 1),
+                 pct_q30=round(u(88, 94.5), 1), pct_gc=round(u(40, 44) if assay != "RSQ" else u(46, 51), 1))
+        m["total_bases"] = int(reads * m["mean_read_length"])
+        x["q20_frac"] = round(u(0.95, 0.985), 3)
+        if assay in ("WGS", "WES", "RSQ"):
+            m["pct_duplication"] = round({"WGS": u(7, 15), "WES": u(10, 24), "RSQ": u(28, 39)}[assay], 1)
+    elif platform == "ONT":
+        reads = u(4e6, 9e6) if assay == "WGS" else u(1e7, 2.2e7)
+        rl = u(8000, 15000) if assay == "WGS" else u(700, 1400)
+        m.update(total_reads=int(reads), mean_read_length=round(rl), read_n50=round(rl * u(1.6, 2.1)), mean_quality=round(u(15, 19.5), 1))
+        m["total_bases"] = int(reads * rl)
+    elif platform == "PAC":
+        reads = u(1.8e6, 3.5e6) if assay == "WGS" else u(2e7, 5e7)
+        rl = u(14000, 19000) if assay == "WGS" else u(1500, 3000)
+        m.update(total_reads=int(reads), mean_read_length=round(rl), read_n50=round(rl * u(1.05, 1.2)), mean_quality=round(u(30, 34), 1))
+        m["total_bases"] = int(reads * rl)
+    if assay == "WGS":
+        m["mean_coverage"] = round(m["total_bases"] / 3.1e9 * u(0.85, 0.95), 1)
+    if assay == "WES":
+        m["mean_coverage"] = round(u(120, 185) if platform == "ILM" else u(60, 90), 1)
+        m["pct_target_20x"] = round(u(95, 98.5), 1)
+    x["species_human_frac"] = round(u(0.985, 0.999), 4)
+    x["intron_frac"] = round(u(0.22, 0.4) if assay in ("RSQ", "SCR") else u(0.005, 0.02), 3)
+    x["exome_frac"] = round(u(0.6, 0.76) if assay == "WES" else u(0.015, 0.03), 3)
+    if assay in ("WGS", "WES"):
+        x["contamination_pct"] = round(u(0.05, 0.9), 2)
+    return m, x
+
+
+def _qc_checks(assay, platform):
+    rna, sc, dna = assay in ("RSQ", "SCR", "VDJ"), assay in ("SCR", "VDJ"), assay in ("WGS", "WES")
+    na = set()
+    if platform != "ILM" and platform != "10X":
+        na.add("inputs.mate_names")
+    if not dna:
+        na |= {"assay.capture", "identity.contamination"}
+    if not sc:
+        na |= {"singlecell.barcodes", "singlecell.chemistry"}
+    if assay != "VDJ":
+        pass
+    if not (dna or assay == "RSQ"):
+        na.add("reads.coverage")
+    if rna:
+        na.add("reads.duplication")
+    return [(c, "not_assessed" if c in na else "pass") for c in QC_CHECKS_ALL]
+
+
+def seed_demo_seq_qc(conn):
+    """One fictional quick-qc result per sequenced library (synthetic patients: per manifest row; others: per file)."""
+    import random
+    from . import seqqc
+    libs = []    # (sample_id, participant, library name, assay, platform, a file of the library)
+    syn_files = {}
+    for pid, unc, ds, day in SYN_PARTICIPANTS:
+        for f in conn.execute("SELECT d.*, s.participant_id FROM data_file d JOIN sample s USING(sample_id) WHERE s.participant_id=? "
+                              "AND d.deleted_at IS NULL ORDER BY d.id", (pid,)):
+            run = (f["notes"] or "").split("LENS manifest run ")[-1].split(" ")[0]
+            syn_files.setdefault((f["sample_id"], run), f)
+    for (sid, run), f in syn_files.items():
+        libs.append((sid, f["participant_id"], run, f["assay_code"], f["platform_code"], f["uri"]))
+    for f in conn.execute("SELECT d.*, s.participant_id FROM data_file d JOIN sample s USING(sample_id) WHERE d.deleted_at IS NULL "
+                          "AND d.platform_code IN ('ILM','ONT','PAC','10X') AND s.cohort_code <> 'SY' ORDER BY d.id"):
+        libs.append((f["sample_id"], f["participant_id"], f["uri"].split("/")[-2], f["assay_code"], f["platform_code"], f["uri"]))
+    n = 0
+    for sid, pid, lib, assay, platform, uri in libs:
+        s = conn.execute("SELECT * FROM sample WHERE sample_id=?", (sid,)).fetchone()
+        normal = s["specimen_code"] == "PB"
+        rng = random.Random(f"{sid}|{lib}")
+        m, x = _qc_values(rng, assay, platform, normal)
+        checks = [{"check": c, "status": st} for c, st in _qc_checks(assay, platform)]
+        surprise = _QC_SURPRISES.get((pid, lib))
+        if surprise:
+            c, st, obs, exp, why = surprise
+            for ch in checks:
+                if ch["check"] == c:
+                    ch.update(status=st, observed=obs, expected=exp, reason=why)
+            if c == "reads.coverage":
+                m["mean_coverage"] = 14.2
+            if c == "identity.contamination":
+                x["contamination_pct"] = 3.1
+        worst = next((st for st in ("fail", "warn") if any(ch["status"] == st for ch in checks)), "pass")
+        reason = "; ".join(f"{ch['check']}: {ch.get('reason', '')}" for ch in checks if ch["status"] in ("fail", "warn")) or None
+        seqqc.store(conn, s, {"workflow_id": "quick-qc", "workflow_version": "1.0.0-dev (demo values)",
+                              "workflow_run_id": f"demo-quick-qc-{pid}",
+                              "results": [{"library": lib, "path": uri, "qc_status": worst, "status_reason": reason, "metrics": {**m, **x},
+                                           "checks": checks}]}, user="bot:igi")
+        n += 1
+    return n
+
+
 # ---------------------------------------------------------------- public demonstration instance
 
 DEMO_USERS = [  # username, display name, initials, role
@@ -480,5 +613,7 @@ def reset_demo(conn, password):
     info = seed_demo(conn, "demo", second="reviewer")
     info["extra"] = seed_extra_participants(conn, "demo")
     info["extra"].update(seed_synthetic_participants(conn, "demo"))
+    info["qc_results"] = seed_demo_seq_qc(conn)
+    seed_demo_reagents(conn, "demo")
     conn.commit()
     return info

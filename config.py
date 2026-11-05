@@ -60,6 +60,9 @@ LABEL_PRINT_OFFSET_MM = [float(v) for v in os.environ.get("LIMS_LABEL_PRINT_OFFS
 BRADY_SDK_URL = os.environ.get("LIMS_BRADY_SDK_URL",
                                "https://cdn.jsdelivr.net/npm/@bradycorporation/brady-web-sdk@3.3.3/dist/bundle.js")
 PRINT_JOB_MAX_LABELS = 200
+# Reagent scanning on the registration forms: metadata fields a scanned kit/reagent box can fill, each with the field
+# that holds its lot number (None = no lot field).
+REAGENT_FIELDS = {"kit": "kit_lot", "extraction_kit": "kit_lot", "ip_antibody": "antibody_lot", "dissociation_method": None}
 # Data Matrix module size on printed labels, in printer dots (at 300 dpi: 3 = 0.25 mm, 4 = 0.34 mm). Smaller leaves
 # more of the label for text. 3 is the smallest size recommended for handheld and phone scanning at 300 dpi; it is
 # also capped by what fits the label height. Was 4 until 2026-11-05.

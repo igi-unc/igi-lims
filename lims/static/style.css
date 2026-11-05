@@ -100,3 +100,35 @@ tr.flag td:first-child { border-left: 3px solid var(--warn); }
 @media (max-width:700px) { header.top nav { flex-wrap:wrap; } .scan-view { max-width:100%; } }
 
 [hidden] { display:none !important; }
+
+/* sequencing QC charts */
+.sq { position:relative; }
+.sq-filters, .sq-controls { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:end; margin:6px 0 10px; }
+.sq-filters label, .sq-controls label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:2px; }
+.sq-filters label.chk, .sq-controls label.chk { flex-direction:row; align-items:center; gap:5px; color:var(--fg); }
+.sq-tiles { display:flex; flex-wrap:wrap; gap:10px; margin:4px 0 14px; }
+.sq-tile { background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px 14px; min-width:92px; }
+.sq-tile .v { font-size:22px; font-weight:700; line-height:1.2; }
+.sq-tile .k { font-size:12px; color:var(--muted); }
+.sq-panel { margin:18px 0; }
+.sq-panel h2 { margin-bottom:2px; }
+.sq-chart { width:100%; overflow:hidden; }
+.sq-chart svg { display:block; max-width:100%; font-family:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.sq-hit { cursor:pointer; }
+.sq-hit:hover { stroke:#1d2330; }
+.sq-chip { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:baseline; }
+.sq-tip { position:absolute; z-index:5; pointer-events:none; background:#fff; border:1px solid var(--line); border-radius:6px;
+          box-shadow:0 2px 8px rgba(0,0,0,.12); padding:6px 9px; font-size:12px; line-height:1.4; max-width:320px; }
+.sq-tip .m { color:var(--muted); }
+#sq-table { overflow-x:auto; }
+#sq-table table { min-width:640px; }
+
+/* reagent scan on registration forms */
+.rg-bar { display:flex; align-items:center; gap:10px; margin:8px 0 0; }
+.rg-dialog { max-width:520px; width:calc(100% - 32px); border:1px solid var(--line); border-radius:10px; padding:16px; }
+.rg-dialog::backdrop { background:rgba(15,23,42,.45); }
+.rg-dialog video { width:100%; max-height:260px; background:#111; border-radius:6px; }
+.rg-dialog label { display:flex; flex-direction:column; gap:3px; margin:8px 0; }
+select.rg-filled { outline:3px solid #86b6ef; outline-offset:1px; transition:outline-color .3s; }
+.rg-tests { display:flex; flex-wrap:wrap; gap:18px; }
+.rg-tests figure { margin:0; max-width:240px; }

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Reagent barcodes{% endblock %}
+{% block content %}
+<div class="card">
+<h1>Reagent barcodes</h1>
+<p class="muted">Products the LIMS recognises when a kit or reagent box is scanned on a registration form (<b>Scan kit / reagent</b>).
+Each is learned the first time someone scans it and says which entry it is. GS1 codes (the usual Data Matrix on
+reagent boxes) also carry the lot and expiry, which the scan fills in or warns about.</p>
+<table class="compact"><thead><tr><th>Product (GTIN or code)</th><th>Fills</th><th>Entry</th><th>Learned</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td><code>{{ r.product_key }}</code></td><td>{{ r.field_key }}</td><td><code>{{ r.code }}</code> {{ r.meaning or '' }}</td>
+<td class="small muted">{{ r.created_at }} · {{ r.created_by }}</td>
+<td>{% if g.user.role == 'admin' %}<form method="post" action="{{ url_for('reagents.delete', rid=r.id) }}" class="inline" onsubmit="return confirm('Forget this product?')"><button class="small secondary">forget</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">None yet.</td></tr>{% endfor %}
+</tbody></table>
+{% if tests %}
+<h2>Test codes (demo)</h2>
+<p class="muted">Fictional GS1 codes (restricted-circulation GTINs, not real products) for trying <b>Scan kit / reagent</b>
+on the demo: show one on another screen, or print this page.</p>
+<div class="rg-tests">{% for t in tests %}<figure>{{ t.svg|safe }}<figcaption><b>{{ t.what }}</b><br><code class="small">{{ t.human }}</code><br>
+<span class="small muted">lot {{ t.lot }} · expires {{ t.expiry }}</span></figcaption></figure>{% endfor %}</div>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Sequencing QC{% endblock %}
+{% block content %}
+<div class="card">
+<h1>Sequencing QC</h1>
+{% if not n_results %}
+<p class="muted">No QC results yet. The QC workflow (quick-qc) posts them through the data librarian
+(<code>POST /api/samples/&lt;key&gt;/qc</code>); each library then appears here and on its tube's page.</p>
+{% else %}
+<div id="sq" class="sq" data-src="{{ url_for('seqqc.data') }}" data-participant="{{ participant }}">
+  <div class="sq-filters" role="group" aria-label="Filters">
+    <label>Participant <select data-f="participant"><option value="">all</option></select></label>
+    <label>Cohort <select data-f="cohort"><option value="">all</option></select></label>
+    <label>Assay <select data-f="assay"><option value="">all</option></select></label>
+    <label>Platform <select data-f="platform"><option value="">all</option></select></label>
+    <label>Workflow <select data-f="workflow"><option value="">all</option></select></label>
+    <label class="chk"><input type="checkbox" id="sq-latest" checked> latest run only</label>
+  </div>
+  <div class="sq-tiles" id="sq-tiles"></div>
+
+  <section class="sq-panel">
+    <h2>Checks</h2>
+    <p class="muted small">Verdicts per check across the selected libraries, worst checks first.</p>
+    <div id="sq-checks" class="sq-chart"></div>
+  </section>
+
+  <section class="sq-panel">
+    <h2>Distribution</h2>
+    <div class="sq-controls">
+      <label>Metric <select id="sq-metric"></select></label>
+      <label>Rows <select id="sq-group">
+        <option value="assay">assay</option><option value="platform">platform</option><option value="participant">participant</option>
+        <option value="cohort">cohort</option><option value="material">material</option><option value="workflow">workflow</option><option value="">none</option>
+      </select></label>
+      <label class="chk"><input type="checkbox" id="sq-log"> log scale</label>
+    </div>
+    <div id="sq-dist" class="sq-chart"></div>
+  </section>
+
+  <section class="sq-panel">
+    <h2>Relationship</h2>
+    <div class="sq-controls">
+      <label>x <select id="sq-x"></select></label> <label class="chk"><input type="checkbox" id="sq-xlog"> log</label>
+      <label>y <select id="sq-y"></select></label> <label class="chk"><input type="checkbox" id="sq-ylog"> log</label>
+    </div>
+    <div id="sq-scatter" class="sq-chart"></div>
+  </section>
+
+  <section class="sq-panel">
+    <h2>Libraries</h2>
+    <p class="muted small">Worst first. Points in the charts link here and to the tube.</p>
+    <div id="sq-table"></div>
+  </section>
+  <div id="sq-tip" class="sq-tip" role="tooltip" hidden></div>
+</div>
+<script src="{{ url_for('static', filename='seqqc.js') }}"></script>
+{% endif %}
+</div>
+{% endblock %}

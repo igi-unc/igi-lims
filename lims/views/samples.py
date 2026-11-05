@@ -70,8 +70,8 @@ def detail(sample_id):
     children = conn.execute("SELECT * FROM sample WHERE parent_id=? ORDER BY sample_id", (sample_id,)).fetchall()
     custody = conn.execute("SELECT * FROM custody_event WHERE sample_id=? ORDER BY event_datetime, id", (sample_id,)).fetchall()
     files = conn.execute("SELECT * FROM data_file WHERE sample_id=? AND deleted_at IS NULL ORDER BY uri", (sample_id,)).fetchall()
-    seq_qc = conn.execute("SELECT q.*, f.uri, f.checksum_md5 FROM seq_qc q LEFT JOIN data_file f ON f.id = q.data_file_id "
-                          "WHERE q.sample_id=? ORDER BY q.recorded_at DESC, q.id DESC", (sample_id,)).fetchall()
+    from .. import seqqc
+    seq_qc = seqqc.results_for_tube(conn, sample_id)
     history = conn.execute("SELECT * FROM audit_log WHERE table_name='sample' AND record_id=? ORDER BY id DESC", (sample_id,)).fetchall()
     corrections = svc.corrections_for(conn, s)
     coll = svc.get_collection(conn, s["collection_id"])

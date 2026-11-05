@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS seq_qc (
     workflow_id        TEXT NOT NULL,                -- e.g. igi_qc
     workflow_version   TEXT,
     workflow_run_id    TEXT NOT NULL,                -- the librarian's run ID
+    library_name       TEXT,                         -- the library within the run (quick-qc: manifest Run_Name)
     scheduler_job_id   TEXT,
     qc_status          TEXT NOT NULL CHECK (qc_status IN ('pass','warn','fail','not_assessed')),
     status_reason      TEXT,                         -- which threshold failed, as the workflow states it
@@ -207,7 +208,18 @@ CREATE TABLE IF NOT EXISTS seq_qc (
     recorded_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_qc_sample ON seq_qc(sample_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_key ON seq_qc(workflow_run_id, sample_id, COALESCE(data_file_id, 0));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_qc_key2 ON seq_qc(workflow_run_id, sample_id, COALESCE(data_file_id, 0), COALESCE(library_name, ''));
+-- One verdict per named check (quick-qc: inputs.integrity, identity.patient, reads.coverage, ...) for a QC result.
+CREATE TABLE IF NOT EXISTS seq_qc_check (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    qc_id       INTEGER NOT NULL REFERENCES seq_qc(id),
+    check_name  TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('pass','warn','fail','not_assessed')),
+    observed    TEXT,
+    expected    TEXT,
+    reason      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_qc_check ON seq_qc_check(qc_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_file_uri ON data_file(uri) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -301,3 +313,15 @@ CREATE TABLE IF NOT EXISTS label_print (
     reprint_reason  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_label_print_sample ON label_print(sample_id);
+
+-- Reagent / kit barcodes: which code-list entry a scanned product is, learned the first time someone scans it.
+-- product_key = the GS1 GTIN (14 digits) when the code is GS1, otherwise the raw scanned text.
+CREATE TABLE IF NOT EXISTS reagent_barcode (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_key  TEXT NOT NULL,
+    field_key    TEXT NOT NULL,                  -- metadata field it fills, e.g. kit, extraction_kit, ip_antibody
+    code         TEXT NOT NULL,                  -- entry in that field's code list
+    created_by   TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reagent_key ON reagent_barcode(product_key, field_key);

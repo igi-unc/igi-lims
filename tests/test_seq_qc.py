@@ -83,3 +83,55 @@ def test_qc_validation(app, alice, monkeypatch):
     with app.app_context():
         assert get_db().execute("SELECT COUNT(*) FROM seq_qc").fetchone()[0] == 0        # nothing half-written
     assert "No QC results yet" in alice.get(f"/samples/{dna}").data.decode()
+
+
+def test_quick_qc_libraries_and_checks(app, alice, monkeypatch):
+    """quick-qc style: one result per library (several per tube), PASS/WARN/FAIL/NA per named check."""
+    c, dna = _setup(app, alice, monkeypatch)
+    body = {"workflow_id": "quick-qc", "workflow_version": "1.0.0-dev", "workflow_run_id": "r1",
+            "results": [
+                {"library": "ad-wes-tumor", "path": R1, "qc_status": "WARN", "metrics": {"mean_coverage": 42.0, "intron_frac": 0.01},
+                 "checks": [{"check": "reads.coverage", "status": "WARN", "observed": "42x", "expected": ">= 50x", "reason": "below WES warn"},
+                            {"check": "assay.capture", "status": "PASS"}, {"check": "singlecell.barcodes", "status": "NA"}]},
+                {"library": "ad-wgs-tumor", "path": R1, "qc_status": "PASS", "metrics": {"mean_coverage": 31.0},
+                 "checks": [{"check": "reads.coverage", "status": "PASS"}]}]}
+    r = c.post(f"/api/samples/{dna}/qc", json=body, headers=WRITE)
+    assert r.status_code == 201 and r.get_json()["created"] == 2, r.get_json()
+    res = {x["library_name"]: x for x in c.get(f"/api/samples/{dna}/qc", headers=READ).get_json()["results"]}
+    assert res["ad-wes-tumor"]["qc_status"] == "warn"
+    assert {x["check"]: x["status"] for x in res["ad-wes-tumor"]["checks"]} == {
+        "reads.coverage": "warn", "assay.capture": "pass", "singlecell.barcodes": "not_assessed"}
+    # re-posting replaces the checks rather than appending
+    body["results"][0]["checks"] = [{"check": "reads.coverage", "status": "PASS"}]
+    assert c.post(f"/api/samples/{dna}/qc", json=body, headers=WRITE).get_json()["updated"] == 2
+    res = {x["library_name"]: x for x in c.get(f"/api/samples/{dna}/qc", headers=READ).get_json()["results"]}
+    assert [x["check"] for x in res["ad-wes-tumor"]["checks"]] == ["reads.coverage"]
+    bad = c.post(f"/api/samples/{dna}/qc", headers=WRITE, json={**body, "results": [
+        {"library": "x", "qc_status": "PASS", "checks": [{"check": "a b", "status": "PASS"}, {"check": "ok", "status": "MAYBE"},
+                                                       {"check": "dup", "status": "PASS"}, {"check": "dup", "status": "FAIL"}]}]})
+    assert bad.status_code == 400 and len(bad.get_json()["problems"]) == 3
+    # the overview page and its data: rows carry assay/platform from the file, every numeric metric, the checks
+    assert b"Sequencing QC" in alice.get("/seq-qc/").data
+    rows = alice.get("/seq-qc/data.json").get_json()["rows"]
+    wes = next(r for r in rows if r["library"] == "ad-wes-tumor")
+    assert wes["file"] == "x_R1.fastq.gz"
+    assert wes["metrics"] == {"mean_coverage": 42.0, "intron_frac": 0.01} and wes["checks"] == {"reads.coverage": "pass"} and wes["latest"]
+    page = alice.get(f"/samples/{dna}").data.decode()
+    assert "ad-wes-tumor" in page and "1 checks" in page and "Charts for P101" in page
+
+
+def test_qc_page_without_results_and_access(app, alice):
+    assert b"No QC results yet" in alice.get("/seq-qc/").data
+    assert app.test_client().get("/seq-qc/data.json").status_code in (302, 401)     # login required
+
+
+def test_demo_has_fictional_quick_qc(app):
+    from lims.demo import reset_demo
+    from lims import seqqc
+    with app.app_context():
+        conn = get_db()
+        info = reset_demo(conn, "pw")
+        rows = seqqc.chart_rows(conn)
+        assert info["qc_results"] == len(rows) >= 30
+        assert {r["status"] for r in rows} == {"pass", "warn", "fail"}
+        assert all("demo values" in r["version"] for r in rows) and all(r["assay"] != "?" for r in rows)
