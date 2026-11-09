@@ -229,10 +229,15 @@ def registry_fields_for(conn, s):
     species = "human" if s["cohort_code"] != "DG" else None
     if species is None:
         why["species"] = "canine cohort; the registry has human and mouse only"
-    return {"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), "participant_id": s["participant_id"],
-            "exists": True, "deleted": bool(s["deleted_at"]), "status": s["status"],
-            "fields": {"sample_type": sample_type, "analyte": analyte, "platform": platform,
-                       "library_type": library_type, "species": species},
+    # The bot's contract (CHANNELS.md, 2026-11-03 17:10): everything outside `phi` may be shown in a Slack channel.
+    # PHI = the full sample ID (UNC ID, dates), the UNC ID, dates and operator initials. P### is safe (Steven).
+    return {"found": True, "exists": True, "lims_number": format_serial(s["serial"]), "deleted": bool(s["deleted_at"]),
+            "status": s["status"],
+            "safe": {"participant_id": s["participant_id"], "sample_type": sample_type, "analyte": analyte,
+                     "platform": platform, "library_type": library_type, "species": species},
+            "phi": {"sample_id": s["sample_id"], "unc_id": s["unc_id"], "received_date": s["received_date"],
+                    "processing_date": s["processing_date"], "created_datetime": s["created_datetime"],
+                    "operator": s["created_by"]},
             "unmapped_reasons": why}
 
 
@@ -243,7 +248,7 @@ def registry_fields(key):
     conn = get_db()
     s = _resolve_tube(conn, key)
     if s is None:
-        return jsonify({"query": key, "exists": False}), 404
+        return jsonify({"found": False, "exists": False}), 404      # the key is not echoed: it may be a sample ID
     return jsonify(registry_fields_for(conn, s))
 
 
@@ -268,11 +273,13 @@ def post_files(key):
     JSON: {registry_id, instance, paths: [...], accessioned_by, approved_by, assay_code?, platform_code?, notes?}"""
     from .. import audit
     conn = get_db()
+    from ..db import format_serial
+    # Write responses carry no PHI (bot contract): tubes are named by LIMS number, never by sample ID or path.
     s = _resolve_tube(conn, key)
     if s is None:
-        return jsonify({"error": f"no tube {key}"}), 404
+        return jsonify({"error": "no such tube"}), 404
     if s["deleted_at"]:
-        return jsonify({"error": f"tube {s['sample_id']} is deleted"}), 409
+        return jsonify({"error": f"tube {format_serial(s['serial'])} is deleted"}), 409
     d = request.get_json(silent=True) or {}
     reg, inst = str(d.get("registry_id") or "").strip(), str(d.get("instance") or "").strip().lower()
     paths = d.get("paths")
@@ -304,10 +311,12 @@ def post_files(key):
                             (s["sample_id"], reg, path)).fetchone()
         if same:
             existing.append(same["id"]); continue
-        other = conn.execute("SELECT sample_id FROM data_file WHERE uri=? AND deleted_at IS NULL", (path,)).fetchone()
+        other = conn.execute("SELECT s.serial FROM data_file d JOIN sample s USING(sample_id) WHERE d.uri=? AND d.deleted_at IS NULL",
+                             (path,)).fetchone()
         if other:
             conn.rollback()
-            return jsonify({"error": f"{path} is already linked to tube {other['sample_id']}"}), 409
+            return jsonify({"error": f"paths[{paths.index(path) if path in paths else '?'}] is already linked to another tube "
+                                     f"(LIMS number {format_serial(other['serial'])})"}), 409
         cur = conn.execute(
             "INSERT INTO data_file(sample_id, uri, assay_code, platform_code, notes, registry_id, registry_instance, recorded_by) "
             "VALUES (?,?,?,?,?,?,?,?)",
@@ -317,8 +326,7 @@ def post_files(key):
                   after={"sample_id": s["sample_id"], "uri": path, "registry_id": reg, "instance": inst,
                          "accessioned_by": acc, "approved_by": appr})
     conn.commit()
-    from ..db import format_serial
-    return jsonify({"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), "registry_id": reg,
+    return jsonify({"status": "created" if created else "exists", "lims_number": format_serial(s["serial"]),
                     "created": len(created), "already_linked": len(existing), "file_ids": created + existing}), \
         (201 if created else 200)
 
@@ -352,7 +360,7 @@ def post_qc(key):
     conn = get_db()
     s = _resolve_tube(conn, key)
     if s is None:
-        return jsonify({"error": f"no tube {key}"}), 404
+        return jsonify({"error": "no such tube"}), 404
     d = request.get_json(silent=True) or {}
     inst = str(d.get("instance") or "igi").strip().lower()
     if not re.fullmatch(r"[a-z0-9_-]{1,32}", inst):
@@ -363,4 +371,5 @@ def post_qc(key):
         return jsonify({"error": "invalid request", "problems": e.problems}), 400
     conn.commit()
     from ..db import format_serial
-    return jsonify({"sample_id": s["sample_id"], "lims_number": format_serial(s["serial"]), **out}), (201 if out["created"] else 200)
+    return jsonify({"status": "created" if out["created"] else "updated", "lims_number": format_serial(s["serial"]), **out}), \
+        (201 if out["created"] else 200)

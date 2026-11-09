@@ -37,7 +37,7 @@ def test_post_and_read_qc(app, alice, monkeypatch):
     c, dna = _setup(app, alice, monkeypatch)
     assert c.post(f"/api/samples/{dna}/qc", json=_body(), headers=READ).status_code == 401      # read token cannot write
     r = c.post("/api/samples/1/qc", json=_body(), headers=WRITE)
-    assert r.status_code == 201 and r.get_json()["created"] == 3 and r.get_json()["md5_mismatches"] == []
+    assert r.status_code == 201 and r.get_json()["created"] == 3 and r.get_json()["md5_mismatch_file_ids"] == []
     j = c.get("/api/samples/1/qc", headers=READ).get_json()
     assert len(j["results"]) == 3
     byuri = {x["uri"]: x for x in j["results"]}
@@ -53,7 +53,8 @@ def test_post_and_read_qc(app, alice, monkeypatch):
     b = _body()
     b["results"][0].update(qc_status="fail", md5="f" * 32)
     r = c.post(f"/api/samples/{dna}/qc", json=b, headers=WRITE)
-    assert r.status_code == 200 and r.get_json()["updated"] == 3 and r.get_json()["md5_mismatches"] == [R1]
+    assert r.status_code == 200 and r.get_json()["updated"] == 3 and len(r.get_json()["md5_mismatch_file_ids"]) == 1
+    assert "IGI-" not in r.get_data(as_text=True) and "/proj/" not in r.get_data(as_text=True)    # no PHI echoed
     j = c.get(f"/api/samples/{dna}/qc", headers=READ).get_json()
     assert len(j["results"]) == 3 and {x["uri"]: x for x in j["results"]}[R1]["qc_status"] == "fail"
     with app.app_context():

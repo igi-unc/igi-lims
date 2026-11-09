@@ -59,7 +59,7 @@ def _check_result(conn, s, r, problems, i):
         f = conn.execute("SELECT id, uri, checksum_md5 FROM data_file WHERE sample_id=? AND uri=? AND deleted_at IS NULL",
                          (s["sample_id"], str(r["path"]).strip())).fetchone()
         if f is None:
-            problems.append(f"{where}.path is not a data file of tube {s['sample_id']} (link it first with POST .../files)")
+            problems.append(f"{where}.path is not a data file of this tube (link it first with POST .../files)")
         else:
             out["data_file_id"], out["uri"], out["recorded_md5"] = f["id"], f["uri"], f["checksum_md5"]
     elif md5:
@@ -166,8 +166,8 @@ def store(conn, s, d, user):
                 audit.log(conn, "data_file", c["data_file_id"], "update", username=user, before={"checksum_md5": None},
                           after={"checksum_md5": md5}, reason=f"md5 computed by QC run {run}")
             elif c["recorded_md5"].lower() != md5:
-                mismatches.append(c["uri"])
-    return {"workflow_run_id": run, "created": created, "updated": updated, "md5_mismatches": mismatches}
+                mismatches.append(c["data_file_id"])       # file IDs, not paths: paths contain the sample ID (PHI)
+    return {"workflow_run_id": run, "created": created, "updated": updated, "md5_mismatch_file_ids": mismatches}
 
 
 def _checks_by_qc(conn, ids):

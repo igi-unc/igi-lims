@@ -185,7 +185,7 @@ Wherever `<key>` appears, it may be a sample ID or a LIMS number (`42` or `00004
 | `/api/collections/<collection_id>` | collection record, its tree and corrections |
 | `/api/search?q=` | one lookup: sample ID, LIMS number, P number, UNC ID or part of an ID; compact results with page links |
 | `/api/files?assay=&participant=` | data files joined to tubes |
-| `/api/samples/<key>/registry-fields` | prefill for the Slack data librarian, in its own vocabulary (`sample_type`, `analyte`, `platform`, `library_type`, `species`); `null` plus a reason where there is no clean mapping |
+| `/api/samples/<key>/registry-fields` | prefill for the Slack data librarian: `{found, lims_number, safe: {participant_id, sample_type, analyte, platform, library_type, species}, phi: {sample_id, unc_id, dates, operator}}`. `safe` uses the bot's vocabulary, `null` plus a reason where there is no clean mapping; everything outside `phi` may appear in a Slack channel; unknown tube = 404 `{found: false}` |
 
 ### Write-back from the data librarian
 
@@ -201,7 +201,8 @@ the read token nor a browser session can write.
 
 `assay_code`, `platform_code` and `notes` are optional (codes must be in the LIMS lists). A
 retry is harmless: a path already linked to the same tube and registry ID is reported as
-`already_linked`, not added again (201 if anything was added, 200 if not). A path already
+`already_linked`, not added again (201 `status: created` if anything was added, 200 `status: exists` if not).
+Write responses and their errors never contain a sample ID or a path (both carry PHI): tubes are named by LIMS number. A path already
 linked to a different tube is refused (409). Rows are recorded and audited as `bot:<instance>`,
 with the Slack user IDs in the notes and the audit entry.
 
@@ -231,7 +232,7 @@ that row, so a scraper can safely run twice; a new run adds rows beside the old 
   other key is kept as-is in `metrics_json`, so new tools need no schema change.
 * `path` must already be a data file of that tube (`POST .../files` first). An `md5` fills an
   empty checksum on the file; one that differs from the recorded checksum is reported in
-  `md5_mismatches` and flagged on the tube page, and the recorded value is kept.
+  `md5_mismatch_file_ids` and flagged on the tube page, and the recorded value is kept.
 * The whole request is checked first; any problem returns 400 with a list and writes nothing.
 * `GET /api/samples/<key>/qc` (read token) returns the results, newest first. The tube page
   shows them under **Sequencing QC**.
